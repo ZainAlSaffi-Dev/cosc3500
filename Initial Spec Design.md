@@ -1,8 +1,8 @@
-# Pricing an Option When Volatility Won't Sit Still — COSC3500 Project Design
+# Pricing an Option When Volatility Won't Sit Still — COSC3500 Project Brief
 
 **Course:** COSC3500 High-Performance Computing
 **Student:** [Name and student number]
-**Status:** Proposed for tutor approval
+**Status:** Approved
 
 ## 1. What this project actually does
 
@@ -36,6 +36,10 @@ The four "personality parameters" of the model, one sentence each:
 - `rho` — how tightly stock drops and volatility spikes are linked (negative in practice).
 
 This second random process is exactly why the computation gets bigger. Under Black-Scholes, volatility is a known constant, so the solver only needs to ask "what if the stock were at various prices?" — a single row of what-ifs. Under Heston, volatility is *itself* a what-if, so the solver needs a whole spreadsheet of scenarios: every combination of "what if the stock were here" and "what if the market were this calm or this wild".
+
+![One simulated path of the two coupled Heston processes: the stock price and its volatility](assets/heston-paths.gif)
+
+*One simulated three-month path of the two coupled processes, using the reference parameters from section 8. The lower panel is the point: volatility is not a constant but a jagged random path of its own, and with `rho = -0.70` its climbs line up with the stock's slides.*
 
 ## 3. The pricing equation, gently
 
@@ -89,9 +93,17 @@ There is one such sheet for every point in time between today and expiry, and th
    (known for free)         (computation moves right to left)
 ```
 
+![The option value surface evolving backwards in time from the jagged payoff at expiry to the smooth surface today](assets/value-surface.gif)
+
+*The whole spreadsheet drawn as a surface: stock price and volatility along the base, option value as height and colour. The animation runs the way the solver runs — it starts at expiry, where the surface is the sharp hockey-stick payoff and volatility is irrelevant, and steps backwards to today, where the kink has been smoothed out and higher volatility visibly lifts the value. (Illustrative prototype from a small Python reference solver; the Milestone 1 "weather map" deliverable regenerates this from the C++ engine.)*
+
 In memory the solver keeps exactly two sheets at once. The later sheet is read-only during an update; the earlier sheet is written, each cell exactly once; and only when every cell is finished are the two buffers swapped. Nothing ever reads a half-finished sheet.
 
 One honest caveat: this "explicit" scheme is only stable if the timesteps are small enough relative to the cell spacing. Take steps that are too big and the sheet blows up into oscillating garbage. That is not a flaw to hide — measuring exactly where the stable/unstable boundary sits, and the accuracy-versus-runtime trade-off around it, is part of the research plan. An implicit or ADI scheme is a possible extension, not required scope.
+
+![The error field exploding into a checkerboard when the timestep exceeds the stability limit](assets/instability.gif)
+
+*The instability, previewed: the same solver run at 4× the stable timestep, plotted as its difference from a stable reference run. For a while nothing seems wrong — then a checkerboard mode erupts in the high-volatility, high-price corner (where the diffusion coefficients are largest) and swallows the sheet. This is the failure the stability measurements in the research plan map out.*
 
 ## 5. Where the parallelism lives
 
@@ -145,10 +157,3 @@ grid:      { stock_nodes: 2048, variance_nodes: 512, time_steps: 2000 }
 ```
 
 **What this project deliberately does not do:** European calls and puts only — no American, barrier, or multi-asset options; no calibration to a real volatility surface; no backtester or trading strategy; no live data feed. A small historical end-of-day comparison against real option quotes is optional garnish, attempted only if lawfully accessible data is already in hand, and it is the first thing cut. If work must be dropped, the cut order is fixed: MPI first, then CUDA, then the historical study — never the solver, the validation, or the benchmarks. If the 2D boundary treatment proves too risky, the documented fallback is a 1D local-volatility PDE solver, which preserves the entire optimisation and parallelisation story on a simpler grid.
-
-## 9. Questions for the tutor
-
-1. Is the Heston-style finite-difference model an acceptable scientific model for COSC3500?
-2. Is the nine-cell neighbour-dependent update sufficiently non-trivial for the major project?
-3. Is an explicit scheme acceptable, given that stability and convergence will be measured and documented rather than hidden?
-4. Is the 1D local-volatility PDE an acceptable documented fallback if the 2D boundary treatment becomes too risky?
