@@ -1,0 +1,1115 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "hyperedges": [
+      {
+        "id": "grading_pipeline",
+        "label": "Automated Grading Pipeline",
+        "nodes": [
+          "slurm_goslurm_cosc3500assignment_rangpurjudgementday",
+          "cosc3500_assignment_gradebot",
+          "cosc3500_assignment_benchmark_procedure",
+          "cosc3500_assignment_marking_rubric"
+        ],
+        "relation": "participate_in",
+        "confidence": "EXTRACTED",
+        "confidence_score": 1.0,
+        "source_file": "COSC3500_Assignment.pdf"
+      },
+      {
+        "id": "three_hardware_implementations",
+        "label": "Three Hardware Target Implementations",
+        "nodes": [
+          "cosc3500_assignment_cpu_implementation",
+          "cosc3500_assignment_gpu_implementation",
+          "cosc3500_assignment_mpi_implementation"
+        ],
+        "relation": "form",
+        "confidence": "EXTRACTED",
+        "confidence_score": 1.0,
+        "source_file": "COSC3500_Assignment.pdf"
+      },
+      {
+        "id": "debug_slurm_workflow",
+        "label": "Per-Section Debug Slurm Workflow",
+        "nodes": [
+          "slurm_goslurm_cosc3500assignment_rangpurdebugcpu",
+          "slurm_goslurm_cosc3500assignment_rangpurdebuggpu",
+          "slurm_goslurm_cosc3500assignment_rangpurdebugmpi",
+          "cosc3500_assignment_gradebot"
+        ],
+        "relation": "participate_in",
+        "confidence": "INFERRED",
+        "confidence_score": 0.85,
+        "source_file": "COSC3500_Assignment.pdf"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "label": "matrixMultiply.cpp",
+      "file_type": "code",
+      "source_file": "matrixMultiply.cpp",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "matrixmultiply",
+      "community": 1,
+      "norm_label": "matrixmultiply.cpp"
+    },
+    {
+      "label": "matrixMultiply()",
+      "file_type": "code",
+      "source_file": "matrixMultiply.cpp",
+      "source_location": "L15",
+      "_origin": "ast",
+      "id": "matrixmultiply_matrixmultiply",
+      "community": 1,
+      "norm_label": "matrixmultiply()"
+    },
+    {
+      "label": "floatType",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "matrixmultiply_cpp_floattype",
+      "community": 1,
+      "norm_label": "floattype"
+    },
+    {
+      "label": "matrixMultiplyGPU.cu",
+      "file_type": "code",
+      "source_file": "matrixMultiplyGPU.cu",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "matrixmultiplygpu",
+      "community": 3,
+      "norm_label": "matrixmultiplygpu.cu"
+    },
+    {
+      "label": "matrixMultiply_GPU()",
+      "file_type": "code",
+      "source_file": "matrixMultiplyGPU.cu",
+      "source_location": "L15",
+      "_origin": "ast",
+      "id": "matrixmultiplygpu_matrixmultiply_gpu",
+      "community": 3,
+      "norm_label": "matrixmultiply_gpu()"
+    },
+    {
+      "label": "__host__",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "host",
+      "community": 3,
+      "norm_label": "__host__"
+    },
+    {
+      "label": "floatTypeCUDA",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "floattypecuda",
+      "community": 3,
+      "norm_label": "floattypecuda"
+    },
+    {
+      "label": "matrixMultiplyKernel_GPU()",
+      "file_type": "code",
+      "source_file": "matrixMultiplyGPU.cu",
+      "source_location": "L25",
+      "_origin": "ast",
+      "id": "matrixmultiplygpu_matrixmultiplykernel_gpu",
+      "community": 3,
+      "norm_label": "matrixmultiplykernel_gpu()"
+    },
+    {
+      "label": "__global__",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "global",
+      "community": 3,
+      "norm_label": "__global__"
+    },
+    {
+      "label": "matrixMultiplyMPI.cpp",
+      "file_type": "code",
+      "source_file": "matrixMultiplyMPI.cpp",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "matrixmultiplympi",
+      "community": 1,
+      "norm_label": "matrixmultiplympi.cpp"
+    },
+    {
+      "label": "matrixMultiply_MPI()",
+      "file_type": "code",
+      "source_file": "matrixMultiplyMPI.cpp",
+      "source_location": "L15",
+      "_origin": "ast",
+      "id": "matrixmultiplympi_matrixmultiply_mpi",
+      "community": 1,
+      "norm_label": "matrixmultiply_mpi()"
+    },
+    {
+      "label": "floatType",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "matrixmultiplympi_cpp_floattype",
+      "community": 1,
+      "norm_label": "floattype"
+    },
+    {
+      "label": "goslurm_COSC3500Assignment_RangpurDebugCPU",
+      "file_type": "code",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugCPU",
+      "source_location": "L1",
+      "metadata": {
+        "language": "bash",
+        "kind": "file"
+      },
+      "_origin": "ast",
+      "id": "slurm_goslurm_cosc3500assignment_rangpurdebugcpu",
+      "community": 4,
+      "norm_label": "goslurm_cosc3500assignment_rangpurdebugcpu"
+    },
+    {
+      "label": "goslurm_COSC3500Assignment_RangpurDebugCPU script",
+      "file_type": "code",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugCPU",
+      "source_location": "L1",
+      "metadata": {
+        "language": "bash",
+        "kind": "bash_entrypoint"
+      },
+      "_origin": "ast",
+      "id": "slurm_goslurm_cosc3500assignment_rangpurdebugcpu__entry",
+      "community": 4,
+      "norm_label": "goslurm_cosc3500assignment_rangpurdebugcpu script"
+    },
+    {
+      "label": "PATH",
+      "file_type": "code",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugCPU",
+      "source_location": "L18",
+      "metadata": {
+        "language": "bash",
+        "kind": "code"
+      },
+      "_origin": "ast",
+      "id": "slurm_goslurm_cosc3500assignment_rangpurdebugcpu_path",
+      "community": 4,
+      "norm_label": "path"
+    },
+    {
+      "label": "goslurm_COSC3500Assignment_RangpurDebugGPU",
+      "file_type": "code",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugGPU",
+      "source_location": "L1",
+      "metadata": {
+        "language": "bash",
+        "kind": "file"
+      },
+      "_origin": "ast",
+      "id": "slurm_goslurm_cosc3500assignment_rangpurdebuggpu",
+      "community": 5,
+      "norm_label": "goslurm_cosc3500assignment_rangpurdebuggpu"
+    },
+    {
+      "label": "goslurm_COSC3500Assignment_RangpurDebugGPU script",
+      "file_type": "code",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugGPU",
+      "source_location": "L1",
+      "metadata": {
+        "language": "bash",
+        "kind": "bash_entrypoint"
+      },
+      "_origin": "ast",
+      "id": "slurm_goslurm_cosc3500assignment_rangpurdebuggpu__entry",
+      "community": 5,
+      "norm_label": "goslurm_cosc3500assignment_rangpurdebuggpu script"
+    },
+    {
+      "label": "PATH",
+      "file_type": "code",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugGPU",
+      "source_location": "L19",
+      "metadata": {
+        "language": "bash",
+        "kind": "code"
+      },
+      "_origin": "ast",
+      "id": "slurm_goslurm_cosc3500assignment_rangpurdebuggpu_path",
+      "community": 5,
+      "norm_label": "path"
+    },
+    {
+      "label": "goslurm_COSC3500Assignment_RangpurDebugMPI",
+      "file_type": "code",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugMPI",
+      "source_location": "L1",
+      "metadata": {
+        "language": "bash",
+        "kind": "file"
+      },
+      "_origin": "ast",
+      "id": "slurm_goslurm_cosc3500assignment_rangpurdebugmpi",
+      "community": 6,
+      "norm_label": "goslurm_cosc3500assignment_rangpurdebugmpi"
+    },
+    {
+      "label": "goslurm_COSC3500Assignment_RangpurDebugMPI script",
+      "file_type": "code",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugMPI",
+      "source_location": "L1",
+      "metadata": {
+        "language": "bash",
+        "kind": "bash_entrypoint"
+      },
+      "_origin": "ast",
+      "id": "slurm_goslurm_cosc3500assignment_rangpurdebugmpi__entry",
+      "community": 6,
+      "norm_label": "goslurm_cosc3500assignment_rangpurdebugmpi script"
+    },
+    {
+      "label": "PATH",
+      "file_type": "code",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugMPI",
+      "source_location": "L18",
+      "metadata": {
+        "language": "bash",
+        "kind": "code"
+      },
+      "_origin": "ast",
+      "id": "slurm_goslurm_cosc3500assignment_rangpurdebugmpi_path",
+      "community": 6,
+      "norm_label": "path"
+    },
+    {
+      "label": "goslurm_COSC3500Assignment_RangpurJudgementDay",
+      "file_type": "code",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurJudgementDay",
+      "source_location": "L1",
+      "metadata": {
+        "language": "bash",
+        "kind": "file"
+      },
+      "_origin": "ast",
+      "id": "slurm_goslurm_cosc3500assignment_rangpurjudgementday",
+      "community": 0,
+      "norm_label": "goslurm_cosc3500assignment_rangpurjudgementday"
+    },
+    {
+      "label": "goslurm_COSC3500Assignment_RangpurJudgementDay script",
+      "file_type": "code",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurJudgementDay",
+      "source_location": "L1",
+      "metadata": {
+        "language": "bash",
+        "kind": "bash_entrypoint"
+      },
+      "_origin": "ast",
+      "id": "slurm_goslurm_cosc3500assignment_rangpurjudgementday__entry",
+      "community": 0,
+      "norm_label": "goslurm_cosc3500assignment_rangpurjudgementday script"
+    },
+    {
+      "label": "PATH",
+      "file_type": "code",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurJudgementDay",
+      "source_location": "L20",
+      "metadata": {
+        "language": "bash",
+        "kind": "code"
+      },
+      "_origin": "ast",
+      "id": "slurm_goslurm_cosc3500assignment_rangpurjudgementday_path",
+      "community": 0,
+      "norm_label": "path"
+    },
+    {
+      "label": "COSC3500 Assignment Specification: Parallel Programming Techniques",
+      "file_type": "document",
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "Implement three matrix multiply functions for three hardware configurations: CPU (AVX/OpenMP, 4 cores), GPU (CUDA, 1 GPU), and a cluster of two nodes (MPI, 2 nodes x 4 cores). Performance is benchmarked relative to a gold-standard reference (Intel MKL for CPU and MPI, CUBLAS for GPU) on NxN matrices; marks depend on how close runtime is to the reference, capped at 7 per implementation (21 total).",
+      "id": "cosc3500_assignment_spec",
+      "community": 0,
+      "norm_label": "cosc3500 assignment specification: parallel programming techniques"
+    },
+    {
+      "label": "Assignment1_GradeBot",
+      "file_type": "concept",
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "Automated marking binary; usage: ./Assignment1_GradeBot {matrix dimension} {threadCount} {runBenchmarkCPU} {runBenchmarkGPU} {runBenchmarkMPI} {optional integer}... Optional trailing integers are passed through to the matrixMultiply routines as the args parameter (argCount) for debugging/tweaking, but will not exist when the final JudgementDay script runs. Outputs to stdout plus per-node text files. Exists to give students instant feedback with the exact harness used for final grading.",
+      "id": "cosc3500_assignment_gradebot",
+      "community": 0,
+      "norm_label": "assignment1_gradebot"
+    },
+    {
+      "label": "Marking Rubric (Table 1)",
+      "file_type": "concept",
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "Marks scale with runtime slowdown factor relative to the reference (lower is better). CPU thresholds: 1.0->7, 1.5->6, 3.0->5, 6.0->4, 12.0->3. GPU: 1.5->7, 2.0->6, 3.0->5, 4.0->4, 5.0->3. MPI: 0.6->7, 1.0->6, 1.5->5, 3.0->4, 6.0->3. 2 marks: more than twice as slow as the threshold for 3 but no timeout; 1 mark: compiles and runs but wrong answer; 0: does not compile, not submitted, or timeout. Capped at 7 per implementation, 21 total.",
+      "id": "cosc3500_assignment_marking_rubric",
+      "community": 2,
+      "norm_label": "marking rubric (table 1)"
+    },
+    {
+      "label": "Benchmark Procedure",
+      "file_type": "rationale",
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "A set of random unitary square matrices is created and successively multiplied together (a sequence of A = A.B, feeding each result into the next multiply) to get a final solution, which is checked against the reference within an allowable floating point error and timed relative to Intel MKL / CUBLAS. For CPU and GPU the whole multiplication lives in one memory space. For MPI, every node already holds an identical full copy of all input matrices (so no test-data distribution is needed), but each node computes only its own portion of each product, so students must ensure all nodes end each step with the full current product matrix, since it is the input to the next multiplication. Final grading runs CPU and GPU benchmarks once on each of two nodes and takes the fastest (most favourable) node result.",
+      "id": "cosc3500_assignment_benchmark_procedure",
+      "community": 0,
+      "norm_label": "benchmark procedure"
+    },
+    {
+      "label": "CPU (AVX/OpenMP) Implementation",
+      "file_type": "concept",
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "CPU target using AVX/OpenMP on 4 cores; benchmarked against Intel MKL.",
+      "id": "cosc3500_assignment_cpu_implementation",
+      "community": 2,
+      "norm_label": "cpu (avx/openmp) implementation"
+    },
+    {
+      "label": "GPU (CUDA) Implementation",
+      "file_type": "concept",
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "GPU target using CUDA on 1 GPU; benchmarked against CUBLAS.",
+      "id": "cosc3500_assignment_gpu_implementation",
+      "community": 2,
+      "norm_label": "gpu (cuda) implementation"
+    },
+    {
+      "label": "MPI Implementation",
+      "file_type": "concept",
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "Cluster target on 2 nodes with 4 cores each; may reuse the CPU-based implementation from matrixMultiply.cpp. Each node calculates its own portion of the matrix product but must ensure all nodes end up with a full copy of the solution, because each node needs the full current product to compute the next multiplication in the benchmark sequence.",
+      "id": "cosc3500_assignment_mpi_implementation",
+      "community": 2,
+      "norm_label": "mpi implementation"
+    },
+    {
+      "label": "Intel MKL Reference Implementation",
+      "file_type": "concept",
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "Gold-standard reference for the CPU and MPI benchmarks; student runtimes and output correctness are measured relative to it.",
+      "id": "cosc3500_assignment_intel_mkl",
+      "community": 2,
+      "norm_label": "intel mkl reference implementation"
+    },
+    {
+      "label": "CUBLAS Reference Implementation",
+      "file_type": "concept",
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "Gold-standard reference for the GPU (CUDA) benchmark.",
+      "id": "cosc3500_assignment_cublas",
+      "community": 2,
+      "norm_label": "cublas reference implementation"
+    },
+    {
+      "label": "ERR_TOLERANCE",
+      "file_type": "concept",
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "Constant defined in rubric.h. The Error column is the sum of squares difference between the final output matrix and the reference implementation; error below ERR_TOLERANCE is allowed (floating point slack), larger errors count as a failed implementation.",
+      "id": "cosc3500_assignment_err_tolerance",
+      "community": 0,
+      "norm_label": "err_tolerance"
+    },
+    {
+      "label": "Benchmark Text Output Format",
+      "file_type": "concept",
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "GradeBot writes stdout plus one text file per benchmark per node, named COSC3500Assignment_{benchmark type}_{node}.txt, with 6 columns: Info ({CPU|GPU|MPI}, [mpiRank,mpiWorldSize], {threadCount|gpuID|mpiRank}, {physical core count|GPU count|mpiWorldSize}, hardware name), N (matrix dimension), Matrices/second (MKL reference), Matrices/second (You), Error (sum of squares difference vs reference), Grade (marks assigned).",
+      "id": "cosc3500_assignment_text_output",
+      "community": 0,
+      "norm_label": "benchmark text output format"
+    },
+    {
+      "label": "Final Submission Requirements",
+      "file_type": "concept",
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "pages 2-3",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "Submit a single zip named 48008361.zip containing matrixMultiply.cpp, matrixMultiplyGPU.cu, matrixMultiplyMPI.cpp, and slurm.zip (an archive of all slurm job output files, slurm-xxxx.out). Unimplemented parts must be submitted as the original blank default .cpp files. The format is strict: any deviation is rejected by the automated scripts associated with Assignment1_GradeBot.",
+      "id": "cosc3500_assignment_final_submission",
+      "community": 1,
+      "norm_label": "final submission requirements"
+    },
+    {
+      "label": "Modifiable Files Constraint",
+      "file_type": "rationale",
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "Only 3 files may be changed for final submission: matrixMultiply.cpp, matrixMultiplyGPU.cu, matrixMultiplyMPI.cpp. Functions may not use any header files or outside libraries other than the provided headers (matrixMultiply.h, matrixMultiplyGPU.cuh, matrixMultiplyMPI.h), and must not write to stdout or to file in the final submission. This keeps the automated benchmark/marking harness in control of I/O and dependencies.",
+      "id": "cosc3500_assignment_modifiable_files_constraint",
+      "community": 1,
+      "norm_label": "modifiable files constraint"
+    },
+    {
+      "label": "Rangpur Cluster",
+      "file_type": "concept",
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 3",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "HPC cluster hosting the assignment. Starter files live in /home/groups/cosc3500/shared/matmul/; students copy the Makefile, the three matrixMultiply* files, and the /slurm/ submission scripts to their own directory. Students are asked NOT to submit all jobs via the final-grade script to avoid overwhelming the nodes; per-section Debug slurm scripts exist for iterative testing. The final grade script runs on two nodes, CPU and GPU benchmarks once per node, and the fastest node result is used.",
+      "id": "cosc3500_assignment_rangpur_cluster",
+      "community": 0,
+      "norm_label": "rangpur cluster"
+    }
+  ],
+  "links": [
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "matrixMultiply.cpp",
+      "source_location": "L15",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "matrixmultiply",
+      "target": "matrixmultiply_matrixmultiply",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 2",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_final_submission",
+      "target": "matrixmultiply_matrixmultiply"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_spec",
+      "target": "matrixmultiply_matrixmultiply"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "matrixmultiply_matrixmultiply",
+      "target": "cosc3500_assignment_cpu_implementation"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "matrixMultiply.cpp",
+      "source_location": "L15",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "_origin": "ast",
+      "source": "matrixmultiply_matrixmultiply",
+      "target": "matrixmultiply_cpp_floattype",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.65,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "matrixmultiplympi_matrixmultiply_mpi",
+      "target": "matrixmultiply_matrixmultiply"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "matrixMultiplyGPU.cu",
+      "source_location": "L15",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "matrixmultiplygpu",
+      "target": "matrixmultiplygpu_matrixmultiply_gpu",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "matrixMultiplyGPU.cu",
+      "source_location": "L25",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "matrixmultiplygpu",
+      "target": "matrixmultiplygpu_matrixmultiplykernel_gpu",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 2",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_final_submission",
+      "target": "matrixmultiplygpu_matrixmultiply_gpu"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_spec",
+      "target": "matrixmultiplygpu_matrixmultiply_gpu"
+    },
+    {
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "matrixmultiplygpu_matrixmultiply_gpu",
+      "target": "cosc3500_assignment_gpu_implementation"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "matrixMultiplyGPU.cu",
+      "source_location": "L15",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "_origin": "ast",
+      "source": "matrixmultiplygpu_matrixmultiply_gpu",
+      "target": "floattypecuda",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "matrixMultiplyGPU.cu",
+      "source_location": "L15",
+      "weight": 1.0,
+      "context": "return_type",
+      "_origin": "ast",
+      "source": "matrixmultiplygpu_matrixmultiply_gpu",
+      "target": "host",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "matrixMultiplyGPU.cu",
+      "source_location": "L25",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "_origin": "ast",
+      "source": "matrixmultiplygpu_matrixmultiplykernel_gpu",
+      "target": "floattypecuda",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_spec",
+      "target": "matrixmultiplygpu_matrixmultiplykernel_gpu"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "matrixMultiplyGPU.cu",
+      "source_location": "L25",
+      "weight": 1.0,
+      "context": "return_type",
+      "_origin": "ast",
+      "source": "matrixmultiplygpu_matrixmultiplykernel_gpu",
+      "target": "global",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "matrixMultiplyMPI.cpp",
+      "source_location": "L15",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "matrixmultiplympi",
+      "target": "matrixmultiplympi_matrixmultiply_mpi",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 2",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_final_submission",
+      "target": "matrixmultiplympi_matrixmultiply_mpi"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_spec",
+      "target": "matrixmultiplympi_matrixmultiply_mpi"
+    },
+    {
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "matrixmultiplympi_matrixmultiply_mpi",
+      "target": "cosc3500_assignment_mpi_implementation"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "matrixMultiplyMPI.cpp",
+      "source_location": "L15",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "_origin": "ast",
+      "source": "matrixmultiplympi_matrixmultiply_mpi",
+      "target": "matrixmultiplympi_cpp_floattype",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_spec",
+      "target": "slurm_goslurm_cosc3500assignment_rangpurdebugcpu"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "slurm_goslurm_cosc3500assignment_rangpurdebugcpu",
+      "target": "cosc3500_assignment_cpu_implementation"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugCPU",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "slurm_goslurm_cosc3500assignment_rangpurdebugcpu",
+      "target": "slurm_goslurm_cosc3500assignment_rangpurdebugcpu__entry",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugCPU",
+      "source_location": "L19",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "slurm_goslurm_cosc3500assignment_rangpurdebugcpu",
+      "target": "slurm_goslurm_cosc3500assignment_rangpurdebugcpu_path",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_spec",
+      "target": "slurm_goslurm_cosc3500assignment_rangpurdebuggpu"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "slurm_goslurm_cosc3500assignment_rangpurdebuggpu",
+      "target": "cosc3500_assignment_gpu_implementation"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugGPU",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "slurm_goslurm_cosc3500assignment_rangpurdebuggpu",
+      "target": "slurm_goslurm_cosc3500assignment_rangpurdebuggpu__entry",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugGPU",
+      "source_location": "L20",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "slurm_goslurm_cosc3500assignment_rangpurdebuggpu",
+      "target": "slurm_goslurm_cosc3500assignment_rangpurdebuggpu_path",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_spec",
+      "target": "slurm_goslurm_cosc3500assignment_rangpurdebugmpi"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "slurm_goslurm_cosc3500assignment_rangpurdebugmpi",
+      "target": "cosc3500_assignment_mpi_implementation"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugMPI",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "slurm_goslurm_cosc3500assignment_rangpurdebugmpi",
+      "target": "slurm_goslurm_cosc3500assignment_rangpurdebugmpi__entry",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurDebugMPI",
+      "source_location": "L19",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "slurm_goslurm_cosc3500assignment_rangpurdebugmpi",
+      "target": "slurm_goslurm_cosc3500assignment_rangpurdebugmpi_path",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_spec",
+      "target": "slurm_goslurm_cosc3500assignment_rangpurjudgementday"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 2",
+      "weight": 1.0,
+      "source": "slurm_goslurm_cosc3500assignment_rangpurjudgementday",
+      "target": "cosc3500_assignment_gradebot"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurJudgementDay",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "slurm_goslurm_cosc3500assignment_rangpurjudgementday",
+      "target": "slurm_goslurm_cosc3500assignment_rangpurjudgementday__entry",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "slurm/goslurm_COSC3500Assignment_RangpurJudgementDay",
+      "source_location": "L21",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "slurm_goslurm_cosc3500assignment_rangpurjudgementday",
+      "target": "slurm_goslurm_cosc3500assignment_rangpurjudgementday_path",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 2",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_spec",
+      "target": "cosc3500_assignment_gradebot"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 3",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_spec",
+      "target": "cosc3500_assignment_rangpur_cluster"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 2",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_gradebot",
+      "target": "cosc3500_assignment_benchmark_procedure"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 2",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_gradebot",
+      "target": "cosc3500_assignment_marking_rubric"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 2",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_gradebot",
+      "target": "cosc3500_assignment_text_output"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_marking_rubric",
+      "target": "cosc3500_assignment_cublas"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_marking_rubric",
+      "target": "cosc3500_assignment_intel_mkl"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 2",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_benchmark_procedure",
+      "target": "cosc3500_assignment_err_tolerance"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_cpu_implementation",
+      "target": "cosc3500_assignment_intel_mkl"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_mpi_implementation",
+      "target": "cosc3500_assignment_cpu_implementation"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_gpu_implementation",
+      "target": "cosc3500_assignment_cublas"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_mpi_implementation",
+      "target": "cosc3500_assignment_intel_mkl"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_intel_mkl",
+      "target": "cosc3500_assignment_cublas"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf",
+      "source_location": "page 1",
+      "weight": 1.0,
+      "source": "cosc3500_assignment_modifiable_files_constraint",
+      "target": "cosc3500_assignment_final_submission"
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "grading_pipeline",
+      "label": "Automated Grading Pipeline",
+      "nodes": [
+        "slurm_goslurm_cosc3500assignment_rangpurjudgementday",
+        "cosc3500_assignment_gradebot",
+        "cosc3500_assignment_benchmark_procedure",
+        "cosc3500_assignment_marking_rubric"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf"
+    },
+    {
+      "id": "three_hardware_implementations",
+      "label": "Three Hardware Target Implementations",
+      "nodes": [
+        "cosc3500_assignment_cpu_implementation",
+        "cosc3500_assignment_gpu_implementation",
+        "cosc3500_assignment_mpi_implementation"
+      ],
+      "relation": "form",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "COSC3500_Assignment.pdf"
+    },
+    {
+      "id": "debug_slurm_workflow",
+      "label": "Per-Section Debug Slurm Workflow",
+      "nodes": [
+        "slurm_goslurm_cosc3500assignment_rangpurdebugcpu",
+        "slurm_goslurm_cosc3500assignment_rangpurdebuggpu",
+        "slurm_goslurm_cosc3500assignment_rangpurdebugmpi",
+        "cosc3500_assignment_gradebot"
+      ],
+      "relation": "participate_in",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "COSC3500_Assignment.pdf"
+    }
+  ],
+  "built_at_commit": "753880760f8c585ef0ebb63dfa9bf876322b8e87"
+}
