@@ -1,0 +1,338 @@
+SPEAKER 0
+Let's have a look more specifically at what you'll be learning and doing in this course. More or less, the course is structured such that you work your way up through increasing levels of parallelism. You keep splitting up your problems, your algorithms, your code, whatever, amongst more and more parallel workers, and the problem size would generally get larger and larger, or maybe the problem size stays the same, and you just try to make it go faster and faster by throwing more and more workers at it at the same time. So to start with, in the course, you'll just be writing so-called normal serial code, where everything runs sequentially on one CPU core. Then we'll look at SIMD, single instruction multiple data, also known as vectorization, and this is a type of parallel programming you might not have used before, but it's quite powerful, and I think it's often overlooked. You've still only got one core, there's still just one thread, so it's not multi-threading, but that single CPU core, just takes that single instruction, that one instruction. And it does it to a batch or a bunch of typically adjacent pieces of data all at the same
+
+SPEAKER 1
+time. So like for example, it'll add the number 1 to a block of 8 numbers all at once. Or something else, something more complicated than that.
+
+SPEAKER 0
+To do that, in this course we'll be using AVX intrinsics, which are like functions that behave a little bit like assembly instructions, but without the drama of going full
+
+SPEAKER 1
+assembly code. So sometimes I call it like, it's like assembly language but on sort of like little trainer wheels.
+
+SPEAKER 0
+Then the next level of parallelism, up from that you would start doing multi-threading, so MIMD, multiple instructions, multiple data. Now there's multiple cores, and they can all do their own thing effectively. They have a completely different instructions, they can operate on completely different pieces of data, and that's probably what you would normally think of when you think of parallel programming. And ah depending on what courses you've done before, that's probably the kind of stuff you've done before. In this course, we'll be using a specific type of, or specific I guess it's a library of ah parallel programming. Called uh Open MP, uh, mostly you'll be using it for multi-threading, although that's not, not the only thing it can do, it's just for parallel programming in general. Then the next level of parallelism up would be where you start to have multiple computers, multiple nodes, and this is what you would normally call a cluster, or if it's big enough, you'd start to call it a supercomputer. And this is where we've got multiple machines working on the same problem and typically they would be communicating via some sort of networking interface. It's different from multi-threading in that with multi-threading all the threads normally have access to the same RAM. They've got access, basically equal access to the same pieces of memory, whereas when you start doing it on a cluster, you know, nodes can't easily.
+
+SPEAKER 1
+See what the other nodes are doing, uh, unless you kind of do it quite deliberately.
+
+SPEAKER 0
+OK, they don't necessarily have access to the same memory and then talking between them becomes quite slow cos it has to be over like an an ethernet interface or something else. Um, and for this we'll be using MPI message passing interface, which is another way of parallel programming at the sort of cluster scale. And for that you would be running it on running your sort of parallel programming MPI code on the UQ
+
+SPEAKER 1
+teaching clusters that you'll have access to in this course.
+
+SPEAKER 0
+Then we've got GPU programming, which is kind of its own thing but it's got aspects that involve all of those other types of parallelism I just described. For that we'll be coding in Kuda. The GPU was probably the most parallel processing unit I guess that you'll do in this course, although theoretically MPI in a cluster can be ah much more parallel, you
+
+SPEAKER 1
+know, if it's a big enough supercomputer. And indeed even with MPI you could actually have multiple GPUs going at once.
+
+SPEAKER 0
+But in practise boy for this course and also just day to day when you're only working on one machine,
+
+SPEAKER 1
+GPU is probably the highest level of parallelism that you'd work with day to day outside of like a cluster environment, OK.
+
+SPEAKER 0
+For the assessment for the course. There's really only two pieces of assessment effectively that are sort of broken up into chunks. You've got your major project, which is where you get most of your marks. That's split into multiple deadlines, and there's a matrix multiplying, a matrix multiply coding assignment that's in the middle, which
+
+SPEAKER 1
+is supposed to get you, uh, familiar with the different parallel programming techniques.
+
+SPEAKER 0
+I'll discuss this in more detail in a moment, but effectively you choose a project topic for your major project.
+
+SPEAKER 1
+You choose an algorithm, a simulation, you know, something that you want to parallellyze, and you've got a fair bit
+
+SPEAKER 0
+of freedom with that. Uh, and then you make it go as fast as you can, first with using just serial techniques, just serial programming, and that's milestone one, and then later on you upgrade or extend your code to make it parallel, and
+
+SPEAKER 1
+that's milestone two near the end of the course.
+
+SPEAKER 0
+And that milestone 2 will also have an in-person interview,
+
+SPEAKER 1
+OK?
+
+SPEAKER 0
+So milestone 1 and milestone 2, the deliverables are pre-recorded video presentations of 10 minutes each where you explain your
+
+SPEAKER 1
+project to the examiners and then they can also follow up with that in the interview.
+
+SPEAKER 0
+In between the milestone 1 and milestone 2, you'll have the matrix multiplier assignment and that's more of your regular
+
+SPEAKER 1
+sort of programming assignment where you'll have to write some code to implement a matrix multiplier as fast as possible and you get marks automatically, basically directly linked to how fast your implementation is.
+
+SPEAKER 0
+As for contact hours, now on the timetable and you know allocate plus, you should see lec one and app
+
+SPEAKER 1
+one. and even though they're down as different types of sessions, they're actually just the same. They're just generic contact hours.
+
+SPEAKER 0
+The lectures and the tutorials are all pre-recorded, so you can watch those on your own time, or you can
+
+SPEAKER 1
+watch them during the sessions, in-person sessions as well if you wish, and, ah, yeah, you can just go through the course at your own pace.
+
+SPEAKER 0
+Everything's online from the very start of the course and then physically in the in-person sessions, we can just help you individually with whatever you're up to at the time.
+
+SPEAKER 1
+OK, so you should be for your own sort of
+
+SPEAKER 0
+timetabling purposes, you should be watching at least one lecture
+
+SPEAKER 1
+video per week and one tutorial video per week for the first few weeks until you run out of content, but we can help you with anything in any week. So if you, Showed up in week 1 and you wanna ask about stuff that's nominally in week 5 or 8, then that's also completely fine, OK?
+
+SPEAKER 0
+And this also is, I, I think it's a nice
+
+SPEAKER 1
+part about this course, is that if you want to, you can manage your time around other courses' deadlines because everything's been laid out from the beginning. So obviously the course has deadlines that are due at certain times, but there's actually nothing stopping you from starting earlier on those and submitting earlier if you wish.
+
+SPEAKER 0
+Here we've got the course timetable outline. As I said, the pre-recorded lectures and tutorials, you can follow along at your own pace, so the timing of
+
+SPEAKER 1
+those is really just a guide. But you really should be watching at least one lecture and 1 tutorial per week up to the mid-semester break or until you run out of content. So for the 1st 8 weeks or so, you'll be
+
+SPEAKER 0
+learning the core content, and then the rest of the time you'll be implementing those ideas in your assessment items,
+
+SPEAKER 1
+but there's no more video content to watch, OK.
+
+SPEAKER 0
+Now, whereas the timetable for how you want to follow along in terms of lecture and uh tutorial content is
+
+SPEAKER 1
+self-paced.
+
+SPEAKER 0
+You'll be sorry to hear that the assessment deadlines are
+
+SPEAKER 1
+not self-paced. Those are fixed, non-negotiable points in time.
+
+SPEAKER 0
+I've also got in here the so-called milestone zero, which
+
+SPEAKER 1
+isn't really, it's not a real assessment item. It's not, it's not even in the course profile, I don't think. That's, Just a pseudo deadline to say hey you should have chosen your project by, you know, milestone 0 time, and we'll get you to submit your project title, your project topic to Blackboard as if it's a real assessment item, but in practise it's not. You should, if you're choosing a non-standard project, you should really discuss with the teaching staff just to make sure you're not choosing something disastrous.
+
+SPEAKER 0
+And this milestone zero is really just for us to
+
+SPEAKER 1
+make sure that everyone's at least nominally engaged with the course and that they've actually chosen a topic and they're not gonna, you know, be freaking out. Or just to sort of get them vaguely on the rails of the course.
+
+SPEAKER 0
+Milestone one is the first real assessment item, that's worth
+
+SPEAKER 1
+24%. That deliverable, as I said before, is a 10 minute video. And then FAQs and stuff you can see about the details of that video submission, etc. The next item is the matrix multiplier assignment, submit code
+
+SPEAKER 0
+and some log files for that. Milestone two is the parallel extension of your milestone one and deliverable for that is also a 10 minute video. Now I can show you the course timeline here as
+
+SPEAKER 1
+this kind of flat. Boring Microsoft's PowerPoint default colour scheme table, and it does the job, but it's a bit dull.
+
+SPEAKER 0
+So I've also decided to put together the course timeline
+
+SPEAKER 1
+as an inspirational 1980s style montage, and this montage is
+
+SPEAKER 0
+something that you can use to get yourself psyched at the start of the semester, get psyched about all the parallel programming techniques you're gonna be learning, but also you can return to this montage periodically throughout the semester, whenever you feel that your motivation is waning.
+
+SPEAKER 1
+Whenever you need to dig deep and get the inspiration you need to push through.
+
+SPEAKER 0
+So here it is, the Kosk 3500 course timetable, motivational
+
+SPEAKER 1
+montage.
+
+SPEAKER 0
+Alright, it's the introduction, you're living it right now. Week 2, learning about architecture. Week 3 optimisation and profiling. Week 4, you're learning about sim de vectorization. Week 5, you're doing whatever the hell that is. Week 6. Working back clusters MPI week 7, working on GPUs, working on your abs. Week 8, hybrid programming. And then week 9 comes around, you're working on your assignment, hitting those performance benchmarks, and I'm sort of like
+
+SPEAKER 1
+staring over at you with my dead eyes, vaguely interested in your progress. Uh, oops, Mid-semester break, don't forget to get your vaccine
+
+SPEAKER 0
+boosters, I'm not a doctor, but I'm pretty sure it's a vaccine, and then for the rest of the time you're gonna be working on your assessment items, upping the parallelism, upping the tempo, putting in the optimisations, and then finally get your milestone 2 submission in and impress us all with all your parallel programming techniques that you've managed
+
+SPEAKER 1
+to demonstrate. OK, so coming back now to the assessment, specifically the
+
+SPEAKER 0
+major project. The major project will be the majority of your marks.
+
+SPEAKER 1
+You have to choose a simulation slash algorithm that you can parallellyze, and then through the course, you're gonna be
+
+SPEAKER 0
+implementing that algorithm first in serial code, then later in parallel code, and you'll be presenting your design decisions and
+
+SPEAKER 1
+results in 2 10 minute pre-recorded video presentations, first for
+
+SPEAKER 0
+the serial implementation and then later for the parallel implementation,
+
+SPEAKER 1
+and then later you'll be interviewed in person.
+
+SPEAKER 0
+First up, you've got to choose a topic. And you'll tell us what you chose via the so-called milestone 2. So how do you, sorry, milestone 0. So how do you decide what topic? Well, ultimately, it's up to you. But you can look at this website for example, where they've got some example simulations of all kinds of things
+
+SPEAKER 1
+really, like epidemics, interacting particles, flocking, chemistry stuff, lots of things. Ah, but we also provide an example list of just some of our classics. If you choose one of these from the list, then you know that it's something that's doable, at least, and you can see all the examples are similar really. They're all similar in that they're parallelizable groups of things
+
+SPEAKER 0
+that interact at least a little bit with other things, cos the reason it's like that is you want to avoid problems.
+
+SPEAKER 1
+That are embarrassingly parallel, just so that you've got some
+
+SPEAKER 0
+scope to show off some parallel programming techniques along the
+
+SPEAKER 1
+way.
+
+SPEAKER 0
+If you make the parallelism too easy, then there's just
+
+SPEAKER 1
+just gonna be less to show off, there's gonna be less um less advanced techniques that you'll be able to do. So for example, in the getting started tutorial, I, I do the radioactive decay as the simulation. That's actually a bad topic because every nuclei doesn't depend on any other nuclei, unless it's like a chain reaction I guess, but in that example, they're all just random independent events. It could, it's embarrassingly parallel, it's not really a good, a good choice of uh milestone topic.
+
+SPEAKER 0
+Ah, you're also welcome to just make up your own topic if you've got something that you're interested in.
+
+SPEAKER 1
+It is riskier, and I'd recommend if you're gonna, if
+
+SPEAKER 0
+you wanna go that route, it is something you can do, but you should discuss it with the course staff
+
+SPEAKER 1
+in the sessions to make sure you're not doing something too easy or too hard. Often too hard is actually the thing that, Ends up causing more problems I guess, but every year people do
+
+SPEAKER 0
+their own thing, and sometimes it's great and sometimes it's a disaster, and my advice here is, don't get carried
+
+SPEAKER 1
+away with the algorithm or the model itself. Like don't choose something, That's so complicated where simply getting the model working at all is a lot of work, OK, and that's a common cause of regret. You've chose a model which is too complicated and you can't even get the model to give you the right answer to start with, so you don't really have any time to show off the actual benchmarking and tweaking and optimisation, whereas where, which is where you actually get the marks. So if you look at the standard list of things that we provide or standard list of topics, all those
+
+SPEAKER 0
+models, the idea is very basic.
+
+SPEAKER 1
+Like sometimes it's literally just one formula, like interacting particles for instance.
+
+SPEAKER 0
+However, even though the model itself is incredibly simple, there's
+
+SPEAKER 1
+still a lot of complexity. In terms of a lot of scope, in terms of
+
+SPEAKER 0
+how you can decide to parallellyze that. So, in terms of, it's still a good model in
+
+SPEAKER 1
+terms of getting actual marks for the course, cos you can get it working initially quite quickly and then optimise it, OK, you don't spend all your time just trying to get some really crazy model to just even do the thing it's supposed to do. Now, the flip side of that is like I sort of said with like radioactive decay or something, if you choose something, That's so trivial to parallelly, that there's really no scope for showing off anything that you've learnt in the course, so it, it's hard to get marks for a really, really uh, Yeah, basically like an embarrassingly parallel problem won't give you much scope. OK, so how does the assessment play out?
+
+SPEAKER 0
+Well, first, You get the model working, and you have it go as fast as possible using serial only code. This is milestone one. Now serial only does not mean there's no optimisations. You, there's still a bunch of stuff and we covered that in the first few lectures, I think like the 1st 3 lectures or so before we get to SIMD.
+
+SPEAKER 1
+So CIMD is a type of parallelism, so that shouldn't be in milestone one.
+
+SPEAKER 0
+But there's still lots of ways to make just serial
+
+SPEAKER 1
+code run fast, and normally it's about memory access. And you will need that even in milestone one, like
+
+SPEAKER 0
+the, the, the criteria sheet for milestone one and milestone
+
+SPEAKER 1
+two are essentially identical.
+
+SPEAKER 0
+For the purposes of milestone one, yeah, I'd emphasise SIMD counts as parallelism, you shouldn't have SIMD in milestone one. Then in milestone two, you'll do a parallel implementation. And you can choose what type of parallel programming platforms
+
+SPEAKER 1
+slash techniques you wish to use. It could be SIMD, it could be OpenMP, it could be MPI, it could be CUDA, it could be various combinations thereof, and I talk about that in the FAQ about, you know, how you can decide which ones you want to, you want to do. Ah, normally it's a decision about whether you want to go the GPU route or the CPU route, but they're not 100% mutually exclusive either. Sometimes a good way to go about it is you start off with a CPU implementation cos you have to do it anyway in Serial, then you make a parallel implementation using say SIMD OpenMP and then maybe MPI and then you might try to make a basically separate optimisation that's on GPU. If you've got time, that's a, that's a, a, a good way to flesh it all out, but you may not have time to do all that.
+
+SPEAKER 0
+The video presentation for both milestone 1 and milestone 2 are pre-recorded. And they're strictly 10 minutes each. Know that many of you will have done a lot of work and you might feel like 10 minutes isn't
+
+SPEAKER 1
+enough time. You've got all this stuff you did, you wanna talk about all of it.
+
+SPEAKER 0
+I'm here to tell you that it is enough time. People have to explain more complicated stuff than your KO
+
+SPEAKER 1
+3500 project in 10 minutes or less all the time. Like people at research conferences, typically we only have 12 minutes, for instance.
+
+SPEAKER 0
+But also, I think, don't underestimate just how hard it
+
+SPEAKER 1
+is to make a nice, polished presentation fit down. Into 10 minutes, it is actually a lot of work, that's part of the task, but, ah, short presentations are not necessarily easier than long presentations where you can just take as much time as you want and sort of waffle on. You have to be quite, ah, you have to prioritise, you have to simplify, you've gotta practise, you've gotta spend a lot of time on graphical aids, there's a, there's
+
+SPEAKER 0
+a lot to it. Ah, so don't underestimate how tricky that can be.
+
+SPEAKER 1
+So if you're struggling to get it to 10 minutes,
+
+SPEAKER 0
+just keep in mind that it is actually a struggle
+
+SPEAKER 1
+to get it into 10 minutes. It's, it's different from being impossible, it's just you have to actually spend a lot of time trying to work out how the hell you're gonna fit this thing into 10 minutes. OK, that's a common problem that you'll have throughout. You know, your working life as well when you have to present things.
+
+SPEAKER 0
+Then after your milestone 2, after the tutors have watched your presentations, there will also be an in-person interview.
+
+SPEAKER 1
+That's mandatory, and you have to treat that effectively like an in-person exam sort of rules.
+
+SPEAKER 0
+So like an exam, if you can't make it, you'll
+
+SPEAKER 1
+need like deferred exam approval kind of reasonings and official approvals. So don't just be a no show.
+
+SPEAKER 0
+Don't get on a plane and fly away.
+
+SPEAKER 1
+Before you've done the interview, because that's like you just failed the course, it's bad. It's effectively, yeah, effectively the interview is pass fail, but
+
+SPEAKER 0
+the tutors will also use your interview to inform the
+
+SPEAKER 1
+final grade that they'll give you for your milestone too, as well.
+
+SPEAKER 0
+Alright, thanks very much and welcome to the course.
