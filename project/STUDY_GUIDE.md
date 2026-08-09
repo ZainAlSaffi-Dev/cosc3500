@@ -195,6 +195,21 @@ deliverables. The alternative (implicit/ADI schemes) is unconditionally
 stable but requires solving linear systems each step — out of scope, noted
 as an extension.
 
+**P5 measured boundary (2026-08-09, smoke grid 256×64, T = 0.25):** the
+solver prints dt_stable ≈ 1.526e-5. Bracketing empirically by sweeping nt:
+nt = 15000 (dt = 1.092× the bound) still finishes finite (price 205.3226 —
+note the 4th decimal already drifting: a marginal mode decaying slowly);
+nt = 14900 (1.100×) ends at 2.8e+69 — caught mid-explosion; nt = 14600
+(1.122×) is NaN. So the *real* cliff sits ~9% above the printed estimate.
+Why conservative: the printed bound plugs in the single worst cell's
+coefficients (the far corner), but an unstable mode occupies a *region*,
+so its growth rate averages in neighbouring, smaller coefficients. A safety
+bound that errs safe is exactly what you want — say this in the video.
+The horror-show config (`unstable.cfg`) runs at 4× the bound: checkerboard
+erupts at the high-S/high-v corner and overflows to NaN by ~step 450 of
+4096; `weather_map.py --diverging` films it (red/blue = the +/- oscillation,
+black = overflowed cells).
+
 ### 9. Boundary conditions (know these cold)
 
 The PDE needs values at the grid edges. Five conditions total:
@@ -285,6 +300,17 @@ A fast wrong answer is worth nothing.
   moves the answer by dollars, so the margins trip on regressions, not noise.
   The plan's "rel err < 1e-3" target is for the *reference-sized* grid
   (spacing ~10 vs 50 here); the P4 convergence study demonstrates it.
+
+**P4 measured convergence (2026-08-09, node-aligned ladder, dt quarters per
+rung):** prices 190.996 → 195.605 → 195.925 → 196.102 (finest 841×201,
+nt = 224000 is the anchor). Errors vs the anchor: 5.106 → 0.497 → 0.177,
+successive ratios 10.3 and 2.8 → observed order in dt ≈ 1.7 and 0.7, mean
+≈ 1.2 — *consistent with first order in dt* (equivalently second order in
+the spacings, since dt ∝ ds² under the stability constraint). The rates
+oscillate around 1 because the coarsest rung barely resolves the payoff
+kink (spacing 200 vs strike 5250) and the anchor itself carries error.
+Richardson extrapolation from the last two rungs puts the true price near
+196.16. Figure: `results/convergence.png`, raw numbers alongside as CSV.
 
 ---
 
