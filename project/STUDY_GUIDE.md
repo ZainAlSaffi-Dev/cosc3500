@@ -255,6 +255,37 @@ We can't check against "the market" — that would test the *model*, not the
 The iron rule: **no version is benchmarked until it matches the reference.**
 A fast wrong answer is worth nothing.
 
+**P3 implementation notes — what the two test binaries actually do:**
+
+- **The normal CDF without approximation.** Black-Scholes needs N(x), the
+  standard normal CDF. `<cmath>` has no `norm_cdf`, but it has `erfc`, the
+  *complementary error function* — and N(x) = ½·erfc(−x/√2) is an exact
+  identity, not an approximation. One line, no polynomial fits to defend.
+- **Node-aligned test grid.** `extract_result` reads the cell *nearest*
+  (spot, v0) — no interpolation. On the smoke grid the nearest stock node is
+  $11.80 away from spot 5200; at delta ≈ 0.56 that's ~$6.60 of price error
+  from the snap alone — bigger than everything we're trying to measure. The
+  tests instead pick node counts so spot and v0 land *exactly* on nodes:
+  `ns = 421` → spacing 50 → 5200 is node 104 (and strike 5250 is node 105);
+  `nv = 51` → spacing 0.02 → v0 = 0.04 is node 2.
+- **Why parity is near-exact on the grid, not just on paper.** The parity
+  portfolio (long call, short put) has payoff S − K — *linear* in S. Central
+  differences are exact on linear functions, every boundary formula treats
+  it exactly, and it has no v-dependence, so the scheme propagates it with
+  only "compounding" error: after nt steps the grid holds (1 − r·dt)^nt
+  where the formula says e^(−rT) — a gap of order 1e-5 dollars here. So a
+  dollar-tight tolerance is fair for parity, while the BS-collapse test
+  carries genuine discretisation error and needs a measured tolerance.
+- **Tolerances are measured, not guessed.** Each test was run once to record
+  its actual error, then the tolerance was fixed just above it. Measured
+  (2026-08-09, node-aligned 421×51 grid, nt = 56000): BS-collapse rel err
+  1.16e-3 (call) / 1.12e-3 (put) → tolerance 2.5e-3 (~2× measured); parity
+  gap 5.4e-6 dollars → tolerance 1e-4 (20× measured — headroom for compiler
+  FP differences on rangpur, still ~5 orders below bug-sized). A real bug
+  moves the answer by dollars, so the margins trip on regressions, not noise.
+  The plan's "rel err < 1e-3" target is for the *reference-sized* grid
+  (spacing ~10 vs 50 here); the P4 convergence study demonstrates it.
+
 ---
 
 ## Part III — The Programming (what am I writing and why?)
