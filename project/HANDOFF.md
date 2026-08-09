@@ -26,12 +26,17 @@
   region-occupying mode — STUDY_GUIDE §8 P5 notes). unstable.cfg now
   smoke-sized at 4× bound (old comment claimed 4× but was ~2000× over on
   the reference grid; also reference frames are 13 MB each, unfilmable).
-- **P6 weather map:** `weather_map.py` renders mp4 (+gif): sequential
-  Blues for smooth runs, `--diverging` RdBu for the blow-up, NaN black,
-  fixed colour scale, `--max-frames` caps the all-NaN tail.
-  Rendered: `results/weather_map.{mp4,gif}` (smoke, 80 frames),
-  `results/blowup.mp4` (90 frames, checkerboard erupts high-S/high-v
-  ~step 300–450). Snapshot dirs: results/smooth, results/blowup.
+- **P6 weather map:** `weather_map.py` renders mp4 (+gif) from snapshot
+  dumps; author reviewed the first cut (Blues on white) as unreadable →
+  now inferno on a dark stage, plus `--time-value` (V − payoff: the real
+  heat-transfer shot, flame at the strike pinching to a point at v=0)
+  and `--style surface` (3-D sheet, slow camera drift). `--diverging`
+  RdBu on white for the blow-up clip. Fixed colour scale, 98th-pct cap,
+  NaN magenta-on-dark/black-on-white, `--max-frames` caps the NaN tail.
+  Rendered: `results/weather_map.{mp4,gif}`, `weather_map_timevalue.mp4`
+  (best single clip), `surface.mp4`, `surface_timevalue.mp4`,
+  `blowup.mp4`. Snapshot dirs: results/smooth, results/blowup.
+  STUDY_GUIDE §6 P6 rendering notes explain all four choices.
 - **P7 scaffold:** `--opt-level 0..6` CLI → `Config::opt_level`;
   OptSolver mirrors baseline, dispatches a `StepKernel` function pointer
   ONCE before the time loop; kernels own interior + v=0 row, solve()

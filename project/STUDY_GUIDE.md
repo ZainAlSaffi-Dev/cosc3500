@@ -157,6 +157,30 @@ Up/down = calmer/wilder variance (v-derivatives). **Diagonals = the
 cross-term** (correlation). No cross-term → 5-point stencil like the heat
 equation; Heston's correlation forces the diagonals.
 
+**P6 rendering notes (2026-08-09) — what the four clips show and why they
+look the way they do:**
+
+- `weather_map.mp4` — raw V(S, v), inferno heat ramp on a DARK stage. The
+  first cut used blue-on-white and was unreadable: the low-value half of a
+  light-to-dark ramp vanishes into a white figure background. Dark stage +
+  black→red→yellow means cold recedes and heat glows.
+- `weather_map_timevalue.mp4` — **the actual heat-transfer shot.** Raw V
+  spends the whole colour range on the boring linear deep-ITM ramp (up to
+  ~$15,750) while the PDE's real work happens in a ~$400 band near the
+  strike. Subtracting the expiry payoff (time value = V − payoff) cancels
+  the ramp: what remains is a flame anchored at K = 5250, widening as
+  variance grows, pinching to a point at v = 0 — where diffusion dies (all
+  diffusion terms carry a factor v) and only transport survives. Time value
+  IS what diffuses; this clip is the spreadsheet metaphor made visible.
+- `surface.mp4` / `surface_timevalue.mp4` — the same data as a 3-D sheet
+  with a slow camera drift: the kinked payoff ramp smoothing out, and the
+  time-value sail growing out of the flat expiry sheet. The "matrix being
+  computed", frame by frame.
+- Mechanics: one fixed colour scale across all frames (else the animation
+  "breathes"), 98th-percentile cap so late-time high-v glow doesn't
+  compress early structure, NaN cells magenta on dark / black on white so
+  broken cells are unmistakable.
+
 ### 7. Finite differences in one minute
 
 How do you turn derivatives into cell arithmetic? Approximate them with

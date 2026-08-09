@@ -2,27 +2,38 @@
 """Weather map (PLAN P6): results/<run>/snap_*.csv -> animated value surface.
 
 Each snapshot CSV: nv rows (variance), ns columns (stock price) — layout
-fixed by src/io.cpp dump_snapshot. Frames colour option value over the
-(S, v) plane; the animation runs in SOLVER order: expiry payoff -> today.
+fixed by src/io.cpp dump_snapshot. The animation runs in SOLVER order:
+expiry payoff -> today.
 
-Two colour modes (pick by what the data's job is, not by taste):
-  sequential (default) — one hue light->dark for magnitude; smooth runs.
-  diverging           — two hues around a neutral zero for the instability
-                        clip, where the checkerboard swings +/- and polarity
-                        IS the story. NaN/inf cells render black.
+Styles and colour modes (pick by what the data's job is):
+  --style flat (default)  heatmap over the (S, v) plane.
+  --style surface         3-D sheet V(S, v) with a slow camera drift — the
+                          "spreadsheet" itself, kink smoothing out.
+  sequential (default)    dark background + inferno (black->red->yellow):
+                          low values recede, heat glows. Magnitude story.
+  --diverging             white background + red/blue around 0 for the
+                          instability clip, where polarity IS the story.
+                          NaN/inf cells render black.
+  --time-value            subtract the expiry payoff, plotting V - payoff:
+                          the time value is what actually diffuses — raw V
+                          wastes the colour range on the linear deep-ITM
+                          ramp. (Call payoff; strike via --strike.)
 
 Usage:
-    python3 scripts/weather_map.py results/run1 --out results/weather_map.mp4
-    python3 scripts/weather_map.py results/blowup --diverging --fps 12
+    python3 scripts/weather_map.py results/smooth --out results/weather_map.mp4
+    python3 scripts/weather_map.py results/smooth --time-value --out tv.mp4
+    python3 scripts/weather_map.py results/smooth --style surface --out s.mp4
+    python3 scripts/weather_map.py results/blowup --diverging --max-frames 90
 """
 
 import argparse
 import glob
 import os
 import re
-import sys
 
 import numpy as np
+
+S_MAX_MULT = 4.0  # matches every config: S spans [0, 4*strike]
 
 
 def load_snapshots(snapshot_dir: str):
@@ -42,8 +53,13 @@ def main() -> int:
     parser.add_argument("snapshot_dir")
     parser.add_argument("--out", default="results/weather_map.mp4")
     parser.add_argument("--fps", type=int, default=20)
+    parser.add_argument("--style", choices=("flat", "surface"), default="flat")
     parser.add_argument("--diverging", action="store_true",
                         help="two-hue scale around 0 for the instability clip")
+    parser.add_argument("--time-value", action="store_true",
+                        help="plot V - expiry payoff (call) instead of V")
+    parser.add_argument("--strike", type=float, default=5250.0,
+                        help="strike for --time-value payoff and the S axis")
     parser.add_argument("--gif", action="store_true",
                         help="also write a .gif next to the .mp4")
     parser.add_argument("--max-frames", type=int, default=0,
@@ -57,12 +73,30 @@ def main() -> int:
     import matplotlib.pyplot as plt
     import imageio.v3 as iio
 
+    # Sequential mode is film material: dark stage so the heat glows.
+    # Diverging keeps a white stage — a diverging scale's midpoint is light
+    # by design, and calm regions should read quiet, not glowing.
+    if not args.diverging:
+        plt.style.use("dark_background")
+
     snaps = load_snapshots(args.snapshot_dir)
     if args.max_frames > 0:
         snaps = snaps[: args.max_frames]
 
+    s_max = S_MAX_MULT * args.strike
+    num_stock = snaps[0][1].shape[1]
+    stock_axis = np.linspace(0.0, s_max, num_stock)
+
+    value_label = "option value ($)"
+    if args.time_value:
+        # Time value = V - intrinsic. The deep-ITM ramp cancels out and the
+        # colour range is spent entirely on what the PDE actually moves.
+        payoff = np.maximum(stock_axis - args.strike, 0.0)
+        snaps = [(step, vals - payoff[np.newaxis, :]) for step, vals in snaps]
+        value_label = "time value V − payoff ($)"
+
     # One colour scale across ALL frames, or the animation "breathes" and
-    # instability frames clip. Non-finite values (blow-up) are masked black.
+    # instability frames clip. Non-finite values (blow-up) are masked.
     finite_vals = np.concatenate(
         [a[np.isfinite(a)].ravel() for _, a in snaps])
     if finite_vals.size == 0:
@@ -72,41 +106,60 @@ def main() -> int:
         # 99.5th percentile, not max: one saturated cell must not wash out
         # the palette for every earlier frame.
         limit = np.percentile(np.abs(finite_vals), 99.5) or 1.0
-        vmin, vmax, cmap_name = -limit, limit, "RdBu_r"
+        vmin, vmax, cmap_name, bad_colour = -limit, limit, "RdBu_r", "black"
     else:
-        # Magnitude story: one hue, light -> dark.
-        vmin, vmax, cmap_name = 0.0, float(finite_vals.max()), "Blues"
+        # Magnitude story: perceptually-uniform heat ramp. 98th percentile
+        # cap keeps the late-time high-v glow from compressing the early
+        # near-strike structure; hotter cells simply saturate to yellow.
+        vmin = min(0.0, float(finite_vals.min()))
+        vmax = float(np.percentile(finite_vals, 98.0)) or 1.0
+        cmap_name, bad_colour = "inferno", "magenta"
     cmap = matplotlib.colormaps[cmap_name].copy()
-    cmap.set_bad("black")  # non-finite cells: unmistakably "broken"
+    cmap.set_bad(bad_colour)  # broken cells must be unmistakable
 
     total_steps = max(step for step, _ in snaps)
+    variance_axis = np.linspace(0.0, 1.0, snaps[0][1].shape[0])
+    stock_mesh, variance_mesh = np.meshgrid(stock_axis, variance_axis)
+
     frames = []
-    fig, ax = plt.subplots(figsize=(8, 4.5), dpi=120)
-    for step, grid_vals in snaps:
+    if args.style == "surface":
+        fig = plt.figure(figsize=(8, 4.5), dpi=120)
+        ax = fig.add_subplot(projection="3d")
+    else:
+        fig, ax = plt.subplots(figsize=(8, 4.5), dpi=120)
+    for index, (step, grid_vals) in enumerate(snaps):
         ax.clear()
         masked = np.ma.masked_invalid(grid_vals)
-        # origin="lower": v=0 at the bottom, matching how we drew the grid
-        # on paper. extent maps pixel indices to (S, v) coordinates.
-        image = ax.imshow(masked, origin="lower", aspect="auto",
-                          cmap=cmap, vmin=vmin, vmax=vmax,
-                          extent=(0.0, 21000.0, 0.0, 1.0))
-        ax.set_xlabel("stock price S")
-        ax.set_ylabel("variance v")
         broken = int(np.sum(~np.isfinite(grid_vals)))
         note = f"   [{broken} cells non-finite]" if broken else ""
+        if args.style == "surface":
+            ax.plot_surface(stock_mesh, variance_mesh,
+                            np.where(np.isfinite(grid_vals), grid_vals, 0.0),
+                            cmap=cmap, vmin=vmin, vmax=vmax,
+                            rcount=64, ccount=128, linewidth=0,
+                            antialiased=False)
+            ax.set_zlim(vmin, float(finite_vals.max()))
+            ax.set_zlabel(value_label, fontsize=8)
+            # Slow camera drift: ~25 degrees of azimuth over the whole clip.
+            ax.view_init(elev=25,
+                         azim=-60 + 25.0 * index / max(1, len(snaps) - 1))
+        else:
+            image = ax.imshow(masked, origin="lower", aspect="auto",
+                              cmap=cmap, vmin=vmin, vmax=vmax,
+                              extent=(0.0, s_max, 0.0, 1.0))
+            if index == 0:
+                fig.colorbar(image, ax=ax, label=value_label)
+        ax.set_xlabel("stock price S", fontsize=9)
+        ax.set_ylabel("variance v", fontsize=9)
         ax.set_title(f"{args.title} — step {step}/{total_steps}{note}",
                      fontsize=10)
-        if len(frames) == 0:
-            fig.colorbar(image, ax=ax, label="option value ($)")
         fig.canvas.draw()
-        # Grab the rendered canvas as an RGB image array for the encoder.
         frame = np.asarray(fig.canvas.buffer_rgba())[:, :, :3].copy()
         frames.append(frame)
     plt.close(fig)
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    # H.264 mp4 (course submission format). macro_block_size pads odd frame
-    # sizes; imageio-ffmpeg ships its own ffmpeg binary.
+    # H.264 mp4 (course submission format); imageio-ffmpeg ships ffmpeg.
     iio.imwrite(args.out, frames, fps=args.fps, codec="libx264")
     print(f"wrote {args.out} ({len(frames)} frames @ {args.fps} fps)")
     if args.gif:
