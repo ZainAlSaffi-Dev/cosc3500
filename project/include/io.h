@@ -11,7 +11,7 @@
 // Row = variance level j, column = stock node i (matches weather_map.py).
 void dump_snapshot(const std::string& dump_dir, int step, const Grid& grid);
 
-// One machine-readable stdout line (CLI contract, PLAN §3):
+// stdout line
 // price,delta,gamma,vega,ns,nv,nt,solver,seconds,cell_updates_per_sec
 void print_result_csv(const SolveResult& r, const Config& cfg);
 

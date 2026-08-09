@@ -129,6 +129,29 @@ Stability note: the v=0 row is the least stiff (its coefficients vanished);
 the explicit dt bound binds at the high-v/high-S corner — which is exactly
 where the instability checkerboard erupts first.
 
+## 1d. Working agreement — learning by building (locked)
+
+The author wants to finish the project AND understand every line (interview
+prep for M2, video narration for M1). Rules for every coding session:
+
+- **Explain before code.** Before any file is written/changed, state in 2–3
+  plain-English sentences what it will do and which STUDY_GUIDE section it
+  maps to. New concept → STUDY_GUIDE gets a section before the code lands.
+- **Author-writes list.** These core pieces the author types themself, with
+  guidance (skeleton + hints first, review after): payoff initialisation,
+  the interior stencil update, ONE boundary (v=0 — the trap one), and ONE
+  opt-level kernel (level 1, hoisting — the biggest idea). Everything else
+  (plumbing, CLI, tests, scripts, remaining boundaries/levels) can be
+  scaffolded by the assistant, but always walked through afterwards.
+- **Narration comments** (§1b) are mandatory everywhere — they are the
+  follow-along thread through the code.
+- **Checkpoint quiz.** At the end of each phase (P1–P8), 3–5 rapid-fire
+  questions on what was just built (same style as STUDY_GUIDE Part V).
+  Wrong answer → that topic gets re-explained and added to the drill list.
+- **STUDY_GUIDE stays in sync.** Any decision change lands in the guide in
+  the same session (already a repo rule; restated here because it's the
+  learning backbone).
+
 ## 2. Repo layout (this scaffold)
 
 ```
@@ -151,20 +174,21 @@ project/
 │   ├── params.cpp
 │   ├── grid.cpp
 │   ├── solver_baseline.cpp  ← correct-first serial solver
-│   ├── solver_opt.cpp       ← optimised serial (same interface, same answers)
+│   ├── solver_opt.cpp       ← optimised serial (same interface, same answers); dispatches on --opt-level
+│   ├── solver_opt_kernels.cpp ← step_level1()..step_level6() ladder kernels (§4b)
 │   ├── black_scholes.cpp
 │   └── io.cpp
 ├── tests/
 │   ├── test_bs_collapse.cpp ← xi=0, v0=theta ⇒ match Black-Scholes formula
 │   ├── test_parity.cpp      ← C - P = S*exp(-qT) - K*exp(-rT)
-│   └── test_opt_matches.cpp ← solver_opt ≡ solver_baseline to 1e-12
+│   └── test_opt_matches.cpp ← solver_opt at EVERY --opt-level 0..6 ≡ solver_baseline to 1e-12
 ├── scripts/
 │   ├── weather_map.py       ← snapshots → coloured frames → gif/mp4 (ffmpeg)
 │   ├── convergence_plot.py  ← refinement study → convergence figure
-│   └── bench_plot.py        ← bench CSVs → before/after bar + scaling figure
+│   └── bench_plot.py        ← bench CSVs → opt-level ladder bars + scaling figure
 ├── slurm/
 │   ├── debug_serial.sh      ← 5-min sanity job (build + smoke run)
-│   └── bench_serial.sh      ← the real benchmark job (baseline vs opt sweep)
+│   └── bench_serial.sh      ← the real benchmark job (baseline + opt-level 0–6 sweep)
 └── results/                 ← gitignored; snapshots, CSVs, frames land here
 ```
 
@@ -177,6 +201,7 @@ never needed on rangpur.
 ```
 ./heston --config config/reference.cfg [options]
   --solver baseline|opt        (default baseline)
+  --opt-level 0..6             (opt solver only; cumulative technique ladder, default 6 = all)
   --type call|put              (overrides config)
   --dump-every N               (snapshot every N steps → --dump-dir)
   --dump-dir results/run1      (default results/)
@@ -217,10 +242,42 @@ local raw pointers, fast-math (correctness story comes first). Precision
 stays double for M1; float32 is noted as an M2 experiment (L03 #1 pairs it
 with SIMD width).
 
+### 4b. Ablation ladder — `--opt-level 0..6` (locked)
+
+The "measured separately" promise is delivered as a **cumulative ladder**,
+re-runnable by anyone (including the markers) with one sbatch sweep:
+
+| Level | Adds technique | L03 name |
+|---|---|---|
+| 0 | none — identical algorithm to BaselineSolver (sanity anchor) | — |
+| 1 | per-row stencil-weight lookup table | hoisting + lookup + CSE |
+| 2 | no divisions in hot loop | strength reduction |
+| 3 | contiguous traversal (outer j, inner i) | loop order / locality |
+| 4 | branch-free interior, boundaries split out | loop splitting |
+| 5 | running-index instead of `j*ns+i` | induction variable |
+| 6 | inner-loop unrolling | unrolling (optional) |
+
+Design rules:
+- **Dispatch once, outside the time loop**: OptSolver picks a per-level
+  `step_levelN()` kernel function up front. NEVER per-cell `if (level >= k)`
+  checks — that would poison the very timings the ladder exists to measure.
+- Kernels live in their own file (`solver_opt_kernels.cpp`) since each is a
+  short (~40-line) variant; duplication is accepted — the ladder IS the
+  ablation instrument, and diffing adjacent kernels shows exactly one
+  technique.
+- `test_opt_matches` loops over ALL levels 0–6, each vs baseline to 1e-12.
+- Benchmark output: 7-bar ladder figure (cell-updates/sec per level)
+  replaces the plain before/after bar. Baseline-vs-level-6 remains the
+  headline number.
+- **Honest null results**: if a rung shows no gain (compiler already did
+  it — likely for levels 5/6 at -O2), report it as-is; the task sheet
+  explicitly credits "techniques you tried that didn't work" under
+  Optimisation (25%), and L03 says null results show methodology.
+
 Profile with **gprof** (the course-taught tool: `-pg`, flat + call-graph
 profile) plus manual `<chrono>` instrumentation; report where time goes
-before and after. Evidence = cell-updates/sec table on rangpur, identical
-answers proven by `test_opt_matches`.
+before and after. Evidence = cell-updates/sec ladder table on rangpur,
+identical answers proven by `test_opt_matches` at every level.
 
 ## 5. Phases, order, acceptance criteria
 
@@ -252,11 +309,13 @@ solver's printed estimate.
 → H.264 mp4 of value surface flowing backwards.
 ✓ Animation renders from C++ engine output (replaces Python prototype).
 
-**P7 — Serial optimisation + rangpur benchmarking.** Implement §4 steps,
-`test_opt_matches` green after each, then `slurm/bench_serial.sh` runs the
-baseline-vs-opt sweep on a compute node across grid sizes.
-✓ Before/after cell-updates/sec table + figure from rangpur numbers.
-✓ Flags, hostname, grid sizes all recorded in the CSV.
+**P7 — Serial optimisation + rangpur benchmarking.** Implement §4 steps as
+the §4b opt-level ladder, `test_opt_matches` green after each level lands,
+then `slurm/bench_serial.sh` sweeps solver=baseline plus opt levels 0–6 on
+a compute node across grid sizes.
+✓ Ladder cell-updates/sec table + 7-bar figure from rangpur numbers
+  (baseline vs level 6 = headline before/after).
+✓ Flags, hostname, grid sizes, opt level all recorded in the CSV.
 
 **P8 — Video assembly.** Script: problem (weather map) → method (spreadsheet
 metaphor) → validation (tests) → convergence → optimisation story →
@@ -268,6 +327,8 @@ instability finale → reflection. 10 minutes, H.264.
 - ≥5 reps per configuration; report median + min/max; `--bench R` handles it.
 - Sweep grid sizes: 512×128, 1024×256, 2048×512 (reference), 4096×1024,
   nt scaled to keep the scheme stable.
+- Opt-level ladder (§4b): full 0–6 sweep at the reference grid size; other
+  grid sizes need only baseline + level 6 (scaling story).
 - Record: hostname, compiler version, flags, date → CSV header comment.
 - Course benchmarking rules (L03, follow verbatim):
   - **Consume the results** (print the price) — otherwise the compiler can
@@ -320,6 +381,6 @@ From the lectures, the exact M2 toolkit (nothing fancier):
 - [ ] Convergence figure committed
 - [ ] Instability clip + measured boundary
 - [ ] Weather-map animation from C++ output
-- [ ] Rangpur before/after benchmark table + figure
+- [ ] Rangpur opt-level ladder benchmark table + 7-bar figure (incl. headline baseline-vs-level-6)
 - [ ] 10-min H.264 video, submission format per rubric
 - [ ] Repo clean: `make clean && make` works from fresh clone on rangpur

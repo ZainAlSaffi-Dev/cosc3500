@@ -374,6 +374,31 @@ Explicitly *not* doing: tiling/blocking (not course content), fast-math
 (would compromise the correctness story), float32 (saved as an M2
 experiment — half the memory traffic and twice the SIMD width).
 
+**How we prove which technique did what: the ablation ladder.** An
+"ablation" is a controlled experiment borrowed from science: change ONE
+thing, measure, repeat. `--opt-level 0..6` turns the list above into a
+cumulative ladder — level 0 is the baseline algorithm, level 1 adds the
+lookup table, level 2 adds strength reduction on top, and so on. Each rung
+is benchmarked separately, so the bar chart shows the *marginal* gain of
+each named technique, not just one before/after pair. Two rules make the
+experiment honest:
+
+- The level choice happens ONCE, before the time loop, by picking a
+  per-level kernel function (`step_level3()` etc.). If instead we checked
+  `if (level >= 3)` inside the hot loop, the checking itself would slow
+  every level down and corrupt the measurement — the classic
+  instrument-disturbs-the-experiment mistake.
+- A rung that shows **no speedup is reported anyway**. It usually means the
+  compiler already did that optimisation at `-O2` (likely for induction
+  variables and unrolling). The task sheet explicitly gives credit for
+  "techniques you tried that didn't work" — a null result demonstrates
+  methodology.
+
+Interview line: *"Level N enables the first N techniques cumulatively;
+diffing two adjacent kernels shows exactly one technique, and
+`test_opt_matches` proves every level still produces the baseline answer to
+1e-12."*
+
 The metric: **cell-updates per second** = `Ns·Nv·nt / seconds` — comparable
 across grid sizes, which raw seconds are not.
 

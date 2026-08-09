@@ -13,25 +13,37 @@ struct OptionSpec {
 // Market state today.
 struct MarketSpec {
     double spot = 5200.0;
-    double rate = 0.045;       // r, continuously compounded
-    double div_yield = 0.013;  // q
+    //interest rate, continuously compounded
+    double rate = 0.045;
+    //dividend yield, continuously compounded
+    double div_yield = 0.013;
 };
 
 // Heston model parameters (spec §2).
 struct HestonParams {
-    double v0 = 0.04;     // initial variance
-    double kappa = 1.5;   // mean-reversion speed
-    double theta = 0.04;  // long-run variance
-    double xi = 0.35;     // vol of vol
-    double rho = -0.70;   // price/vol correlation
+    //initial variance
+    double v0 = 0.04;
+    //mean-reversion speed
+    double kappa = 1.5;
+    //long-run variance
+    double theta = 0.04;
+    //vol of vol
+    double xi = 0.35;
+    //price/vol correlation
+    double rho = -0.70;
 };
 
 // Discretisation. S in [0, s_max_mult*strike], v in [0, v_max], uniform.
 struct GridSpec {
-    int ns = 2048;          // stock nodes (contiguous dimension)
-    int nv = 512;           // variance nodes
-    int nt = 2000;          // timesteps
+    //stock nodes (contiguous dimension)    
+    int ns = 2048;
+    //variance nodes
+    int nv = 512;
+    //timesteps
+    int nt = 2000;
+    //stock max multiplier
     double s_max_mult = 4.0;
+    //variance max
     double v_max = 1.0;
 };
 
@@ -43,9 +55,13 @@ struct Config {
     GridSpec grid;
 
     // I/O behaviour (CLI-only, not in .cfg)
-    int dump_every = 0;              // 0 = no snapshots
+    // 0 = no snapshots
+    int dump_every = 0;
+    //dump directory
     std::string dump_dir = "results";
-    int bench_reps = 0;              // 0 = single solve
+    //benchmark repetitions
+    int bench_reps = 0;
+    //solver (baseline which is un optimised and opt which is optimised)
     std::string solver = "baseline"; // baseline | opt
 };
 
