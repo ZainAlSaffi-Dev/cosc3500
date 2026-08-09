@@ -80,6 +80,14 @@ Memory-safety rules (the point):
 - `std::string` for paths/names; `printf`-family for output (CSV lines).
 - One class per header; files stay under ~200 lines.
 
+Naming (locked at P2 start): descriptive identifiers over abbreviations —
+`num_stock_nodes` not `ns`, `stock_spacing` not `ds`, `current()`/`next()`
+sheets, loop indices `stock_i`/`var_j`. Docs and cfg/CLI keys keep the short
+maths shorthand (`ns`, `nv`, `nt`, `idx = j*ns + i`); `load_config` maps the
+short keys onto the descriptive fields. Exception: Heston parameters keep
+their maths symbols (`kappa`, `theta`, `xi`, `rho`, `v0`) — they must stay
+recognisable against the PDE and the literature.
+
 Narration comments (so the author can follow along line-by-line):
 - **Every serial-optimisation technique gets a one-line plain-English label
   on the line (or block) where it is applied** — e.g.
@@ -92,9 +100,12 @@ Narration comments (so the author can follow along line-by-line):
 - **Every non-obvious decision gets a one-line comment stating the choice
   and the reason** — e.g. `// two buffers, swap pointers: avoids copying the
   whole grid each timestep`.
+- **New-construct comments explain to a beginner first, in plain English**
+  — say what the construct does on its own terms; at most end with
+  "similar to X in Python". Never a labelled "Python analogy:" comment.
 - Keep these to one line each, plain English, on/above the relevant line.
   They are teaching aids for the 10-min video and interview prep, same
-  spirit as the Python-analogy comments above.
+  spirit as the new-construct comments above.
 
 Why this is safe: every byte is owned by exactly one vector or unique_ptr,
 and scope exit frees it — leaks and double-frees are unrepresentable.
@@ -145,6 +156,9 @@ prep for M2, video narration for M1). Rules for every coding session:
   scaffolded by the assistant, but always walked through afterwards.
 - **Narration comments** (§1b) are mandatory everywhere — they are the
   follow-along thread through the code.
+- **The author's comments are theirs.** In author-written pieces, comments
+  are personal study notes — review the code, not the comments. Conceptual
+  corrections go in conversation, never as requested comment edits.
 - **Checkpoint quiz.** At the end of each phase (P1–P8), 3–5 rapid-fire
   questions on what was just built (same style as STUDY_GUIDE Part V).
   Wrong answer → that topic gets re-explained and added to the drill list.

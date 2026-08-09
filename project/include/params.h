@@ -33,18 +33,24 @@ struct HestonParams {
     double rho = -0.70;
 };
 
-// Discretisation. S in [0, s_max_mult*strike], v in [0, v_max], uniform.
+// Discretisation. S in [0, stock_max_multiplier*strike], v in
+// [0, variance_max], uniform spacing. Config files and CLI keep the short
+// keys (ns, nv, nt, s_max_mult, v_max); load_config maps them onto these
+// descriptive fields.
 struct GridSpec {
     //stock nodes (contiguous dimension)    
-    int ns = 2048;
+    int num_stock_nodes = 2048;  // cfg/CLI key: ns
     //variance nodes
-    int nv = 512;
+    int num_variance_nodes = 512;  // cfg/CLI key: nv
     //timesteps
-    int nt = 2000;
-    //stock max multiplier
-    double s_max_mult = 4.0;
-    //variance max
-    double v_max = 1.0;
+    int num_timesteps = 2000;  // cfg/CLI key: nt
+    // Top of the stock axis, as a multiple of strike: S spans
+    // [0, stock_max_multiplier*strike]. Far enough out that the option's
+    // value there is effectively known (deep in/out of the money).
+    double stock_max_multiplier = 4.0;  // cfg/CLI key: s_max_mult
+    // Top of the variance axis. v is variance = volatility^2, so 1.0 means
+    // 100% annual volatility — beyond any realistic market scenario.
+    double variance_max = 1.0;  // cfg/CLI key: v_max
 };
 
 // Everything a run needs. CLI overrides applied on top of file values.

@@ -272,7 +272,9 @@ black_scholes.cpp    closed-form formula                   (validation only)
 io.cpp          snapshot dumps + result CSV line           (never in timed loop)
 ```
 
-Python analogies for the C++ constructs (also in code comments):
+Python analogies for the C++ constructs (in code, comments explain each new
+construct to a beginner in plain English first, ending "similar to X in
+Python" only where it helps — never a labelled "Python analogy:" comment):
 
 | C++ | Python equivalent | Watch out |
 |---|---|---|
@@ -323,6 +325,11 @@ later parallel versions correct *by construction* — threads only read shared
 immutable data and write disjoint cells.
 
 ### 14. Memory layout — why `idx = j*Ns + i`
+
+(In the code these carry descriptive names: `index(stock_i, var_j) =
+var_j * num_stock_nodes + stock_i`, spacing `stock_spacing`/`variance_spacing`,
+sheets `current()`/`next()`. The maths shorthand `i`, `j`, `Ns` below means
+the same thing.)
 
 The sheet is stored as ONE flat array, not a list-of-lists (Python's
 `list[list]` scatters rows all over the heap — cache poison). Layout:
@@ -485,6 +492,38 @@ with the machine and efficiency returns — finer grids justify more cores).
 ## Part V — Rapid-fire interview drill
 
 Answer these out loud. If any stumble, reread its section.
+
+**P2 checkpoint drill (2026-08-09 — all five stumbled; re-explain at next
+session start, then re-quiz until they stick)**
+
+- **Q: Why does `init_payoff` write into `current_` and not `next_`?**
+  A: The time loop always READS `current()` and WRITES `next()`. The payoff
+  is the first sheet the loop ever reads, so it must start in the read
+  buffer. (§13)
+- **Q: With one buffer instead of two, what goes wrong mid-timestep?**
+  A: Updating in place means some neighbours you read were already updated
+  *this* step — the stencil mixes time level n with n+1. Results then depend
+  on loop order and are simply wrong. Two buffers freeze the read sheet for
+  the whole step. (§13)
+- **Q: Why a FORWARD difference for V_v on the v=0 row — why not central?**
+  A: Central needs a node at v = −dv, which doesn't exist and can't (negative
+  variance is meaningless). And the drift kappa*theta > 0 points INTO the
+  domain, so taking the derivative from above (upwind — from where the
+  information flows) is the stable, physical choice. Imposing a value
+  (Dirichlet) would over-determine the degenerate equation. (§9, PLAN §1c)
+- **Q: When dt crosses the stability bound, which cells blow up first, why?**
+  A: The high-S, high-v corner. The diffusion coefficients (½vS², ½ξ²v) are
+  largest there, so the explicit update's amplification factor crosses 1
+  there first; the error flips sign cell-to-cell each step — the
+  checkerboard. (§8)
+- **Q: Feller is violated for our parameters — why not "fix" it, and what
+  does it actually cost us?**
+  A: 2κθ ≥ ξ² is a property of the market-calibrated parameters, not of our
+  code — equity calibrations typically violate it. Consequence: the variance
+  process puts real probability mass near v=0, where our uniform v-grid is
+  relatively coarse → slight under-resolution there. The scheme stays valid;
+  we state it as a known limitation (non-uniform v-grid = future work).
+  (§9, PLAN §1c)
 
 **Finance/model**
 1. What's the difference between a call and a put? European vs American?
