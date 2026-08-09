@@ -60,6 +60,16 @@ def main() -> int:
                         help="plot V - expiry payoff (call) instead of V")
     parser.add_argument("--strike", type=float, default=5250.0,
                         help="strike for --time-value payoff and the S axis")
+    parser.add_argument("--maturity", type=float, default=0.25,
+                        help="option maturity in years — converts solver "
+                             "steps into days-to-expiry for the titles")
+    parser.add_argument("--spot", type=float, default=5200.0,
+                        help="today's stock price, marked on flat frames")
+    parser.add_argument("--v0", type=float, default=0.04,
+                        help="today's variance, marked on flat frames")
+    parser.add_argument("--caption", default=None,
+                        help="one/two-line explainer under the axes "
+                             "(default: auto text per style)")
     parser.add_argument("--gif", action="store_true",
                         help="also write a .gif next to the .mp4")
     parser.add_argument("--max-frames", type=int, default=0,
@@ -80,6 +90,10 @@ def main() -> int:
         plt.style.use("dark_background")
 
     snaps = load_snapshots(args.snapshot_dir)
+    # Total step count must come from the FULL dump list — computing it
+    # after --max-frames truncation would mislabel every remaining frame's
+    # step fraction and days-to-expiry.
+    total_steps = max(step for step, _ in snaps)
     if args.max_frames > 0:
         snaps = snaps[: args.max_frames]
 
@@ -117,9 +131,15 @@ def main() -> int:
     cmap = matplotlib.colormaps[cmap_name].copy()
     cmap.set_bad(bad_colour)  # broken cells must be unmistakable
 
-    total_steps = max(step for step, _ in snaps)
     variance_axis = np.linspace(0.0, 1.0, snaps[0][1].shape[0])
     stock_mesh, variance_mesh = np.meshgrid(stock_axis, variance_axis)
+
+    # Markers don't think in solver steps — translate to calendar time.
+    # Step n holds the sheet n*dt before expiry; the last step is "today".
+    # (Assumes the final dump lands on the final step, true whenever
+    # dump_every divides nt.)
+    days_total = args.maturity * 365.0
+    days_per_step = days_total / total_steps
 
     frames = []
     if args.style == "surface":
@@ -127,11 +147,30 @@ def main() -> int:
         ax = fig.add_subplot(projection="3d")
     else:
         fig, ax = plt.subplots(figsize=(8, 4.5), dpi=120)
+
+    # Static explainer for a reader who has never seen Heston: what the
+    # axes mean and which direction the solver moves. Drawn once at figure
+    # level, so ax.clear() per frame leaves it alone.
+    caption = args.caption
+    if caption is None and args.style == "surface":
+        caption = ("The sheet of what-if option values over stock price and "
+                   "variance. The kinked expiry payoff is known exactly;\n"
+                   "the solver smooths it backwards through time until it "
+                   "reaches today's sheet.")
+    elif caption is None:
+        caption = ("Each pixel is one what-if scenario: stock price S "
+                   "(x-axis) under variance v (y-axis); colour = the "
+                   "option's value there.\nThe expiry payoff is known "
+                   "exactly; the solver fills the sheet backwards in time "
+                   "until it reaches today.")
+    fig.subplots_adjust(bottom=0.22 if args.style == "flat" else 0.14)
+    fig.text(0.5, 0.02, caption, ha="center", va="bottom", fontsize=7.5,
+             color="0.65" if not args.diverging else "0.35")
     for index, (step, grid_vals) in enumerate(snaps):
         ax.clear()
         masked = np.ma.masked_invalid(grid_vals)
         broken = int(np.sum(~np.isfinite(grid_vals)))
-        note = f"   [{broken} cells non-finite]" if broken else ""
+        note = f"  [{broken} broken cells]" if broken else ""
         if args.style == "surface":
             ax.plot_surface(stock_mesh, variance_mesh,
                             np.where(np.isfinite(grid_vals), grid_vals, 0.0),
@@ -149,10 +188,33 @@ def main() -> int:
                               extent=(0.0, s_max, 0.0, 1.0))
             if index == 0:
                 fig.colorbar(image, ax=ax, label=value_label)
+            # Landmarks for a reader who doesn't know the contract: the
+            # strike (where the payoff kinks) and today's market point —
+            # the one cell whose value becomes the quoted price.
+            accent = "0.75" if not args.diverging else "0.35"
+            ax.axvline(args.strike, color=accent, linestyle="--",
+                       linewidth=1.0)
+            ax.text(args.strike + 0.012 * s_max, 0.95,
+                    f"strike K = {args.strike:g}", color=accent, fontsize=8)
+            ax.plot(args.spot, args.v0, "o", markersize=8,
+                    markerfacecolor="none", markeredgecolor=accent,
+                    markeredgewidth=1.5)
+            ax.annotate(f"today's market (S = {args.spot:g}, v = {args.v0:g})"
+                        "\n= the price we quote",
+                        xy=(args.spot, args.v0),
+                        xytext=(args.spot + 0.10 * s_max, args.v0 + 0.16),
+                        fontsize=8, color=accent,
+                        arrowprops=dict(arrowstyle="-", color=accent,
+                                        linewidth=0.8))
         ax.set_xlabel("stock price S", fontsize=9)
         ax.set_ylabel("variance v", fontsize=9)
-        ax.set_title(f"{args.title} — step {step}/{total_steps}{note}",
-                     fontsize=10)
+        # Headline in calendar time; the solver step drops to a second,
+        # smaller line for anyone cross-referencing the code.
+        days_left = step * days_per_step
+        ax.set_title(f"{args.title} — {days_left:.0f} of {days_total:.0f} "
+                     f"days before expiry\n"
+                     f"(solver step {step}/{total_steps}){note}",
+                     fontsize=9)
         fig.canvas.draw()
         frame = np.asarray(fig.canvas.buffer_rgba())[:, :, :3].copy()
         frames.append(frame)

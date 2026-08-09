@@ -35,8 +35,11 @@
   NaN magenta-on-dark/black-on-white, `--max-frames` caps the NaN tail.
   Rendered: `results/weather_map.{mp4,gif}`, `weather_map_timevalue.mp4`
   (best single clip), `surface.mp4`, `surface_timevalue.mp4`,
-  `blowup.mp4`. Snapshot dirs: results/smooth, results/blowup.
-  STUDY_GUIDE §6 P6 rendering notes explain all four choices.
+  `blowup.mp4`. Snapshot dirs: results/smooth (every 100 steps, 200
+  frames), results/blowup. Frames are marker-friendly (author feedback):
+  days-to-expiry headline, strike line, today's-market ring, caption;
+  step totals read from the full dump list before --max-frames.
+  STUDY_GUIDE §6 P6 rendering notes explain every choice.
 - **P7 scaffold:** `--opt-level 0..6` CLI → `Config::opt_level`;
   OptSolver mirrors baseline, dispatches a `StepKernel` function pointer
   ONCE before the time loop; kernels own interior + v=0 row, solve()

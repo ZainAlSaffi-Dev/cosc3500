@@ -180,6 +180,15 @@ look the way they do:**
   "breathes"), 98th-percentile cap so late-time high-v glow doesn't
   compress early structure, NaN cells magenta on dark / black on white so
   broken cells are unmistakable.
+- **Marker-friendly framing (author feedback):** headlines count calendar
+  time ("46 of 91 days before expiry"), with the raw solver step demoted
+  to a smaller second line; every flat frame carries a dashed line at the
+  strike, a ring on today's market point (S = 5200, v = 0.04) labelled
+  "the price we quote", and a one-line caption saying what the sheet is
+  and which direction the solver moves. Smooth run dumps every 100 steps
+  (200 frames) so the motion reads as flow, not slideshow. One trap fixed
+  on the way: the step total must be read from the FULL dump list before
+  `--max-frames` truncation, or every title mislabels the fraction.
 
 ### 7. Finite differences in one minute
 
