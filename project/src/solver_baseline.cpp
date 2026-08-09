@@ -15,8 +15,10 @@ SolveResult BaselineSolver::solve(const Config& cfg) {
     //  3. Time loop n = 1..nt (stepping backwards from expiry):
     //     a. interior cells (j=1..nv-2 outer, i=1..ns-2 inner): 9-point
     //        blend of g.cur() into g.next() — weights from discretised PDE.
-    //     b. boundaries: S=0, S=Smax (Dirichlet), v=0 (one-sided reduced
-    //        equation), v=vmax (Neumann copy-form). All per PLAN §1 table.
+    //     b. boundaries: S=0, S=Smax (Dirichlet), v=vmax (Neumann copy-form)
+    //        per PLAN §1 table; v=0 is the DEGENERATE-PDE row — PLAN §1c,
+    //        4-point stencil, forward v-difference, never Dirichlet.
+    //        Also print Feller status (2*kappa*theta vs xi^2) at startup.
     //     c. g.swap_buffers();
     //     d. if (cfg.dump_every > 0 && n % cfg.dump_every == 0)
     //          dump_snapshot(cfg.dump_dir, n, g);   // outside timed region

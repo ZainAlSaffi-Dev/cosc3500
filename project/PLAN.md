@@ -27,7 +27,7 @@ boundary is itself a deliverable, not a bug.
 | v domain | `[0, v_max]`, uniform. Default `v_max = 1.0` (vol 100%) | Covers crash scenarios (v0=0.36 in M2 replay) |
 | Boundary S=0 | Call: `V=0`. Put: `V = K*exp(-r*(T-t))` | Exact — stock absorbed at 0 |
 | Boundary S=Smax | Call: `V = S*exp(-q*τ) - K*exp(-r*τ)` (deep ITM). Put: `V=0` | Asymptotic payoff |
-| Boundary v=0 | PDE degenerates: diffusion-in-v and cross terms vanish; solve reduced 1-D equation with **one-sided (upwind) dV/dv** since kappa*theta > 0 pushes inward | Standard Heston treatment |
+| Boundary v=0 | **Degenerate-PDE row — see §1c.** No condition imposed; solve `V_t + (r−q)S·V_S + kappa·theta·V_v − rV = 0` with central S-diff + forward (upwind) v-diff. Never Dirichlet, never central-in-v | in't Hout & Foulon treatment; drift kappa·theta > 0 flows inward |
 | Boundary v=vmax | `dV/dv = 0` (Neumann): copy row `j=Nv-1` update from `j=Nv-2` curvature-free form | Vega saturates for huge v |
 | Greeks | delta/gamma: central differences in S at nearest cell to (spot, v0); vega: central difference in v, chain rule ×(2*sqrt(v)) noted in write-up | Free from finished sheet |
 | Timestep | User-set `nt`; solver also computes and reports the explicit stability estimate `dt_stable ≈ min over grid of 1/( v*S²/ΔS² + xi²*v/Δv² + r )`-style bound | Enables the instability demo and the stability-boundary study |
@@ -80,8 +80,54 @@ Memory-safety rules (the point):
 - `std::string` for paths/names; `printf`-family for output (CSV lines).
 - One class per header; files stay under ~200 lines.
 
+Narration comments (so the author can follow along line-by-line):
+- **Every serial-optimisation technique gets a one-line plain-English label
+  on the line (or block) where it is applied** — e.g.
+  `// loop-invariant hoisting: coefficients depend only on j, computed once per row`,
+  `// strength reduction: replace divide with precomputed reciprocal`,
+  `// row-major traversal: j outer, i inner, so memory access is contiguous`.
+- **Every boundary-condition handling site gets a one-line comment** naming
+  which boundary it is and what condition is imposed — e.g.
+  `// v=0 boundary: one-sided derivative, diffusion term vanishes here`.
+- **Every non-obvious decision gets a one-line comment stating the choice
+  and the reason** — e.g. `// two buffers, swap pointers: avoids copying the
+  whole grid each timestep`.
+- Keep these to one line each, plain English, on/above the relevant line.
+  They are teaching aids for the 10-min video and interview prep, same
+  spirit as the Python-analogy comments above.
+
 Why this is safe: every byte is owned by exactly one vector or unique_ptr,
 and scope exit frees it — leaks and double-frees are unrepresentable.
+
+## 1c. The v=0 boundary, spelled out (the trap boundary)
+
+At v=0 every diffusion term carries a factor v and vanishes; the PDE
+degenerates to pure transport on that row:
+
+```text
+V_t + (r−q)·S·V_S + kappa·theta·V_v − r·V = 0
+```
+
+The v-drift at the boundary is kappa·theta > 0 — pointing INTO the domain —
+so the correct treatment is to solve this degenerate equation on the j=0
+row, not to impose a value:
+
+- 4-point stencil: self, S-left, S-right (central), one v-neighbour above
+  (forward one-sided difference for V_v; upwind matches the positive drift).
+- FORBIDDEN: Dirichlet at v=0 (over-determines), central v-difference
+  (needs a v<0 ghost point — meaningless).
+
+**Feller check (report at startup):** 2·kappa·theta ≥ xi² decides whether
+variance can touch zero. Reference params: 0.1200 < 0.1225 — VIOLATED
+(marginally), as is typical for equity calibrations. Scheme stays valid;
+consequence is solution mass near v=0 that a uniform v-grid slightly
+under-resolves. State as a known limitation (video beat); non-uniform
+v-grid is a stretch goal, not M1. Solver should print the Feller status
+alongside dt_stable_estimate.
+
+Stability note: the v=0 row is the least stiff (its coefficients vanished);
+the explicit dt bound binds at the high-v/high-S corner — which is exactly
+where the instability checkerboard erupts first.
 
 ## 2. Repo layout (this scaffold)
 
@@ -142,21 +188,39 @@ Output (stdout, one CSV line):
 
 ## 4. Serial optimisation menu (the 25% Optimisation story)
 
-Baseline is written deliberately straightforward (weights recomputed per cell,
-generic indexing). Optimised version applies, in order, each measured
-separately for the before/after narrative:
+Aligned with the techniques the course actually teaches (L03 — use the
+lecturer's names for them in the video). Baseline is written deliberately
+straightforward (weights recomputed per cell, generic indexing). Optimised
+version applies, in order, each measured separately:
 
-1. **Precompute stencil weights per row** (hoist all j-dependent and
-   i-dependent coefficient work out of the inner loop).
-2. **Loop order matches layout**: outer j, inner i, contiguous walk.
-3. **Boundary cells out of the hot loop**: interior loop runs `i=1..Ns-2`,
-   `j=1..Nv-2` branch-free; boundaries handled in separate small loops.
-4. **Restrict-qualified raw pointers** for cur/next inside the kernel.
-5. (Stretch) blocked/tiled traversal — measure, keep only if it wins.
+1. **Loop-invariant code motion / hoisting + lookup table**: precompute the
+   nine stencil weights per variance-row into a table before the time loop —
+   hoists thousands of per-cell multiplications into a per-row lookup.
+   (L03 techniques #7 hoisting + #9 lookup tables + #13 common
+   subexpression elimination, all in one move.)
+2. **Strength reduction**: no divisions in the hot loop — precompute
+   reciprocals (1/ds², 1/dv², …) once; division throughput is 5–14 cycles
+   vs 0–1 for multiply (L03 #15).
+3. **Cache-friendly loop order**: outer j, inner i, contiguous walk matching
+   the row-major layout — spatial/temporal locality, 64-byte cache lines
+   (L03 #22; lecturer measured 8x from loop order alone).
+4. **Hoist conditionals out of the loop**: interior loop runs `i=1..Ns-2`,
+   `j=1..Nv-2` branch-free; boundaries in separate small loops (L03 #18/#20
+   loop splitting).
+5. **Induction-variable simplification**: replace per-cell `j*ns+i` index
+   math with an incremented running index/pointer (L03 #14 — explicitly
+   framed in lecture as the 2D→1D address-calculation case).
+6. (Optional, measure) **loop unrolling** of the inner loop (L03 #17).
 
-Profile with `gprof` or `perf stat` locally; report where time goes before and
-after. Evidence = cell-updates/sec table on rangpur, identical answers proven
-by `test_opt_matches`.
+NOT doing: tiling/blocking (not course content), restrict tricks beyond
+local raw pointers, fast-math (correctness story comes first). Precision
+stays double for M1; float32 is noted as an M2 experiment (L03 #1 pairs it
+with SIMD width).
+
+Profile with **gprof** (the course-taught tool: `-pg`, flat + call-graph
+profile) plus manual `<chrono>` instrumentation; report where time goes
+before and after. Evidence = cell-updates/sec table on rangpur, identical
+answers proven by `test_opt_matches`.
 
 ## 5. Phases, order, acceptance criteria
 
@@ -205,8 +269,41 @@ instability finale → reflection. 10 minutes, H.264.
 - Sweep grid sizes: 512×128, 1024×256, 2048×512 (reference), 4096×1024,
   nt scaled to keep the scheme stable.
 - Record: hostname, compiler version, flags, date → CSV header comment.
+- Course benchmarking rules (L03, follow verbatim):
+  - **Consume the results** (print the price) — otherwise the compiler can
+    delete the benchmarked loop entirely (lecturer demoed runtime → 0).
+  - **Problem must not fit in cache** — reference grid is 2×8 MB buffers,
+    comfortably exceeding L2/L3 per-core; state this in the video.
+  - **Verify correctness while benchmarking** — `make test` runs before
+    every bench job (already wired into bench_serial.sh).
+  - Timer resolution: solve takes seconds; `<chrono>` steady_clock is ample.
+  - Don't be surprised by null results — compiler may have already done the
+    optimisation; report honest null results, they show methodology.
 - Amdahl/Gustafson framing saved for M2; M1 story = memory-access + redundant
   work elimination.
+
+## 6b. Milestone 2 technique alignment (locked now so M1 sets it up)
+
+From the lectures, the exact M2 toolkit (nothing fancier):
+
+- **SIMD = AVX intrinsics, `<immintrin.h>`** — NOT compiler auto-vectorisation
+  (L04: "typically gives pretty subpar results") and NOT assembly (L04:
+  discouraged). `__m256d` (4 doubles) on our data; optional float32 variant
+  doubles the width to 8 (ties to L03 precision technique). Use
+  `aligned_alloc` to 64-byte (cache-line) boundaries — exactly why the grid
+  is a flat contiguous array with S contiguous. FMA (`_mm256_fmadd_pd`) for
+  the stencil blend. Remainder loop for ns not divisible by width.
+  Realistic expectation (L04): ~4x, memory-bound, not the full vector width.
+- **OpenMP** — `#pragma omp parallel for` on the OUTER j loop (L05:
+  "parallelise outermost loops first"), `default(none)` with explicit
+  shared/private lists (L05 recommendation), thread counts via
+  OMP_NUM_THREADS. Our design needs ZERO synchronisation inside a step
+  (threads read shared immutable cur, write disjoint rows of next) — one
+  implicit barrier per step at the end of the parallel for. Never
+  `critical` in the hot loop (L05 demo: 40x SLOWDOWN). Expect speedup ≈
+  physical cores, not hyper-threads; accept tiny FP differences from
+  reordering (L05: non-associativity), bounded by test tolerance.
+- **MPI/CUDA** — optional extensions only, first to cut (unchanged).
 
 ## 7. Risks & cut order
 
