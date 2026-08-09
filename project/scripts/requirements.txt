@@ -1,0 +1,5 @@
+# Local-only plotting/animation deps (never needed on rangpur — PLAN §2).
+numpy
+matplotlib
+imageio
+imageio-ffmpeg

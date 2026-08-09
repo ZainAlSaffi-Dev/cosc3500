@@ -13,8 +13,8 @@
 static void usage() {
     std::fprintf(stderr,
         "usage: heston --config <path> [--solver baseline|opt] [--type call|put]\n"
-        "              [--dump-every N] [--dump-dir DIR] [--bench R]\n"
-        "              [--ns X] [--nv X] [--nt X]\n");
+        "              [--opt-level 0..6] [--dump-every N] [--dump-dir DIR]\n"
+        "              [--bench R] [--ns X] [--nv X] [--nt X]\n");
 }
 
 // Fetch the value that must follow a flag like "--ns 1024".
@@ -47,6 +47,10 @@ int main(int argc, char** argv) {
                 flag_value(argc, argv, i);  // already handled in pass 1
             } else if (arg == "--solver") {
                 cfg.solver = flag_value(argc, argv, i);
+            } else if (arg == "--opt-level") {
+                cfg.opt_level = std::stoi(flag_value(argc, argv, i));
+                if (cfg.opt_level < 0 || cfg.opt_level > 6)
+                    throw std::runtime_error("--opt-level must be 0..6");
             } else if (arg == "--type") {
                 const std::string type = flag_value(argc, argv, i);
                 if (type != "call" && type != "put")

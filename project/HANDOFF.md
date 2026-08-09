@@ -1,75 +1,102 @@
-# HANDOFF — next session pickup (updated 2026-08-09, end of P3)
+# HANDOFF — next session pickup (updated 2026-08-09, end of P4–P7-scaffold)
 
 ## Kickoff prompt (paste this to start the next session)
 
-> Read `project/HANDOFF.md`, then `project/PLAN.md` (§1b, §1d, §5).
-> P3 (validation gate) is GREEN and committed. FIRST: re-explain the
-> five P2 drill topics in STUDY_GUIDE Part V ("P2 checkpoint drill")
-> one at a time and re-quiz me until I can answer them — still owed
-> from two sessions ago. Then P4 (convergence study) and P6 (weather
-> map), both assistant-scaffolded per §1d.
+> Read `project/HANDOFF.md`, then PLAN §4/§4b and STUDY_GUIDE §15.
+> P1–P6 are DONE and committed; P7 is scaffolded and waiting on MY
+> level-1 kernel (`step_level1` in `src/solver_opt_kernels.cpp` — the
+> hint skeleton is in place). First: the P2 drill topics 2–5 plus the
+> P3/P4/P5 checkpoint quizzes are still owed — run them. Then guide me
+> (hints, review after — don't write it) through step_level1; after it's
+> green in test_opt_matches, you scaffold levels 2–6 one commit each.
 
 ## Where the project is
 
-- **P1 + P2 + P3 done and committed.** P2 milestone commit `d70876e`;
-  P3 (this session) on top.
-- **P3 validation gate GREEN** (both tests, run locally):
-  - `tests/test_bs_collapse`: xi=0, v0=theta vs closed form.
-    Measured rel err 1.161e-3 (call), 1.116e-3 (put); tolerance 2.5e-3.
-  - `tests/test_parity`: full Heston, C−P vs S·e^(−qT)−K·e^(−rT).
-    Measured gap 5.4e-6 dollars; tolerance 1e-4.
-  - Both use a **node-aligned** stable grid: ns=421 (spacing 50 → spot
-    5200 = node 104), nv=51 (spacing 0.02 → v0 = node 2), nt=56000
-    (dt ≈ 0.79× the printed stability bound). Alignment matters because
-    `extract_result` reads the NEAREST cell, no interpolation — the
-    smoke grid's snap alone is ~$7 of price (and v snaps 0.04→0.0476).
-  - Rationale + measured numbers recorded in STUDY_GUIDE §10 "P3
-    implementation notes".
-- `make test` still fails at `test_opt_matches` — intentional, that's
-  the P7 stub. Run the two P3 binaries directly until P7 lands.
-- Plan's "rel err < 1e-3" was written for the reference-sized grid;
-  1.16e-3 at spacing 50 is consistent with it — P4 convergence study
-  will demonstrate the trend.
+- **P1–P6 complete and committed; P7 scaffolded.** `make test` fully
+  green locally (BS collapse, parity, opt_matches with L0).
+- **P3 gate:** collapse rel err 1.16e-3 (tol 2.5e-3), parity gap 5.4e-6
+  (tol 1e-4), node-aligned 421×51 grid — STUDY_GUIDE §10 P3 notes.
+- **P4 convergence:** prices 190.996 → 195.605 → 195.925 → 196.102 on
+  the aligned ladder; observed order ≈ 1.2 in dt; Richardson true price
+  ≈ 196.16. `results/convergence.png` + `.csv`; regenerate with
+  `python3 scripts/convergence_plot.py`.
+- **P5 instability:** smoke-grid printed bound dt_stable = 1.526e-5;
+  measured cliff: finite at 1.092× bound, 2.8e69 at 1.100×, NaN at
+  1.122× → estimate ~9% conservative (why: corner-cell bound vs
+  region-occupying mode — STUDY_GUIDE §8 P5 notes). unstable.cfg now
+  smoke-sized at 4× bound (old comment claimed 4× but was ~2000× over on
+  the reference grid; also reference frames are 13 MB each, unfilmable).
+- **P6 weather map:** `weather_map.py` renders mp4 (+gif): sequential
+  Blues for smooth runs, `--diverging` RdBu for the blow-up, NaN black,
+  fixed colour scale, `--max-frames` caps the all-NaN tail.
+  Rendered: `results/weather_map.{mp4,gif}` (smoke, 80 frames),
+  `results/blowup.mp4` (90 frames, checkerboard erupts high-S/high-v
+  ~step 300–450). Snapshot dirs: results/smooth, results/blowup.
+- **P7 scaffold:** `--opt-level 0..6` CLI → `Config::opt_level`;
+  OptSolver mirrors baseline, dispatches a `StepKernel` function pointer
+  ONCE before the time loop; kernels own interior + v=0 row, solve()
+  owns shared boundaries; CSV label `opt-L<k>`. `step_level0` = exact
+  baseline copy, measured 0.0e+00 diff, same throughput. Levels 1–6
+  return nullptr → solver throws at the edge → test SKIPs honestly
+  (all-SKIP = FAIL, so the test can't go green by doing nothing).
 
-## Quiz status (§1d) — THE open learning debt (unchanged)
+## THE author-writes piece next: step_level1 (hoisting ladder rung)
 
-P2 checkpoint quiz: author could answer none of the five. Questions +
-answers in STUDY_GUIDE Part V "P2 checkpoint drill". Re-explain each
-conversationally, then re-quiz. Topics: payoff→current_ reasoning,
-two-buffer rationale, v=0 forward/upwind difference, where instability
-erupts first and why, Feller meaning/consequence. A P3 checkpoint quiz
-(norm_cdf/erfc, node alignment, why parity is near-exact discretely,
-measured-tolerance method) is also owed.
+Working agreement §1d: the author types `step_level1` themself. Hint
+skeleton is in `src/solver_opt_kernels.cpp` (hoist v-dependent scalars
+per row; S/S² lookup tables O(ns) per step; named reciprocal spacings;
+arithmetic must stay 1e-12-identical). After it lands and matches,
+assistant scaffolds levels 2–6, one technique per commit, diffable.
 
-## Open decision (needed by P7, not before): reference.cfg stability
+## Open learning debt (quiz backlog)
 
-Unchanged from last session — see PLAN §5 P7 and previous discussion:
-reference.cfg nt=2000 is ~500× over the stability bound; options are
-(A) shortened-maturity honest benchmark (recommended), (B) 1-rep full
-solve, (C) shrink grid. Also unstable.cfg nt is ~2000× over, not ~4×
-as its comment claims — tune in P5 using the printed bound.
+- P2 drill: topic 1 (payoff→current_, buffer ping-pong) re-taught this
+  session — author followed the two-whiteboard walkthrough but hasn't
+  been re-quizzed to completion; topics 2–5 untouched (two-buffer
+  rationale, v=0 upwind, where instability erupts + why, Feller).
+  Questions + answers: STUDY_GUIDE Part V "P2 checkpoint drill".
+- New quiz material since: P3 (erfc, node alignment, discrete parity,
+  measured tolerances), P4 (order ~1.2, why it oscillates around 1),
+  P5 (why the printed bound is ~9% conservative), P7 scaffold
+  (function-pointer dispatch, why dispatch-once, why level 0 exists).
 
-## Immediate next steps (in order)
+## Open decision (needed at P7 benchmarking): reference.cfg stability
 
-1. Re-explain + re-quiz the five P2 drill topics; quiz P3 topics too.
-2. P4 convergence study: sweep (ns, nv, nt) doublings via CLI
-   overrides, `convergence_plot.py` → deliverable figure.
-3. P5 instability demo (tune unstable.cfg nt from printed bound).
-4. P6 weather-map animation (dump-every + weather_map.py → mp4).
-5. P7 opt ladder — author writes level-1 kernel; reference.cfg
-   benchmark decision due then.
+Unchanged: reference.cfg nt=2000 is ~500× over its stability bound
+(dt_stable ≈ 2.37e-7 → stable full solve ≈ 1.3M steps ≈ 45–60 min/rep).
+Options: (A) shorten maturity so dt ≈ 0.8× bound at benchmarkable nt —
+honest timings, correctness proven by P3 tests (recommended); (B) full
+stable solve, 1 rep; (C) shrink grid (deviates from spec §8). Decide
+before writing `slurm/bench_serial.sh` sweeps.
+
+## Remaining to Milestone 1 done
+
+1. Quiz backlog (above).
+2. Author writes step_level1 → assistant levels 2–6 → ladder green.
+3. reference.cfg decision → bench_serial.sh 0–6 sweep on rangpur
+   (≥5 reps, compute node only) → bench_plot.py 7-bar ladder figure.
+4. P8: 10-min video assembly (weather map → method → validation →
+   convergence → opt ladder → instability finale → reflection).
+
+## Local viz environment note
+
+Plot/animation scripts need `pip install -r scripts/requirements.txt`.
+This Mac's user site-packages currently mixes arm64 and x86_64 wheels
+(pre-existing arm64 numpy + an x86_64 matplotlib installed 2026-08-09
+under a Rosetta shell) — this session sidestepped it with a scratchpad
+`pip --target` install; a native-terminal `pip3 install --user
+--force-reinstall matplotlib` will fix it properly if plots fail.
 
 ## Standing repo rules (also CLAUDE.md — do not relearn)
 
 - Develop/validate locally; rangpur is benchmark-only via sbatch
   (login-node numbers invalid). Sync with rsync, not git.
 - No SIMD in M1. No parallel version benchmarked until it matches
-  serial reference.
-- OOP-shaped modern C++ per PLAN §1b: RAII, unique_ptr factory, no raw
-  new/delete; descriptive names; beginner-first comments; narration
-  comments mandatory; author's own comments are theirs — never edit.
-- The author writes the §1d core pieces themself (one remains: level-1
-  kernel); assistant scaffolds the rest, explains before code, quizzes
-  at phase boundaries, keeps STUDY_GUIDE in sync.
+  serial reference (test_opt_matches enforces this).
+- OOP-shaped modern C++ per PLAN §1b; descriptive names; beginner-first
+  narration comments; author's own comments are theirs — never edit.
+- Author writes §1d core pieces (step_level1 is the last one);
+  assistant scaffolds the rest, explains before code, quizzes at phase
+  boundaries, keeps STUDY_GUIDE in sync.
 - Commits authored by user alone — no Claude trailers/footers.
 - `.env` holds rangpur/PDF passwords — NEVER print/echo/commit.

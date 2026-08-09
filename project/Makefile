@@ -8,7 +8,7 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Iinclude
 
 # Objects shared by the main binary and the tests (everything except main.o)
 CORE_OBJS = src/params.o src/grid.o src/solver_baseline.o src/solver_opt.o \
-            src/black_scholes.o src/io.o
+            src/solver_opt_kernels.o src/black_scholes.o src/io.o
 
 TESTS = tests/test_bs_collapse tests/test_parity tests/test_opt_matches
 
@@ -29,6 +29,7 @@ src/main.o: include/params.h include/solver.h include/io.h
 src/params.o: include/params.h
 src/grid.o: include/grid.h include/params.h
 src/solver_baseline.o src/solver_opt.o: include/solver.h include/grid.h include/params.h
+src/solver_opt.o src/solver_opt_kernels.o: include/solver_opt_kernels.h
 src/black_scholes.o: include/black_scholes.h
 src/io.o: include/io.h include/grid.h include/params.h include/solver.h
 

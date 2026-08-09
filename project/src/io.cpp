@@ -30,9 +30,13 @@ void dump_snapshot(const std::string& dump_dir, int step, const Grid& grid) {
 
 void print_result_csv(const SolveResult& r, const Config& cfg) {
     // Exactly the PLAN §3 line — bench_plot.py and slurm logs parse this,
-    // so no extra whitespace or columns.
+    // so no extra whitespace or columns. The opt solver's label carries its
+    // ladder level ("opt-L3") so bench CSVs are self-describing (PLAN §7).
+    const std::string solver_label =
+        cfg.solver == "opt" ? "opt-L" + std::to_string(cfg.opt_level)
+                            : cfg.solver;
     std::printf("%.10g,%.8g,%.8g,%.8g,%d,%d,%d,%s,%.6f,%.6g\n",
                 r.price, r.delta, r.gamma, r.vega, cfg.grid.num_stock_nodes,
                 cfg.grid.num_variance_nodes, cfg.grid.num_timesteps,
-                cfg.solver.c_str(), r.seconds, r.cell_updates_per_sec);
+                solver_label.c_str(), r.seconds, r.cell_updates_per_sec);
 }

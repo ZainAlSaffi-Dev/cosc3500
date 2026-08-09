@@ -466,6 +466,31 @@ diffing two adjacent kernels shows exactly one technique, and
 The metric: **cell-updates per second** = `Ns·Nv·nt / seconds` — comparable
 across grid sizes, which raw seconds are not.
 
+**P7 scaffold (2026-08-09) — how the ladder is wired, before any kernel:**
+
+- **Dispatch once, via a function pointer.** `StepKernel` (in
+  `solver_opt_kernels.h`) is a *function pointer* — a plain variable whose
+  value is "which function to call". `OptSolver::solve` asks
+  `kernel_for_level(cfg.opt_level)` for it ONCE, before the time loop, so
+  the hot loop never pays a per-cell "which level?" branch. Similar to
+  assigning a function to a variable in Python — but resolved to a raw
+  jump address, no dictionary lookup per call.
+- **A kernel owns the interior + the v=0 row.** The S=0/S=max columns and
+  the v=vmax Neumann row are shared plumbing in `OptSolver::solve`,
+  identical for every level and for baseline — ladder timings compare
+  kernels, nothing else.
+- **Level 0 is the anchor.** `step_level0` is line-for-line the baseline
+  arithmetic; measured 0.0e+00 difference (bit-identical) and the same
+  ~4.9e8 cell-updates/s locally — proof the harness itself costs nothing.
+- **Unwritten rungs throw, the test SKIPs them.** `kernel_for_level`
+  returns nullptr for levels 1–6 until each lands; the solver throws
+  before any work (the §1b "exceptions at the edges" rule), and
+  `test_opt_matches` prints an honest SKIP — it grows teeth automatically
+  as kernels land, and all-SKIP is a FAIL so it can never go green by
+  doing nothing.
+- The opt solver's CSV label carries the level (`opt-L0`, `opt-L3`) so
+  every benchmark line is self-describing.
+
 ### 16. Benchmarking properly (the other 25%)
 
 - Numbers come **only from rangpur compute nodes** via `sbatch` (login node

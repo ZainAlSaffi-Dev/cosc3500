@@ -69,6 +69,10 @@ struct Config {
     int bench_reps = 0;
     //solver (baseline which is un optimised and opt which is optimised)
     std::string solver = "baseline"; // baseline | opt
+    // Optimisation-ladder level for the opt solver (PLAN §4b), CLI-only.
+    // 0 = same algorithm as baseline. Stays 0 until the full ladder lands;
+    // then PLAN §3's default of 6 (= all techniques) takes over.
+    int opt_level = 0;
 };
 
 // Parse key = value file. Throws std::runtime_error on unknown key / bad value.
