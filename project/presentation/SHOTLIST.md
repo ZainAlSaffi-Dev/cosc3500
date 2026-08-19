@@ -27,6 +27,7 @@ so the recording software can be lined up against it.
 | `demo_timevalue.mp4` again | loop | shares across, variance down, colour is value, time runs backwards | bottom right |
 | `bs_collapse.mp4`, 5 seconds | loop it twice | switch the volatility of volatility off and Heston becomes Black-Scholes | bottom right |
 | the three-prices slide | still | three methods that share no code agree | bottom right |
+| `convergence.png` | still | halving the spacing cuts the error four times over, then the floor | bottom right |
 | the ladder-idea slide | still | seven solvers, each one technique apart | bottom right |
 | `shot_L0_anchor.png` through `shot_L6_unroll.png` | stills, one slide per rung | one sentence per null rung, saying what it added and that the compiler had already done it | bottom right |
 | `shot_L2_strength_reduction.png` | still | the divisions on the left became the multiplications on the right | bottom right |

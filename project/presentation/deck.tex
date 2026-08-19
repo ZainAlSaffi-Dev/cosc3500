@@ -471,6 +471,28 @@
     million}, and the Monte Carlo interval brackets both.}
 \end{frame}
 
+\begin{frame}{Convergence}{Halve the grid spacing and the error should fall four times over}
+  \begin{sigcolumns}
+    \begin{sigcolumn}
+      \begin{itemize}
+        \item The same option is priced on a sequence of grids, each with
+          half the spacing of the last, and each price is compared with
+          the Fourier reference.
+        \item The error falls about \sigemph{four times over per halving}.
+          That is the second-order accuracy the stencil is built to have,
+          so the slope is itself a check on the code.
+        \item Below about \$0.014 refinement stops helping. The grid has
+          to end somewhere, and the reference carries its own small
+          error, so those two set the floor.
+      \end{itemize}
+    \end{sigcolumn}
+    \begin{sigcolumn}
+      \sigfigure{../results/convergence.png}{Error against the Fourier
+        price as the spacing halves.}
+    \end{sigcolumn}
+  \end{sigcolumns}
+\end{frame}
+
 % --------------------------------------------------------------------------
 % Optimisation. The ladder, its one big rung, and the controls.
 % --------------------------------------------------------------------------
@@ -726,15 +748,6 @@
     \midrule
     ctl-order & loops swapped on purpose & {\color{sigred} 63.6} & 2.1x slower \\
     ctl-branch & boundary branch fused back & 135.3 & free \\}
-\end{frame}
-
-\begin{frame}{Convergence}{Error under grid refinement}
-  \begin{center}
-    \sigfigure[0.66\linewidth]{../results/convergence.png}{Error against the
-      Fourier price as the grid refines.}
-  \end{center}
-  \sigcallout{The observed order along the refinement ladder is about two,
-    and the error then lands on a discretisation floor of about \$0.014.}
 \end{frame}
 
 \begin{frame}{Modelled cache traffic}{Why the swapped loop order is slower}

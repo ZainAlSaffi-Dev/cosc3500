@@ -61,11 +61,11 @@ one. Milestone 1 in particular says shorter is acceptable.
 |---|---|---|
 | Cold open and framing | 0:20 | 0:20 |
 | Introduction and Background | 2:50 | 3:10 |
-| Validation (bridges into benchmarking) | 0:35 | 3:45 |
-| Optimisation | 3:05 | 6:50 |
-| Benchmarking | 2:00 | 8:50 |
-| Reflection and Milestone 2 | 0:35 | 9:25 |
-| Close | 0:10 | 9:35 |
+| Validation (bridges into benchmarking) | 0:50 | 4:00 |
+| Optimisation | 3:05 | 7:05 |
+| Benchmarking | 2:00 | 9:05 |
+| Reflection and Milestone 2 | 0:35 | 9:40 |
+| Close | 0:10 | 9:50 |
 
 The Introduction is longer than the first draft of this plan allowed,
 because the model-to-equation run now builds the pricing equation slide by
@@ -138,7 +138,7 @@ the grid.
 The screen shows the payoff diagram, then `xi_smile.mp4`, then
 `demo_timevalue.mp4`.
 
-### 3:10 — Validation (0:35)
+### 3:10 — Validation (0:50)
 
 This beat is short but it buys credibility for everything after it, and it is
 scored under Benchmarking because the spec asks for a setup that avoids
@@ -151,13 +151,19 @@ misleading results.
   inversion says 196.1692, which agrees to four parts in a million. Four
   hundred thousand Monte Carlo paths say 196.1345 give or take 0.5524, which
   brackets both. Put all three on one slide.
-The convergence study sits in the unrecorded backup slides, and the test
-gate is one spoken sentence inside the benchmark protocol beat, that
-before every sweep the binary rebuilds and the full test suite must pass.
+- **Convergence.** The same option on a sequence of grids, each halving the
+  spacing. The error falls about four times over per halving, which is the
+  second-order accuracy the stencil should have, then flattens near \$0.014
+  where the domain cut-off and the reference's own error take over.
 
-The screen shows `bs_collapse.mp4`, then the three-method table.
+The test gate has no slide. It is one spoken sentence inside the benchmark
+protocol beat, that before every sweep the binary rebuilds and the full
+test suite must pass.
 
-### 3:45 — Optimisation (25%)
+The screen shows `bs_collapse.mp4`, then the three-method table, then
+`convergence.png`.
+
+### 4:00 — Optimisation (25%)
 
 Lead with the method, not the result.
 
@@ -192,7 +198,7 @@ Lead with the method, not the result.
 The screen shows `bench_ladder_hugepage.png`, then `memory_cache.mp4`, then
 the `test_opt_matches` output.
 
-### 6:50 — Benchmarking (25%)
+### 7:05 — Benchmarking (25%)
 
 Hit the three things the spec names, in order.
 
@@ -231,7 +237,7 @@ Hit the three things the spec names, in order.
 The screen shows a CSV header, then `bench_scaling.png`, then
 `roofline.png`, then the page-size table from RESULTS.md.
 
-### 8:50 — Reflection and Conclusion (10%)
+### 9:05 — Reflection and Conclusion (10%)
 
 Four questions, one sentence each. The spec names all four.
 
@@ -251,7 +257,7 @@ Four questions, one sentence each. The spec names all four.
   timestep because the two-buffer design makes every cell independent of every
   other cell.
 
-### 9:25 — Close
+### 9:40 — Close
 
 Name the three promises from the cold open and confirm you delivered them.
 
@@ -315,7 +321,7 @@ Name the three promises from the cold open and confirm you delivered them.
 | `results/payoff.png` (built by `make payoff`) | the introduction, showing what an option is |
 | `results/xi_smile.mp4` | the introduction, showing why Black-Scholes is not enough |
 | `results/bs_collapse.mp4` | validation |
-| `results/convergence.png` | a backup slide, not recorded |
+| `results/convergence.png` | validation |
 | `results/code_shots/*.png` (built by `make code-shots`) | the rung slides, the loop-order control, the CSV provenance header and the test output |
 | `results/bench_ladder_hugepage.png` | the optimisation ladder |
 | `results/memory_cache.mp4` | the loop-order control |
