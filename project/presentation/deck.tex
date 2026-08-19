@@ -616,24 +616,15 @@
 \end{frame}
 
 \begin{frame}{The ladder, measured}{Only level 2 changed throughput}
+  \setlength{\sigslotheight}{0.42\textheight}
   \begin{center}
     \sigfigure[0.9\linewidth]{../results/bench_ladder_hugepage.png}{}
   \end{center}
   \sigstats{52.6/baseline Mcell per s, 131.2/after strength reduction,
     134.8/level 6, 2.56x/overall speedup}
-\end{frame}
-
-\begin{frame}{The negative controls}{Each control removes a property the baseline already had}
-  \begin{center}
-    \sigfigure{../results/code_shots/shot_ctl_order.png}{}
-  \end{center}
-  \begin{itemize}
-    \item Swapping the loops makes the inner iteration jump a whole row
-      per step. Same arithmetic, \sigemph{2.1x slower}. That measures the
-      value of the baseline's traversal order.
-    \item Fusing the boundary row back into the interior loop has no
-      measurable cost. The branch predictor handles the per-cell branch.
-  \end{itemize}
+  \sigcallout{The nulls were also checked directly. Swapping the loops on
+    purpose makes identical arithmetic \sigemph{2.1x slower}, so the
+    traversal order the baseline already had was load-bearing.}
 \end{frame}
 
 \begin{frame}{What the speedup cost}{Fifteen units in the last place of the answer}
@@ -752,6 +743,19 @@
     \midrule
     ctl-order & loops swapped on purpose & {\color{sigred} 63.6} & 2.1x slower \\
     ctl-branch & boundary branch fused back & 135.3 & free \\}
+\end{frame}
+
+\begin{frame}{The negative controls}{Each control removes a property the baseline already had}
+  \begin{center}
+    \sigfigure{../results/code_shots/shot_ctl_order.png}{}
+  \end{center}
+  \begin{itemize}
+    \item Swapping the loops makes the inner iteration jump a whole row
+      per step. Same arithmetic, \sigemph{2.1x slower}. That measures the
+      value of the baseline's traversal order.
+    \item Fusing the boundary row back into the interior loop has no
+      measurable cost. The branch predictor handles the per-cell branch.
+  \end{itemize}
 \end{frame}
 
 \begin{frame}{Modelled cache traffic}{Why the swapped loop order is slower}

@@ -159,7 +159,8 @@ Throughput went from 52.6 to 131.2 million cell updates per second.
 Level three walks memory in layout order, three row bases per row
 instead of index calls, so the inner loop touches consecutive doubles.
 No change, by construction, the baseline already walked this way. What
-that order is really worth, the negative control will show.
+that order is really worth, a deliberately swapped version will show on
+the ladder slide.
 
 ## 5:40 Level 4
 
@@ -186,27 +187,20 @@ this talk comes from the cluster.
 
 Here is the whole ladder measured on the cluster, and only level two
 moved. Everything the compiler was allowed to do it had already done, so
-the hand optimisation that paid is the one it is forbidden to make.
-Overall the solver ended up 2.56 times faster.
+the hand optimisation that paid is the one it is forbidden to make. I
+also checked the nulls directly, swapping the loops on purpose makes
+identical arithmetic 2.1 times slower, so the traversal order the
+baseline already had was genuinely load-bearing. Overall the solver
+ended up 2.56 times faster.
 
-## 6:50 The negative controls
-
-Two rungs came back null because the baseline already did the right
-thing, and that claim can be tested by writing the wrong version on
-purpose and timing it. Swapping the loop order makes identical
-arithmetic 2.1 times slower, so traversal order was genuinely
-load-bearing. Fusing the boundary branch back in costs nothing, the
-predictor learns a branch that goes one way for a whole row, so that one
-was never needed.
-
-## 7:15 What the speedup cost
+## 7:00 What the speedup cost
 
 The speedup was not free. It moved the answer by fifteen units in the
 last decimal place, a relative error of 3.3 times ten to the minus
 fifteen, and an automated test holds every level and both controls to
 that tolerance on every build.
 
-## 7:30 The benchmark protocol
+## 7:15 The benchmark protocol
 
 Every number comes from one protocol, a reserved compute node through
 sbatch with exclusive access, a rebuild and full test pass before every
@@ -216,7 +210,7 @@ The no-vectorise sweep at O2 proved nothing, because GCC 8.5 does not
 vectorise at O2 at all. Re-run at O3, the vectoriser does nothing to my
 kernels but nearly doubles the baseline.
 
-## 7:55 Scaling with problem size
+## 7:40 Scaling with problem size
 
 This sweep grows the working set from one mebibyte to sixty-four, and
 the speedup holds between two and a half and three and a half times. The
@@ -225,7 +219,7 @@ with cache effects, so I re-ran it with the allocator pinned. The
 baseline staying flat across a sixty-four-fold growth in working set
 backs up the division story.
 
-## 8:20 The roofline
+## 8:05 The roofline
 
 I had assumed this solver was memory-bound. It is not. The level six
 kernel does thirty-one floating point operations per twenty-four bytes,
@@ -234,7 +228,7 @@ gigaflops rather than trusting a datasheet. Level six runs at 82 percent
 of that ceiling, the baseline at 27, limited by its divisions.
 Optimisation moved the kernel from division-bound to compute-bound.
 
-## 8:45 The page-size effect
+## 8:30 The page-size effect
 
 The largest single effect was not a code change at all. The same binary
 on the same node runs at 134.8 million cell updates per second on
@@ -244,7 +238,7 @@ thousand small ones, against a translation buffer with about a thousand
 entries. It surfaced because my median of five was averaging two
 regimes, huge pages on the first repetition, small on the rest.
 
-## 9:15 Reflection
+## 9:00 Reflection
 
 The main conclusion is that at O2 the compiler has already done the
 textbook transformations, so the hand optimisations that pay are the
@@ -255,7 +249,7 @@ shared-node run said the loop-order control cost thirty times, and the
 real answer was 2.1. For Milestone 2 the kernel is now compute-bound, so
 SIMD first, then OpenMP across rows.
 
-## 9:45 Close
+## 9:30 Close
 
 I promised to show you how the pricer works, to make it faster, and to
 name what I was wrong about. It is 2.56 times faster, it was never

@@ -62,10 +62,10 @@ one. Milestone 1 in particular says shorter is acceptable.
 | Cold open and framing | 0:20 | 0:20 |
 | Introduction and Background | 3:05 | 3:25 |
 | Validation (bridges into benchmarking) | 0:50 | 4:15 |
-| Optimisation | 3:15 | 7:30 |
-| Benchmarking | 1:45 | 9:15 |
-| Reflection and Milestone 2 | 0:30 | 9:45 |
-| Close | 0:10 | 9:55 |
+| Optimisation | 3:00 | 7:15 |
+| Benchmarking | 1:45 | 9:00 |
+| Reflection and Milestone 2 | 0:30 | 9:30 |
+| Close | 0:10 | 9:40 |
 
 The Introduction is longer than the first draft of this plan allowed,
 because the model-to-equation run now builds the pricing equation slide by
@@ -201,7 +201,7 @@ Lead with the method, not the result.
 The screen shows `bench_ladder_hugepage.png`, then `memory_cache.mp4`, then
 the `test_opt_matches` output.
 
-### 7:30 — Benchmarking (25%)
+### 7:15 — Benchmarking (25%)
 
 Hit the three things the spec names, in order.
 
@@ -240,7 +240,7 @@ Hit the three things the spec names, in order.
 The screen shows a CSV header, then `bench_scaling.png`, then
 `roofline.png`, then the page-size table from RESULTS.md.
 
-### 9:15 — Reflection and Conclusion (10%)
+### 9:00 — Reflection and Conclusion (10%)
 
 Four questions, one sentence each. The spec names all four.
 
@@ -260,7 +260,7 @@ Four questions, one sentence each. The spec names all four.
   timestep because the two-buffer design makes every cell independent of every
   other cell.
 
-### 9:45 — Close
+### 9:30 — Close
 
 Name the three promises from the cold open and confirm you delivered them.
 

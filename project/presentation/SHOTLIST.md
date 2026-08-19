@@ -32,8 +32,6 @@ so the recording software can be lined up against it.
 | `shot_L0_anchor.png` through `shot_L6_unroll.png` | stills, one slide per rung | one sentence per null rung, saying what it added and that the compiler had already done it | bottom right |
 | `shot_L2_strength_reduction.png` | still | the divisions on the left became the multiplications on the right | bottom right |
 | `bench_ladder_hugepage.png` | still | walk the bars left to right and stop on level 2 | top right, because the legend sits top left |
-| `shot_ctl_order.png` | still | identical arithmetic with the loops swapped runs 2.1 times slower | bottom right |
-| `memory_cache.mp4`, 14 seconds | play once over the tail of that explanation | let the hit and miss counter do the talking | top left, keeping the counter visible |
 | `shot_optmatches.png` | still | every rung is held to the baseline answer, and the speedup cost fifteen units in the last place | bottom right |
 | `shot_csv_header.png` | still | the job stamps its own provenance into every result file | bottom right |
 | `bench_scaling.png` | still | the shaded band is the page-regime split, and the first run of this sweep had to be redone | bottom right |

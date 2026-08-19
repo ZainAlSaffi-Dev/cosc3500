@@ -11,7 +11,7 @@ material and are not recorded. `deck.html` is the earlier HTML deck. Its
 take timer is still useful, but its slide order no longer matches this
 table, so record over the PDF.
 
-The table ends at nine minutes fifty-five. The assessors stop watching at
+The table ends at nine minutes forty. The assessors stop watching at
 ten, so takes must not drift. If the recording runs long, the four null
 rungs, levels 0, 1, 3 and 4, are the place to tighten first.
 
@@ -40,15 +40,14 @@ rungs, levels 0, 1, 3 and 4, are the place to tighten first.
 | 5:40 | 0:15 | Level 4, loop splitting. Also null by construction. | `results/code_shots/shot_L4_split.png` | small webcam |
 | 5:55 | 0:15 | Level 5, induction variables. The one small real win after level 2. | `results/code_shots/shot_L5_pointers.png` | small webcam |
 | 6:10 | 0:20 | Level 6, unrolling. The compiler already unrolls counted loops. | `results/code_shots/shot_L6_unroll.png` | small webcam |
-| 6:30 | 0:20 | The ladder, measured. Only level 2 moved, and why. | `results/bench_ladder_hugepage.png` | small webcam |
-| 6:50 | 0:25 | The negative controls. Each removes a property the baseline already had. | `results/code_shots/shot_ctl_order.png`, then `results/memory_cache.mp4` | small webcam |
-| 7:15 | 0:15 | What the speedup cost. | `results/code_shots/shot_optmatches.png` | small webcam |
-| 7:30 | 0:25 | How the benchmarks were set up so they could not mislead. | the protocol table, with `results/code_shots/shot_csv_header.png` spliced fullscreen | small webcam |
-| 7:55 | 0:25 | How performance scales with problem size, including the page-regime split. | `results/bench_scaling.png` | small webcam |
-| 8:20 | 0:25 | The bottleneck. The solver was assumed to be memory-bound and is not. | `results/roofline.png` | small webcam |
-| 8:45 | 0:30 | The page-size effect. | a table slide with the page-size numbers | small webcam |
-| 9:15 | 0:30 | Reflection. The four questions the spec asks, one sentence each. | a text slide | face large |
-| 9:45 | 0:10 | Close by returning to the promises from the opening. | face only | face full screen |
+| 6:30 | 0:30 | The ladder, measured. Only level 2 moved, and why, with the loop-order control as direct proof. | `results/bench_ladder_hugepage.png` | small webcam |
+| 7:00 | 0:15 | What the speedup cost. | `results/code_shots/shot_optmatches.png` | small webcam |
+| 7:15 | 0:25 | How the benchmarks were set up so they could not mislead. | the protocol table, with `results/code_shots/shot_csv_header.png` spliced fullscreen | small webcam |
+| 7:40 | 0:25 | How performance scales with problem size, including the page-regime split. | `results/bench_scaling.png` | small webcam |
+| 8:05 | 0:25 | The bottleneck. The solver was assumed to be memory-bound and is not. | `results/roofline.png` | small webcam |
+| 8:30 | 0:30 | The page-size effect. | a table slide with the page-size numbers | small webcam |
+| 9:00 | 0:30 | Reflection. The four questions the spec asks, one sentence each. | a text slide | face large |
+| 9:30 | 0:10 | Close by returning to the promises from the opening. | face only | face full screen |
 
 Somewhere inside the benchmarking section, spend about fifteen seconds on
 the control that went wrong. One of my own
@@ -67,6 +66,7 @@ you look for them. The numbers behind it are in RESULTS.md section 6.
 | asset | reason |
 |---|---|
 | `results/code_shots/shot_iron_rule.png` | The test-gate slide came out. Its content is one row of the protocol table and one spoken sentence in that take. |
+| `results/code_shots/shot_ctl_order.png`, `results/memory_cache.mp4` | The negative-controls slide moved to the unrecorded backup section. Its headline number, the 2.1x loop-order cost, is one sentence on the ladder slide. |
 | `results/demo_surface.mp4` | It does the same job as the flat weather map, and the three-dimensional view is slower for a viewer to parse in the time available. |
 | `results/memory_buffers.mp4` | The two-buffer idea lands in one spoken sentence, so fifteen seconds of animation would not buy fifteen seconds of marks. |
 | `results/blowup.mp4` | The instability demonstration is an aside. PRESENTATION.md keeps it listed as a spare in case a recording comes in short. |
