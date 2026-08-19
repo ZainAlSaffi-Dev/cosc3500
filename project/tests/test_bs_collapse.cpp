@@ -1,9 +1,9 @@
-// Validation gate 1 (PLAN P3): with xi = 0 the volatility of variance is
-// zero, so variance follows its deterministic mean-reversion path; starting
-// it AT the long-run mean (v0 = theta) pins it there forever — Heston
-// degenerates to Black-Scholes with sigma = sqrt(theta). The PDE solver
-// never sees the closed form, so agreement here validates payoff, stencil,
-// boundaries and readout end to end.
+// The first validation gate. Setting the vol of vol to zero leaves the
+// variance following its deterministic mean-reversion path, and starting it
+// at the long-run mean pins it there for good. Heston then collapses to
+// Black-Scholes with a volatility of sqrt(theta). The PDE solver never sees
+// the closed form, so agreement between the two checks the payoff, the
+// stencil, the boundaries and the readout all at once.
 
 #include <cmath>
 #include <cstdio>
@@ -12,13 +12,12 @@
 #include "params.h"
 #include "solver.h"
 
-// Node-aligned stable test grid (same shape in test_parity.cpp):
-// extract_result reads the cell NEAREST (spot, v0) with no interpolation, so
-// spot and v0 must land exactly on nodes — a half-cell snap would swamp the
-// discretisation error this test measures (STUDY_GUIDE §10 P3 notes).
-//   s_max = 4*5250 = 21000, ns = 421 -> spacing 50: spot 5200 = node 104,
-//   strike 5250 = node 105.  v_max = 1, nv = 51 -> spacing 0.02: v0 = node 2.
-// nt = 56000 keeps dt ~0.79x the explicit stability bound (~5.66e-6).
+// A node-aligned and stable test grid, the same shape test_parity.cpp uses.
+// Both the spot and v0 have to land exactly on nodes, because being half a
+// cell off would swamp the discretisation error this test is trying to
+// measure. With s_max at 21000 and 421 nodes the spacing is 50, so a spot of
+// 5200 is node 104 and the strike of 5250 is node 105, and with v_max at 1
+// and 51 nodes the spacing is 0.02, so v0 is node 2.
 static Config aligned_test_config() {
     Config cfg;  // params.h defaults are the reference-run market/model
     cfg.grid.num_stock_nodes = 421;
@@ -29,25 +28,27 @@ static Config aligned_test_config() {
 
 int main() {
     Config cfg = aligned_test_config();
-    // The collapse: kill vol-of-vol, start variance at its resting point.
+    // These two lines are the collapse itself.
     cfg.heston.xi = 0.0;
     cfg.heston.v0 = cfg.heston.theta;
 
-    // Measured on this grid (2026-08-09): rel err 1.161e-3 (call),
-    // 1.116e-3 (put) — pure discretisation error at spacing 50.
-    // Tolerance ~2x measured: a regression trips it, grid noise does not.
+    // Measured on this grid the relative error is 1.161e-3 for the call and
+    // 1.116e-3 for the put, which is discretisation error at a spacing of 50
+    // and nothing more. The tolerance is about twice that, so a regression
+    // trips it but ordinary grid noise does not.
     const double rel_tolerance = 2.5e-3;
 
     const double sigma = std::sqrt(cfg.heston.theta);
-    // Solver lives on the stack — it IS the object here, freed at scope exit;
-    // no pointer needed because there is no polymorphic dispatch to do.
+    // The solver lives on the stack. The variable is the object itself, not
+    // a handle to one, and it's freed at scope exit. No pointer needed here
+    // because nothing is being dispatched polymorphically.
     BaselineSolver solver;
     bool all_ok = true;
     for (int leg = 0; leg < 2; ++leg) {
         cfg.option.is_call = (leg == 0);
         const SolveResult result = solver.solve(cfg);
 
-        // Guard: the comparison is meaningless if the run was unstable.
+        // The comparison means nothing if the run was unstable, so check.
         const double dt = cfg.option.maturity_years / cfg.grid.num_timesteps;
         if (dt > result.dt_stable_estimate) {
             std::printf("test_bs_collapse: UNSTABLE dt %.3e > bound %.3e\n",

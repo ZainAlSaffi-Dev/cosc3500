@@ -1,5 +1,6 @@
-// heston — serial Heston PDE option pricer (COSC3500 Milestone 1).
-// CLI contract in PLAN.md §3. Keep this file thin: parse flags, dispatch, print.
+// The serial Heston PDE option pricer for COSC3500 Milestone 1. PLAN.md §3
+// defines the command line. This file stays thin and only parses the flags,
+// picks a solver and prints the result.
 
 #include <cstdio>
 #include <exception>
@@ -13,11 +14,12 @@
 static void usage() {
     std::fprintf(stderr,
         "usage: heston --config <path> [--solver baseline|opt] [--type call|put]\n"
-        "              [--opt-level 0..6] [--dump-every N] [--dump-dir DIR]\n"
-        "              [--bench R] [--ns X] [--nv X] [--nt X]\n");
+        "              [--opt-level 0..6 | 7=ctl-order | 8=ctl-branch]\n"
+        "              [--dump-every N] [--dump-dir DIR]\n"
+        "              [--bench R] [--ns X] [--nv X] [--nt X] [--maturity Y]\n");
 }
 
-// Fetch the value that must follow a flag like "--ns 1024".
+// Fetches the value that has to follow a flag such as "--ns 1024".
 static std::string flag_value(int argc, char** argv, int& i) {
     if (i + 1 >= argc)
         throw std::runtime_error(std::string(argv[i]) + " needs a value");
@@ -27,8 +29,9 @@ static std::string flag_value(int argc, char** argv, int& i) {
 
 int main(int argc, char** argv) {
     try {
-        // Pass 1: find the config file only, so file values load first and
-        // every other flag can override them afterwards, regardless of order.
+        // The first pass looks only for the config file, so that the file's
+        // values load first and every other flag can then override them no
+        // matter what order they were typed in.
         std::string config_path;
         for (int i = 1; i < argc; ++i) {
             if (std::string(argv[i]) == "--config")
@@ -40,7 +43,7 @@ int main(int argc, char** argv) {
         }
         Config cfg = load_config(config_path);
 
-        // Pass 2: CLI overrides on top of the file values.
+        // The second pass applies the command-line overrides on top.
         for (int i = 1; i < argc; ++i) {
             const std::string arg = argv[i];
             if (arg == "--config") {
@@ -49,8 +52,12 @@ int main(int argc, char** argv) {
                 cfg.solver = flag_value(argc, argv, i);
             } else if (arg == "--opt-level") {
                 cfg.opt_level = std::stoi(flag_value(argc, argv, i));
-                if (cfg.opt_level < 0 || cfg.opt_level > 6)
-                    throw std::runtime_error("--opt-level must be 0..6");
+                // Levels 0 to 6 are the ladder and 7 and 8 are the two
+                // negative controls. The accepted range has only ever grown,
+                // so older scripts still work.
+                if (cfg.opt_level < 0 || cfg.opt_level > 8)
+                    throw std::runtime_error(
+                        "--opt-level must be 0..6 (ladder) or 7/8 (controls)");
             } else if (arg == "--type") {
                 const std::string type = flag_value(argc, argv, i);
                 if (type != "call" && type != "put")
@@ -69,17 +76,25 @@ int main(int argc, char** argv) {
                     std::stoi(flag_value(argc, argv, i));
             } else if (arg == "--nt") {
                 cfg.grid.num_timesteps = std::stoi(flag_value(argc, argv, i));
+            } else if (arg == "--maturity") {
+                // This exists for benchmarking rather than pricing. Since dt
+                // is the maturity divided by nt, shrinking the maturity keeps
+                // a larger grid inside its stability bound without changing
+                // the memory footprint or the access pattern being measured.
+                cfg.option.maturity_years =
+                    std::stod(flag_value(argc, argv, i));
             } else {
                 usage();
                 throw std::runtime_error("unknown flag: " + arg);
             }
         }
 
-        // unique_ptr: sole owner of the polymorphic solver — deleted
-        // automatically at scope exit, like Python GC but deterministic.
+        // The unique_ptr is the sole owner of the solver and deletes it when
+        // it goes out of scope. This is like Python's garbage collector,
+        // except that you know exactly when it happens.
         std::unique_ptr<Solver> solver = make_solver(cfg.solver);
-        // --bench R repeats the whole solve R times, one CSV line each,
-        // so scripts get per-rep timings (median/min/max downstream).
+        // Passing --bench R repeats the whole solve R times and prints one
+        // CSV line each, so the scripts can take a median across reps.
         const int reps = cfg.bench_reps > 0 ? cfg.bench_reps : 1;
         for (int rep = 0; rep < reps; ++rep) {
             const SolveResult result = solver->solve(cfg);
@@ -87,8 +102,8 @@ int main(int argc, char** argv) {
         }
         return 0;
     } catch (const std::exception& e) {
-        // The single catch (PLAN §1b): parsing and the factory throw; nothing
-        // in the numerics does.
+        // This is the only catch in the program. Parsing and the factory can
+        // throw, and the numerics never do.
         std::fprintf(stderr, "heston: %s\n", e.what());
         return 1;
     }

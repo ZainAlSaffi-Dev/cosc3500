@@ -1,5 +1,7 @@
 .env
 results/
+presentation/stills/
+presentation/deck.pdf
 heston
 tests/test_bs_collapse
 tests/test_parity
@@ -7,4 +9,5 @@ tests/test_opt_matches
 *.o
 slurm-*.out
 __pycache__/
+.venv/
 .DS_Store

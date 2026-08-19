@@ -37,7 +37,7 @@ The four "personality parameters" of the model, one sentence each:
 
 This second random process is exactly why the computation gets bigger. Under Black-Scholes, volatility is a known constant, so the solver only needs to ask "what if the stock were at various prices?" — a single row of what-ifs. Under Heston, volatility is *itself* a what-if, so the solver needs a whole spreadsheet of scenarios: every combination of "what if the stock were here" and "what if the market were this calm or this wild".
 
-![One simulated path of the two coupled Heston processes: the stock price and its volatility](assets/heston-paths.gif)
+![One simulated path of the two coupled Heston processes: the stock price and its volatility](../assets/heston-paths.gif)
 
 *One simulated three-month path of the two coupled processes, using the reference parameters from section 8. The lower panel is the point: volatility is not a constant but a jagged random path of its own, and with `rho = -0.70` its climbs line up with the stock's slides.*
 
@@ -93,7 +93,7 @@ There is one such sheet for every point in time between today and expiry, and th
    (known for free)         (computation moves right to left)
 ```
 
-![The option value surface evolving backwards in time from the jagged payoff at expiry to the smooth surface today](assets/value-surface.gif)
+![The option value surface evolving backwards in time from the jagged payoff at expiry to the smooth surface today](../assets/value-surface.gif)
 
 *The whole spreadsheet drawn as a surface: stock price and volatility along the base, option value as height and colour. The animation runs the way the solver runs — it starts at expiry, where the surface is the sharp hockey-stick payoff and volatility is irrelevant, and steps backwards to today, where the kink has been smoothed out and higher volatility visibly lifts the value. (Illustrative prototype from a small Python reference solver; the Milestone 1 "weather map" deliverable regenerates this from the C++ engine.)*
 
@@ -101,7 +101,7 @@ In memory the solver keeps exactly two sheets at once. The later sheet is read-o
 
 One honest caveat: this "explicit" scheme is only stable if the timesteps are small enough relative to the cell spacing. Take steps that are too big and the sheet blows up into oscillating garbage. That is not a flaw to hide — measuring exactly where the stable/unstable boundary sits, and the accuracy-versus-runtime trade-off around it, is part of the research plan. An implicit or ADI scheme is a possible extension, not required scope.
 
-![The error field exploding into a checkerboard when the timestep exceeds the stability limit](assets/instability.gif)
+![The error field exploding into a checkerboard when the timestep exceeds the stability limit](../assets/instability.gif)
 
 *The instability, previewed: the same solver run at 4× the stable timestep, plotted as its difference from a stable reference run. For a while nothing seems wrong — then a checkerboard mode erupts in the high-volatility, high-price corner (where the diffusion coefficients are largest) and swallows the sheet. This is the failure the stability measurements in the research plan map out.*
 

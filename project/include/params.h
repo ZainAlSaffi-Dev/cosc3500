@@ -33,10 +33,11 @@ struct HestonParams {
     double rho = -0.70;
 };
 
-// Discretisation. S in [0, stock_max_multiplier*strike], v in
-// [0, variance_max], uniform spacing. Config files and CLI keep the short
-// keys (ns, nv, nt, s_max_mult, v_max); load_config maps them onto these
-// descriptive fields.
+// How the grid is discretised. The stock axis runs from zero up to
+// stock_max_multiplier times the strike and the variance axis from zero up to
+// variance_max, both with uniform spacing. Config files and the command line
+// keep using the short keys ns, nv, nt, s_max_mult and v_max, which
+// load_config maps onto these longer field names.
 struct GridSpec {
     //stock nodes (contiguous dimension)    
     int num_stock_nodes = 2048;  // cfg/CLI key: ns
@@ -44,16 +45,18 @@ struct GridSpec {
     int num_variance_nodes = 512;  // cfg/CLI key: nv
     //timesteps
     int num_timesteps = 2000;  // cfg/CLI key: nt
-    // Top of the stock axis, as a multiple of strike: S spans
-    // [0, stock_max_multiplier*strike]. Far enough out that the option's
-    // value there is effectively known (deep in/out of the money).
+    // The top of the stock axis, given as a multiple of the strike. It is far
+    // enough out that the option's value there is effectively known, because
+    // the option is deep in or out of the money by that point.
     double stock_max_multiplier = 4.0;  // cfg/CLI key: s_max_mult
-    // Top of the variance axis. v is variance = volatility^2, so 1.0 means
-    // 100% annual volatility — beyond any realistic market scenario.
+    // The top of the variance axis. Variance is volatility squared, so a
+    // value of 1.0 means 100% annual volatility, which is well past anything
+    // a real market does.
     double variance_max = 1.0;  // cfg/CLI key: v_max
 };
 
-// Everything a run needs. CLI overrides applied on top of file values.
+// Everything one run needs. The command line overrides whatever the config
+// file set.
 struct Config {
     OptionSpec option;
     MarketSpec market;
@@ -69,13 +72,16 @@ struct Config {
     int bench_reps = 0;
     //solver (baseline which is un optimised and opt which is optimised)
     std::string solver = "baseline"; // baseline | opt
-    // Optimisation-ladder level for the opt solver (PLAN §4b), CLI-only.
-    // 0 = same algorithm as baseline. Stays 0 until the full ladder lands;
-    // then PLAN §3's default of 6 (= all techniques) takes over.
-    int opt_level = 0;
+    // Which rung of the optimisation ladder the opt solver runs, settable
+    // only from the command line. Level 0 is the same algorithm as the
+    // baseline and level 6 has every technique applied, which is why 6 is the
+    // default now that the whole ladder is written. Levels 7 and 8 select the
+    // negative controls and are never a default.
+    int opt_level = 6;
 };
 
-// Parse key = value file. Throws std::runtime_error on unknown key / bad value.
+// Reads a file of "key = value" lines. It throws std::runtime_error if a key
+// is not recognised or a value does not parse.
 Config load_config(const std::string& path);
 
 #endif  // HESTON_PARAMS_H

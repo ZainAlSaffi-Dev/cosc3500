@@ -1,14 +1,15 @@
-// Validation gate 2 (PLAN P3): put-call parity
+// The second validation gate checks put-call parity, which says that
 //   C - P = S*exp(-q*T) - K*exp(-r*T)
-// holds in ANY model — no Heston formula needed. Runs the FULL parameter set
-// (xi != 0), exercising the cross-term and both variance boundaries that the
-// BS-collapse test (xi = 0) cannot reach.
+// This holds in any model at all, so no Heston formula is needed to test it.
+// It runs with the full parameter set, which exercises the cross term and
+// both variance boundaries that the Black-Scholes collapse test never
+// reaches, because that one has to switch the vol of vol off.
 //
-// Why the tolerance can be dollar-tight: the parity portfolio's payoff S - K
-// is linear in S, central differences are exact on linear functions, and
-// every boundary formula treats it exactly — the only survivor is the
-// compounding gap (1 - r*dt)^nt vs e^(-rT), of order 1e-5 dollars here
-// (STUDY_GUIDE §10 P3 notes). A genuine bug shows up dollars-sized.
+// The tolerance can be this tight because the parity portfolio pays S - K,
+// which is linear in S. Central differences are exact on linear functions and
+// every boundary formula handles this one exactly, so the only error left is
+// the small gap between compounding step by step and the exact exponential.
+// A real bug would show up as dollars rather than fractions of a cent.
 
 #include <cmath>
 #include <cstdio>
@@ -16,12 +17,12 @@
 #include "params.h"
 #include "solver.h"
 
-// Node-aligned stable test grid (same shape in test_bs_collapse.cpp):
-// spot must land exactly on a stock node because the readout takes the
-// nearest cell — otherwise C - P compares against the wrong S.
-//   s_max = 4*5250 = 21000, ns = 421 -> spacing 50: spot 5200 = node 104.
-//   v_max = 1, nv = 51 -> spacing 0.02: v0 = 0.04 = node 2.
-// nt = 56000 keeps dt ~0.79x the explicit stability bound (~5.66e-6).
+// A node-aligned and stable test grid, the same shape test_bs_collapse.cpp
+// uses. The spot has to land exactly on a stock node, because otherwise C - P
+// would be compared against a slightly different S. With s_max at 21000 and
+// 421 nodes the spacing is 50, so a spot of 5200 is node 104, and with v_max
+// at 1 and 51 nodes the spacing is 0.02, so v0 of 0.04 is node 2. The
+// timestep count keeps dt at roughly 0.79 of the stability bound.
 static Config aligned_test_config() {
     Config cfg;  // params.h defaults are the reference-run market/model
     cfg.grid.num_stock_nodes = 421;
@@ -33,14 +34,14 @@ static Config aligned_test_config() {
 int main() {
     Config cfg = aligned_test_config();
 
-    // Same grid, same parameters, only the payoff differs between the legs.
+    // The two legs share a grid and parameters and differ only in payoff.
     BaselineSolver solver;
     cfg.option.is_call = true;
     const SolveResult call_result = solver.solve(cfg);
     cfg.option.is_call = false;
     const SolveResult put_result = solver.solve(cfg);
 
-    // Guard: the comparison is meaningless if the runs were unstable.
+    // The comparison means nothing if the runs were unstable, so check.
     const double dt = cfg.option.maturity_years / cfg.grid.num_timesteps;
     if (dt > call_result.dt_stable_estimate) {
         std::printf("test_parity: UNSTABLE dt %.3e > bound %.3e\n", dt,
@@ -55,9 +56,10 @@ int main() {
     const double parity_lhs = call_result.price - put_result.price;
     const double abs_gap = std::fabs(parity_lhs - parity_rhs);
 
-    // Measured on this grid (2026-08-09): gap 5.4e-6 dollars, as the
-    // compounding analysis above predicts. Tolerance 20x that — headroom for
-    // compiler FP differences on rangpur, still ~5 orders below bug-sized.
+    // Measured on this grid the gap is 5.4e-6 dollars, which is what the
+    // compounding argument above predicts. The tolerance is twenty times that
+    // so there is room for floating-point differences from rangpur's
+    // compiler, and it still sits far below anything a real bug would cause.
     const double abs_tolerance = 1e-4;
 
     std::printf("parity: call %10.4f  put %10.4f  C-P %10.6f  "

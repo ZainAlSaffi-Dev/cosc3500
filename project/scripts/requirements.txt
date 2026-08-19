@@ -3,3 +3,6 @@ numpy
 matplotlib
 imageio
 imageio-ffmpeg
+# Presentation only: code screenshots (scripts/code_shots.py).
+pygments
+pillow

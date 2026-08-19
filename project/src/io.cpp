@@ -1,12 +1,12 @@
 #include "io.h"
 
 #include <cstdio>      // printf-family for the machine-readable result line
-#include <filesystem>  // create_directories — similar to os.makedirs(..., exist_ok=True)
+#include <filesystem>  // create_directories, similar to os.makedirs(..., exist_ok=True)
 #include <fstream>     // std::ofstream: RAII file handle, closes at scope exit
 #include <string>
 
 void dump_snapshot(const std::string& dump_dir, int step, const Grid& grid) {
-    // Feeds weather_map.py; only ever called outside the timed region.
+    // Feeds weather_map.py. Only ever called outside the timed region.
     std::filesystem::create_directories(dump_dir);
     // Zero-padded step number so filenames sort in time order.
     char name[32];
@@ -28,15 +28,24 @@ void dump_snapshot(const std::string& dump_dir, int step, const Grid& grid) {
     }
 }
 
+std::string solver_label(const Config& cfg) {
+    if (cfg.solver != "opt") return cfg.solver;
+    // Levels 7 and 8 are the negative controls rather than ladder rungs, so
+    // they get their own names. Calling them opt-L7 and opt-L8 would let a
+    // CSV row be misread as the ladder carrying on upwards.
+    if (cfg.opt_level == 7) return "opt-ctl-order";
+    if (cfg.opt_level == 8) return "opt-ctl-branch";
+    return "opt-L" + std::to_string(cfg.opt_level);
+}
+
 void print_result_csv(const SolveResult& r, const Config& cfg) {
-    // Exactly the PLAN §3 line — bench_plot.py and slurm logs parse this,
-    // so no extra whitespace or columns. The opt solver's label carries its
-    // ladder level ("opt-L3") so bench CSVs are self-describing (PLAN §7).
-    const std::string solver_label =
-        cfg.solver == "opt" ? "opt-L" + std::to_string(cfg.opt_level)
-                            : cfg.solver;
+    // This is exactly the line PLAN §3 specifies. bench_plot.py and the slurm
+    // logs parse it, so it must not gain extra whitespace or columns. The opt
+    // solver's label carries its ladder level so that a benchmark CSV records
+    // which kernel produced each row.
+    const std::string label = solver_label(cfg);
     std::printf("%.10g,%.8g,%.8g,%.8g,%d,%d,%d,%s,%.6f,%.6g\n",
                 r.price, r.delta, r.gamma, r.vega, cfg.grid.num_stock_nodes,
                 cfg.grid.num_variance_nodes, cfg.grid.num_timesteps,
-                solver_label.c_str(), r.seconds, r.cell_updates_per_sec);
+                label.c_str(), r.seconds, r.cell_updates_per_sec);
 }
