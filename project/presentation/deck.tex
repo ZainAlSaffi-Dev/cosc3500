@@ -1,0 +1,759 @@
+% The recording deck as a Beamer presentation, built on the same skeleton
+% as the Susquehanna Algothon deck (Madrid theme, one palette pass, the
+% sig* macro layer) so slides port between the two. Compile with
+% `make slides` (tectonic presentation/deck.tex). Asset paths are relative
+% to the presentation/ directory, so the file has to stay where it lives.
+%
+% The palette values come from scripts/figstyle.py, so the slides and the
+% figures read as one set. The MP4 animations cannot play inside a PDF;
+% those slides carry a still frame from presentation/stills/ (make stills)
+% and the moving version is spliced in fullscreen during the edit, as
+% presentation/SHOTLIST.md prescribes. Code appears as screenshots of the
+% real source (make code-shots), never retyped listings, so every frame
+% carries its file:line provenance.
+
+\documentclass[aspectratio=169,11pt]{beamer}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{xstring}
+\usepackage{amsmath}
+\usepackage{bm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{colortbl}
+\usepackage{tikz}
+
+% ***************************************************
+% Palette
+% ***************************************************
+% figstyle.py values wearing the sig* role names, so slide code written
+% for either deck compiles against either palette.
+
+\definecolor{sigblue}{HTML}{2563EB}   % BLUE, the thing that worked
+\definecolor{sigink}{HTML}{1F2937}    % deck.html --ink, titles and text
+\definecolor{signavy}{HTML}{111827}   % darker ink for the head and foot bars
+\definecolor{sigslate}{HTML}{6B7280}  % DARK_GREY, captions and notes
+\definecolor{sigmist}{HTML}{F0F3F9}   % background canvas, a shade of wash
+\definecolor{sigcard}{HTML}{FFFFFF}   % figure and block bodies
+\definecolor{sigline}{HTML}{D1D5DB}   % SPINE, hairlines
+\definecolor{sigwhite}{HTML}{FFFFFF}
+\definecolor{siggreen}{HTML}{059669}  % example blocks
+\definecolor{sigamber}{HTML}{D97706}  % AMBER, alert blocks
+\definecolor{sigred}{HTML}{DC2626}    % RED, negative controls
+
+% ***************************************************
+% Theme
+% ***************************************************
+
+\usetheme{Madrid}
+\usecolortheme{default}
+\usefonttheme{professionalfonts}
+\usefonttheme[onlymath]{serif}
+
+\setbeamercolor{background canvas}{bg=sigmist}
+
+\setbeamercolor*{palette primary}{bg=signavy, fg=sigwhite}
+\setbeamercolor*{palette secondary}{bg=sigblue, fg=sigwhite}
+\setbeamercolor*{palette tertiary}{bg=sigink, fg=sigwhite}
+\setbeamercolor*{palette quaternary}{bg=signavy, fg=sigwhite}
+
+% Every beamer element that carries a palette colour, assigned in one pass
+% so the theme has a single source of truth.
+\makeatletter
+\@for\@entry:={%
+  normal text/fg/sigink,structure/fg/sigblue,%
+  itemize item/fg/sigblue,itemize subitem/fg/sigslate,%
+  enumerate item/fg/sigblue,alerted text/fg/sigblue,caption name/fg/sigblue,%
+  section in toc/fg/sigink,subsection in toc/fg/sigslate,%
+  block title/bg/sigblue,block title/fg/sigwhite,%
+  block title alerted/bg/sigamber,block title alerted/fg/sigwhite,%
+  block title example/bg/siggreen,block title example/fg/sigwhite,%
+  block body/bg/sigcard,block body/fg/sigink,%
+  block body alerted/bg/sigcard,block body alerted/fg/sigink,%
+  block body example/bg/sigcard,block body example/fg/sigink%
+}\do{%
+  \StrCut{\@entry}{/}\@element\@rest
+  \StrCut{\@rest}{/}\@channel\@value
+  % Beamer stores the key list unexpanded, so the assignment is built now.
+  \edef\@assign{\noexpand\setbeamercolor{\@element}{\@channel=\@value}}%
+  \@assign
+}
+\makeatother
+
+\setbeamerfont{author in head/foot}{size=\tiny}
+\setbeamertemplate{footline}{%
+  \leavevmode%
+  \hbox{%
+    \begin{beamercolorbox}[wd=.44\paperwidth,ht=2.25ex,dp=1ex,center]{author in head/foot}%
+      \usebeamerfont{author in head/foot}\insertshortauthor
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.31\paperwidth,ht=2.25ex,dp=1ex,center]{title in head/foot}%
+      \usebeamerfont{title in head/foot}\insertshorttitle
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.25\paperwidth,ht=2.25ex,dp=1ex,right]{date in head/foot}%
+      \usebeamerfont{date in head/foot}\insertshortdate{}\hspace*{2em}%
+      \insertframenumber{} / \inserttotalframenumber\hspace*{2ex}%
+    \end{beamercolorbox}}%
+  \vskip0pt%
+}
+
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize item}{\raisebox{0.15ex}{\rule{0.6ex}{0.6ex}}}
+\setbeamertemplate{itemize subitem}{\raisebox{0.2ex}{\rule{0.45ex}{0.45ex}}}
+\setbeamertemplate{blocks}[rounded][shadow=false]
+
+% ***************************************************
+% Furniture
+% ***************************************************
+
+\newcommand{\sigemph}[1]{{\color{sigblue}\bfseries #1}}
+
+% ***************************************************
+% Slide structures
+% ***************************************************
+
+% Row of figures with captions beneath. Column width follows the number of
+% entries. Values must not contain a slash, it is the pair separator.
+\newcounter{sigentries}
+\newcommand{\sigstats}[1]{%
+  \setcounter{sigentries}{0}%
+  \foreach \sigignored in {#1}{\stepcounter{sigentries}}%
+  \pgfmathsetmacro{\sigcolwidth}{(1 - 0.04*(\value{sigentries}-1))/\value{sigentries}}%
+  \par\medskip\noindent
+  \foreach \sigvalue/\sigcaption [count=\sigindex] in {#1}{%
+    \ifnum\sigindex>1\hfill\fi
+    \begin{minipage}[t]{\sigcolwidth\linewidth}
+      \raggedright{\color{sigblue}\Large\bfseries \sigvalue}\par\vspace{0.15em}
+      {\color{sigslate}\scriptsize \sigcaption}
+    \end{minipage}%
+  }%
+  \par
+}
+
+% Tinted band across the foot of a slide, for one sentence.
+\newcommand{\sigcallout}[1]{%
+  \vfill
+  \begin{beamercolorbox}[wd=\linewidth,sep=0.7em,rounded=true]{block body}
+    {\color{sigblue}\rule{0.9ex}{0.9ex}}\hspace{0.5em}#1
+  \end{beamercolorbox}%
+}
+
+% Two plain dot points under a rung's screenshot. The first says what the
+% technique changes, the second why it was expected to pay. The measured
+% verdict stays in the callout beneath them.
+\newcommand{\sigrungnotes}[2]{%
+  \par\vspace{0.25em}
+  {\footnotesize
+  \begin{itemize}\setlength{\itemsep}{0.1em}
+    \item #1
+    \item #2
+  \end{itemize}}%
+}
+
+% Balanced two-column body, gutter set once.
+\newenvironment{sigcolumns}{\begin{columns}[T,onlytextwidth]}{\end{columns}}
+\newenvironment{sigcolumn}{\begin{column}{0.48\textwidth}}{\end{column}}
+
+% Booktabs table with the rules, sizing and stretch set once.
+\newcommand{\sigtable}[3]{%
+  \begingroup
+  \renewcommand{\arraystretch}{1.15}%
+  \begin{table}\small
+    \begin{tabular}{#1}
+      \toprule
+      #2 \\
+      \midrule
+      #3
+      \bottomrule
+    \end{tabular}
+  \end{table}%
+  \endgroup
+}
+
+% Figure slot. Takes the rendered asset's path; until the asset exists the
+% slot reserves the same space and names the file it wants, so the layout
+% can be judged before make stills / make code-shots have run.
+\newlength{\sigslotheight}
+\setlength{\sigslotheight}{0.54\textheight}
+% Setting \sigslotheight inside a frame stays local to that frame, which is
+% how the rung frames trade figure height for their dot points.
+\newcommand{\sigrungfigure}{\setlength{\sigslotheight}{0.34\textheight}}
+\newcommand{\sigfigure}[3][\linewidth]{%
+  \begin{minipage}{#1}
+    \centering
+    \IfFileExists{#2}{%
+      \includegraphics[width=\linewidth,height=\sigslotheight,keepaspectratio]{#2}%
+    }{%
+      \setlength{\fboxsep}{0pt}%
+      \fcolorbox{sigline}{sigcard}{%
+        \begin{minipage}[c][\sigslotheight][c]{\dimexpr\linewidth-2\fboxrule\relax}
+          \centering
+          {\color{sigslate}\scriptsize\texttt{#2}}
+        \end{minipage}%
+      }%
+    }%
+    \par\vspace{0.45em}
+    {\scriptsize\color{sigslate} #3\par}
+  \end{minipage}%
+}
+
+% Supporting frames sit after the appendix marker and outside the count.
+\newcounter{siglastframe}
+\newcommand{\sigbackupbegin}{\setcounter{siglastframe}{\value{framenumber}}}
+\newcommand{\sigbackupend}{\setcounter{framenumber}{\value{siglastframe}}}
+
+% ***************************************************
+% Title data
+% ***************************************************
+
+\title[Heston PDE pricer]{Pricing an option by solving a PDE}
+\subtitle{Serial implementation, optimisation and benchmarking}
+\author[48008361]{Student 48008361}
+\institute[]{COSC3500 Milestone 1}
+\date{August 2026}
+
+\begin{document}
+
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+% --------------------------------------------------------------------------
+% Introduction. The assessors are HPC staff, not finance people, so this
+% section builds the problem from zero.
+% --------------------------------------------------------------------------
+
+\begin{frame}{What an option is}{The right, but not the obligation, to buy at a fixed price}
+  \begin{sigcolumns}
+    \begin{sigcolumn}
+      \begin{itemize}
+        \item A European call is the right, but not the obligation, to buy
+          a share for a fixed \sigemph{strike} price on a fixed day.
+        \item At expiry its value is known exactly. Above the strike it
+          pays the difference, below it pays nothing, so the payoff has a
+          kink at the strike.
+        \item The problem is the price \sigemph{today}, ninety-one days
+          before expiry.
+      \end{itemize}
+    \end{sigcolumn}
+    \begin{sigcolumn}
+      \sigfigure{../results/payoff.png}{The payoff at expiry, with the
+        kink at the strike.}
+    \end{sigcolumn}
+  \end{sigcolumns}
+  \sigstats{5200/today's share price, 5250/the strike, 91 days/to expiry}
+\end{frame}
+
+\begin{frame}{Why not Black-Scholes}{Implied volatility is not constant across strikes}
+  \begin{sigcolumns}
+    \begin{sigcolumn}
+      \begin{itemize}
+        \item Black-Scholes assumes the share's volatility is
+          \sigemph{one constant number}.
+        \item Implied volatility computed from market option prices varies
+          across strikes, which contradicts that assumption.
+        \item The fix is a model in which the volatility itself varies.
+      \end{itemize}
+    \end{sigcolumn}
+    \begin{sigcolumn}
+      \sigfigure{stills/still_smile.png}{Implied volatility from Heston
+        PDE prices. The dashed line is the single Black-Scholes
+        volatility.}
+    \end{sigcolumn}
+  \end{sigcolumns}
+  \sigcallout{Setting Heston's volatility of volatility to zero recovers
+    Black-Scholes exactly. That is the main validation test.}
+\end{frame}
+
+\begin{frame}{The Heston model}{Two correlated stochastic processes}
+  \begin{block}{The share price and its variance are both stochastic processes}
+    \vspace{-0.4em}
+    \begin{align*}
+      dS &= (r - q)\,S\,dt + \sqrt{v}\,S\,dW_1\\[0.1em]
+      dv &= \kappa(\theta - v)\,dt + \xi\sqrt{v}\,dW_2,
+        \qquad \mathrm{corr}(dW_1, dW_2) = \rho
+    \end{align*}
+    \vspace{-0.9em}
+  \end{block}
+  \begin{itemize}
+    \item $S$ is the share price and $v$ is its instantaneous variance,
+      which follows its own stochastic process.
+    \item $\kappa$ is the rate at which the variance reverts to its
+      long-run level $\theta$, and $\xi$ sets the size of the variance
+      fluctuations.
+    \item The two noises are correlated at $\rho = -0.70$.
+  \end{itemize}
+  \sigcallout{The correlation is negative because volatility tends to rise
+    when prices fall.}
+\end{frame}
+
+\begin{frame}{The symbols in the two equations}{Definitions}
+  \sigtable{cl}{\textbf{Symbol} & \textbf{Definition}}{%
+    $S$ & the share price \\
+    $v$ & the variance of the share price, the square of its volatility \\
+    $r$ & the risk-free interest rate \\
+    $q$ & the dividend yield of the share \\
+    $dt$ & a small step forward in time \\
+    $dW_1,\ dW_2$ & random increments, one for the price and one for the variance \\
+    $\kappa$ & the rate at which the variance reverts to its long-run level \\
+    $\theta$ & the long-run level of the variance \\
+    $\xi$ & the volatility of volatility, which sets the size of variance fluctuations \\
+    $\rho$ & the correlation between the two increments \\}
+\end{frame}
+
+\begin{frame}{Where the strike price enters}{The model and the contract are separate}
+  \begin{itemize}
+    \item The two equations describe how the share price moves. They do
+      not involve the option contract, which is why no strike appears in
+      them.
+    \item The contract enters at expiry, where the grid is filled with the
+      payoff, $\max(S - K,\, 0)$ for this call. That is where the strike
+      $K$ enters.
+    \item Black-Scholes merges the model and the contract into one closed
+      formula, which is why $S$ and $K$ appear together there. The PDE
+      route keeps them separate.
+  \end{itemize}
+  \sigcallout{Heston does not build on the Black-Scholes formula. It
+    relaxes one Black-Scholes assumption, the constant volatility. With
+    $\xi = 0$ the model reduces to Black-Scholes, which is the main
+    validation test.}
+\end{frame}
+
+\begin{frame}{From stochastic model to deterministic equation}{There is no random number generator in the program}
+  \begin{itemize}
+    \item The fair price is an average. It is the expected payoff over
+      every path the market could take, discounted back to today.
+    \item One way to compute an average is to simulate many random paths
+      and take their mean. This program does not do that.
+    \item The Feynman-Kac theorem says that average, viewed as a function
+      of the starting point, solves a deterministic equation. That
+      function is the option price, written $V$. The following slides
+      construct its equation.
+  \end{itemize}
+  \sigcallout{Averaging over the noise leaves a deterministic equation, so
+    the program needs no random numbers.}
+\end{frame}
+
+\begin{frame}{The derivative notation}{Subscripts denote partial derivatives}
+  \begin{itemize}
+    \item $V(S, v, t)$ is the option price when the share price is $S$,
+      the variance is $v$ and the time is $t$. It is the unknown the
+      program solves for.
+    \item Capital $V$ and lowercase $v$ are different quantities. $V$ is
+      the option price, $v$ is the variance of the share price.
+    \item A subscript denotes a partial derivative, taken with the other
+      variables held fixed.
+  \end{itemize}
+  \sigtable{cl}{\textbf{Symbol} & \textbf{Definition}}{%
+    $V_S$ & the first derivative with respect to the share price \\
+    $V_{SS}$ & the second derivative with respect to the share price \\
+    $V_v$ & the first derivative with respect to the variance \\
+    $V_{vv}$ & the second derivative with respect to the variance \\
+    $V_{Sv}$ & the mixed derivative, in the share price and the variance \\}
+  \sigcallout{On the grid each of these becomes a difference between
+    neighbouring cells, which is why one cell update reads nine neighbours.}
+\end{frame}
+
+\begin{frame}{Why the noise terms become second derivatives}{Averaging over one time step}
+  \begin{itemize}
+    \item Over one small time step the noise moves the share price up or
+      down by about $\sqrt{v}\,S$, with both directions equally likely.
+    \item Averaging the value over the up move and the down move cancels
+      the first-derivative contributions.
+    \item The remaining term is second order, half the move size squared
+      times $V_{SS}$.
+  \end{itemize}
+  \begin{center}
+    move size $\sqrt{v}\,S$
+    \qquad so the noise in $S$ becomes \qquad
+    $\tfrac{1}{2}\,(\sqrt{v}\,S)^2\, V_{SS} \;=\; \tfrac{1}{2}\,v S^2\, V_{SS}$
+  \end{center}
+  \sigcallout{The same argument applied to the variance noise, of size
+    $\xi\sqrt{v}$, gives $\tfrac{1}{2}\,\xi^2 v\, V_{vv}$. The correlation
+    between the two noises gives the mixed term.}
+\end{frame}
+
+\begin{frame}{The equation, term by term}{Each part of the model contributes one term}
+  \sigtable{ll}{\textbf{Part of the model} & \textbf{Resulting term}}{%
+    time passing & $V_t$ \\
+    the drift of $S$, which is $(r - q)\,S$ & $(r - q)\,S\,V_S$ \\
+    the drift of $v$, which is $\kappa(\theta - v)$ & $\kappa(\theta - v)\,V_v$ \\
+    the noise in $S$, of size $\sqrt{v}\,S$ & $\tfrac{1}{2}\,v S^2\, V_{SS}$ \\
+    the noise in $v$, of size $\xi\sqrt{v}$ & $\tfrac{1}{2}\,\xi^2 v\, V_{vv}$ \\
+    the correlation $\rho$ between the noises & $\rho\,\xi\,v S\, V_{Sv}$ \\
+    discounting at the rate $r$ & $r\,V$ \\}
+  \sigcallout{Drift terms give first derivatives and noise terms give
+    second derivatives. The drift terms need no averaging because they are
+    not random.}
+\end{frame}
+
+\begin{frame}{The equation the program solves}{Every quantity except $V$ is known}
+  \begin{block}{The Heston pricing equation}
+    \vspace{-0.4em}
+    \begin{equation*}
+      V_t + (r - q)\,S\,V_S + \kappa(\theta - v)\,V_v
+        + \tfrac{1}{2} v S^2\, V_{SS} + \rho\,\xi\,v S\, V_{Sv}
+        + \tfrac{1}{2} \xi^2 v\, V_{vv} = r\,V
+    \end{equation*}
+    \vspace{-0.9em}
+  \end{block}
+  \begin{itemize}
+    \item Every symbol except $V$ is a known number before the solve
+      starts. $r$ and $q$ come from the market, and $\kappa$, $\theta$,
+      $\xi$, $\rho$ and the starting variance are the model's five
+      parameters. The strike sits in the expiry payoff, not in the
+      equation.
+    \item The unknown is the option price $V(S, v, t)$, a whole function
+      with one value per scenario, and the grid is that function written
+      out cell by cell.
+  \end{itemize}
+  \sigcallout{The reported price is $V$ evaluated at today's share price
+    and variance.}
+\end{frame}
+
+\begin{frame}{The solver}{A grid over share price and variance, solved backwards from expiry}
+  \begin{sigcolumns}
+    \begin{sigcolumn}
+      \begin{itemize}
+        \item Share price runs across the grid and variance runs down it.
+          Each cell holds the option price $V$ for that pair of inputs.
+        \item At expiry every cell is known exactly, so the solver starts
+          there and steps \sigemph{backwards} to today.
+        \item Each step rebuilds every cell from its nine neighbours,
+          reading one buffer and writing another.
+      \end{itemize}
+    \end{sigcolumn}
+    \begin{sigcolumn}
+      \sigfigure{stills/still_timevalue.png}{Mid-solve. Colour is the
+        option's value above the payoff.}
+    \end{sigcolumn}
+  \end{sigcolumns}
+  \sigcallout{A full production solve is about a trillion cell updates,
+    which is why the speed of this one kernel matters.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% Validation. Nothing gets benchmarked until it is right.
+% --------------------------------------------------------------------------
+
+\begin{frame}{Validation}{Two properties the solver must have, run as automated tests}
+  \begin{sigcolumns}
+    \begin{sigcolumn}
+      \begin{itemize}
+        \item With $\xi = 0$ and $\rho = 0$, Heston reduces to
+          Black-Scholes, which has a closed form. The solver runs the
+          full stencil unchanged and must reproduce the closed form.
+          Measured error 1.16e-3.
+        \item Put-call parity is a model-free identity between call and
+          put prices. The residual is 5.4e-6 and is unchanged while the
+          price varies by thirty dollars across parameter settings.
+      \end{itemize}
+    \end{sigcolumn}
+    \begin{sigcolumn}
+      \sigfigure{stills/still_collapse.png}{The $\xi = 0$ run matching
+        closed-form Black-Scholes at every step of the solve.}
+    \end{sigcolumn}
+  \end{sigcolumns}
+\end{frame}
+
+\begin{frame}{Three independent methods}{Grid, Fourier and Monte Carlo share no code}
+  \begin{itemize}
+    \item Two independent methods, sharing no code with the grid solver,
+      price the same contract.
+  \end{itemize}
+  \sigtable{lr}{\textbf{Method} & \textbf{Price}}{%
+    this solver, on the grid & \$196.1684 \\
+    Fourier inversion, semi-analytic & \$196.1692 \\
+    Monte Carlo, four hundred thousand paths & \$196.13 $\pm$ \$0.55 \\}
+  \sigcallout{The grid and Fourier prices agree to \sigemph{four parts in a
+    million}, and the Monte Carlo interval brackets both.}
+\end{frame}
+
+\begin{frame}{Convergence}{Error under grid refinement}
+  \begin{center}
+    \sigfigure[0.66\linewidth]{../results/convergence.png}{Error against the
+      Fourier price as the grid refines.}
+  \end{center}
+  \sigcallout{The observed order along the refinement ladder is about two,
+    and the error then lands on a discretisation floor of about \$0.014.}
+\end{frame}
+
+\begin{frame}{The test gate}{No build is benchmarked unless its tests have just passed}
+  \begin{center}
+    \sigfigure[0.8\linewidth]{../results/code_shots/shot_iron_rule.png}{}
+  \end{center}
+  \sigcallout{Every job rebuilds the binary and re-runs the full test suite
+    before timing anything. A build whose tests fail exits without timing,
+    so no wrong version was ever benchmarked.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% Optimisation. The ladder, its one big rung, and the controls.
+% --------------------------------------------------------------------------
+
+\begin{frame}{How the optimisation was structured}{Seven solvers, one technique per level, two negative controls}
+  \begin{itemize}
+    \item Every level is a full copy of the level below with exactly
+      \sigemph{one transformation} added, so a difference between
+      neighbours measures one technique.
+    \item Level 0 adds nothing, to confirm the harness itself costs
+      nothing.
+    \item Two \sigemph{negative controls} each remove a property the
+      baseline already has, and are timed the same way.
+    \item Every level must match the baseline's answer before it is
+      benchmarked.
+  \end{itemize}
+  \sigcallout{A single before and after gives one ratio without
+    attribution. The ladder attributes the speedup to individual
+    techniques.}
+\end{frame}
+
+% One frame per rung. Before on the left, after on the right, and the
+% measured effect in the screenshot's own caption, so the number can never
+% drift from the code it belongs to.
+
+\begin{frame}{Level 0, harness control}{Adds no technique}
+  \sigrungfigure
+  \begin{center}
+    \sigfigure{../results/code_shots/shot_L0_anchor.png}{}
+  \end{center}
+  \sigrungnotes{This level runs the baseline's exact arithmetic through
+    the ladder's kernel selection, changing nothing else.}{If selecting a
+    kernel through a function pointer cost anything, every rung above would
+    be measuring the harness rather than its technique.}
+  \sigcallout{The baseline's arithmetic, line for line, behind the
+    ladder's dispatch. Throughput was unchanged, so later differences
+    measure the techniques themselves.}
+\end{frame}
+
+\begin{frame}{Level 1, hoisting}{Loop-invariant computation moved outside the loops}
+  \sigrungfigure
+  \begin{center}
+    \sigfigure[0.92\linewidth]{../results/code_shots/shot_L1_hoisting.png}{}
+  \end{center}
+  \sigrungnotes{Values that do not change inside a loop, such as grid
+    spacings, their reciprocals and per-row coefficients, are computed once
+    outside it and given names.}{The intended win is fewer repeated
+    operations per cell, if the compiler has not already removed them.}
+  \sigcallout{No measurable change. GCC at -O2 had already hoisted all of
+    this, and this level demonstrates that.}
+\end{frame}
+
+\begin{frame}{Level 2, strength reduction}{A transformation the compiler is not permitted to make}
+  \sigrungfigure
+  \begin{center}
+    \sigfigure[0.97\linewidth]{../results/code_shots/shot_L2_strength_reduction.png}{}
+  \end{center}
+  \sigrungnotes{Each division by a grid constant becomes a multiplication
+    by its reciprocal, computed once before the loops.}{The inner loop had
+    five divisions per cell, and division is the slowest arithmetic the core
+    does.}
+  \sigcallout{$x/(2\,ds)$ and $x \cdot (1/(2\,ds))$ round differently in
+    the last bits, so -O2 must leave the divisions alone. A divide costs
+    5 to 14 cycles and does not pipeline, a multiply costs about one.}
+\end{frame}
+
+\begin{frame}{Level 3, traversal order}{The inner loop follows the memory layout}
+  \sigrungfigure
+  \begin{center}
+    \sigfigure[0.92\linewidth]{../results/code_shots/shot_L3_order.png}{}
+  \end{center}
+  \sigrungnotes{The loop nest is arranged so the inner loop visits cells
+    in the exact order they sit in memory.}{Sequential access lets the cache
+    and prefetcher stream whole lines, while a strided walk wastes most of
+    every line it fetches.}
+  \sigcallout{No change, by construction. The baseline already traverses
+    memory in layout order.}
+\end{frame}
+
+\begin{frame}{Level 4, loop splitting}{A separate loop for the boundary row}
+  \sigrungfigure
+  \begin{center}
+    \sigfigure{../results/code_shots/shot_L4_split.png}{}
+  \end{center}
+  \sigrungnotes{The $v=0$ boundary row gets its own loop, instead of an if
+    test on every cell of the main loop.}{A branch in every cell can
+    mispredict and stall the pipeline, so splitting keeps the main loop free
+    of branches.}
+  \sigcallout{No change, by construction. The baseline already splits the
+    boundary row into its own loop, and the fused version is one of the
+    negative controls.}
+\end{frame}
+
+\begin{frame}{Level 5, induction variables}{Row pointers instead of index arithmetic}
+  \sigrungfigure
+  \begin{center}
+    \sigfigure{../results/code_shots/shot_L5_pointers.png}{}
+  \end{center}
+  \sigrungnotes{Each row is walked with pointers that advance one step per
+    cell, instead of recomputing row times width plus column for every
+    neighbour.}{About ten integer additions per cell fold into the address
+    arithmetic the hardware does anyway.}
+  \sigcallout{A small gain, the only one after level 2. About ten integer
+    additions per cell fold into the hardware's addressing modes.}
+\end{frame}
+
+\begin{frame}{Level 6, unrolling}{Four cells per loop iteration}
+  \sigrungfigure
+  \begin{center}
+    \sigfigure{../results/code_shots/shot_L6_unroll.png}{}
+  \end{center}
+  \sigrungnotes{The inner loop handles four cells per iteration instead
+    of one.}{That means one loop test per four cells, and more independent
+    arithmetic in flight to hide instruction latencies.}
+  \sigcallout{No measurable gain. The compiler already unrolls counted
+    loops at -O2, so manual unrolling duplicates its work.}
+\end{frame}
+
+\begin{frame}{The ladder, measured}{Only level 2 changed throughput}
+  \begin{center}
+    \sigfigure[0.9\linewidth]{../results/bench_ladder_hugepage.png}{}
+  \end{center}
+  \sigstats{52.6/baseline Mcell per s, 131.2/after strength reduction,
+    134.8/level 6, 2.56x/overall speedup}
+\end{frame}
+
+\begin{frame}{The negative controls}{Each control removes a property the baseline already had}
+  \begin{center}
+    \sigfigure{../results/code_shots/shot_ctl_order.png}{}
+  \end{center}
+  \begin{itemize}
+    \item Swapping the loops makes the inner iteration jump a whole row
+      per step. Same arithmetic, \sigemph{2.1x slower}. That measures the
+      value of the baseline's traversal order.
+    \item Fusing the boundary row back into the interior loop has no
+      measurable cost. The branch predictor handles the per-cell branch.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{What the speedup cost}{Fifteen units in the last place of the answer}
+  \begin{center}
+    \sigfigure[0.7\linewidth]{../results/code_shots/shot_optmatches.png}{}
+  \end{center}
+  \sigcallout{The whole speedup cost 3.3e-15 relative error, and an
+    automated gate holds every level and both controls to it.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% Benchmarking. The protocol first, then what it measured.
+% --------------------------------------------------------------------------
+
+\begin{frame}{The benchmark protocol}{How every number in this talk was produced}
+  \sigtable{ll}{\textbf{Step} & \textbf{Rule}}{%
+    where jobs run & a reserved rangpur compute node, r730-2, via sbatch \\
+    before every sweep & the binary rebuilds and the full test suite must re-pass \\
+    repetitions & five per point, the median is reported \\
+    provenance & every CSV stamps host, job id, compiler, flags, CPU, caches \\
+    the allocator & pinned, so the page regime is a choice, not an accident \\}
+  \sigcallout{The plot scripts reject any CSV without its provenance
+    header, so no laptop measurement can enter a figure.}
+\end{frame}
+
+\begin{frame}{Scaling with problem size}{One to sixty-four mebibytes of working set}
+  \begin{center}
+    \sigfigure[0.82\linewidth]{../results/bench_scaling.png}{}
+  \end{center}
+  \sigcallout{The first run of this sweep confounded page size with cache.
+    This is the re-run with the allocator pinned, and the speedup holds at
+    2.5x to 3.5x across grids.}
+\end{frame}
+
+\begin{frame}{The roofline}{Testing the memory-bound assumption}
+  \begin{center}
+    \sigfigure[0.75\linewidth]{../results/roofline.png}{}
+  \end{center}
+  \sigcallout{The solver was assumed to be memory-bound. It is not.
+    Optimisation moved it from division-bound to compute-bound, with
+    level 6 at \sigemph{82 percent} of the measured scalar peak.}
+\end{frame}
+
+\begin{frame}{The page-size effect}{A 1.66x change from memory pages alone}
+  \vspace*{-0.4em}
+  \sigtable{lrrr}{\textbf{Solver} & \textbf{4 KiB pages} & \textbf{2 MiB pages}
+      & \textbf{From pages alone}}{%
+    baseline & 44.8 & 52.6 & 1.17x \\
+    level 2 & 80.0 & 131.2 & 1.64x \\
+    \rowcolor{sigblue!12}
+    level 6 & \textbf{81.1} & \textbf{134.8} & \textbf{1.66x} \\}
+  \begin{itemize}
+    \item Million cell updates per second. Same binary, same node, and
+      not a code change at all.
+    \item Sixteen mebibytes is eight huge pages or four thousand small
+      ones, against a translation buffer with a thousand entries.
+  \end{itemize}
+  \sigcallout{It was found because the median of five repetitions was
+    averaging two different memory regimes.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% Reflection.
+% --------------------------------------------------------------------------
+
+\begin{frame}{Reflection}{Four questions the spec asks}
+  \small
+  \begin{block}{The main conclusion}
+    At -O2 the compiler has already done the textbook transformations, so
+    the hand optimisations that pay are the ones it is not allowed to do.
+  \end{block}
+  \begin{exampleblock}{The most surprising result}
+    Page size changed throughput more than five of the six code techniques
+    combined, without any code change.
+  \end{exampleblock}
+  \begin{alertblock}{What I would do differently}
+    Reserve the node exclusively from the first job. An early shared-node
+    measurement was real, but it answered a different question.
+  \end{alertblock}
+  \begin{block}{Milestone 2}
+    The kernel is now compute-bound, so SIMD first, then OpenMP across
+    rows. The two-buffer design already makes every cell independent
+    within a step.
+  \end{block}
+\end{frame}
+
+\begin{frame}[plain]
+  \vfill
+  \centering
+  {\Large\color{sigink}\bfseries A 2.56x serial speedup, validated at
+    every level}
+  \par\vspace{0.6em}
+  {\color{sigslate} COSC3500 Milestone 1, 48008361}
+  \vfill
+\end{frame}
+
+% --------------------------------------------------------------------------
+% Backup frames, outside the numbered sequence. Interview ammunition.
+% --------------------------------------------------------------------------
+
+\appendix
+\sigbackupbegin
+
+\begin{frame}{The full ladder}{Sweep E, huge pages, median of five}
+  \sigtable{llrr}{\textbf{Level} & \textbf{Adds} & \textbf{Mcell per s}
+      & \textbf{Step gain}}{%
+    baseline & the reference solver & 52.6 & \\
+    level 0 & nothing, the harness control & 52.6 & $-0.1$\,\% \\
+    level 1 & hoisting, tables, CSE & 52.7 & $+0.3$\,\% \\
+    \rowcolor{sigblue!12}
+    level 2 & \textbf{strength reduction} & \textbf{131.2} & $\bm{+148.7}$\,\% \\
+    level 3 & traversal order & 131.5 & $+0.3$\,\% \\
+    level 4 & loop splitting & 131.3 & $-0.2$\,\% \\
+    level 5 & induction variables & 134.2 & $+2.2$\,\% \\
+    level 6 & unroll by four & 134.8 & $+0.5$\,\% \\
+    \midrule
+    ctl-order & loops swapped on purpose & {\color{sigred} 63.6} & 2.1x slower \\
+    ctl-branch & boundary branch fused back & 135.3 & free \\}
+\end{frame}
+
+\begin{frame}{Modelled cache traffic}{Why the swapped loop order is slower}
+  \begin{center}
+    \sigfigure[0.86\linewidth]{stills/still_cache.png}{A modelled LRU cache
+      under both traversal orders. Row-major moves 8.6 bytes per cell
+      update, the swapped order moves 40.8.}
+  \end{center}
+\end{frame}
+
+\sigbackupend
+
+\end{document}

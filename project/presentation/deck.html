@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Milestone 1, the Heston PDE pricer</title>
+<style>
+  /* The recording deck. Open this file in a browser, press f for
+     fullscreen, and move with the arrow keys. Asset paths are relative to
+     the presentation/ directory, so the file has to stay where it lives.
+     The palette matches scripts/figstyle.py so the slides and the figures
+     read as one set. */
+  :root {
+    --blue: #2563EB;
+    --ink: #1F2937;
+    --body: #374151;
+    --muted: #6B7280;
+    --faint: #9CA3AF;
+    --line: #E5E7EB;
+    --wash: #F5F7FB;
+    --red: #DC2626;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #fff; color: var(--body);
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased; }
+
+  .slide { display: none; width: 100vw; height: 100vh;
+    padding: 7vh 7vw 9vh; flex-direction: column; }
+  .slide.active { display: flex; }
+
+  /* Every content slide shares the same header: a small blue section word,
+     the slide title, and a short rule. The eye always knows where it is. */
+  .kicker { font-size: 2vh; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--blue); margin-bottom: 1.2vh; }
+  h2 { font-size: 4.6vh; font-weight: 700; color: var(--ink);
+    letter-spacing: -0.01em; margin-bottom: 1.6vh; }
+  .rule { width: 6vw; height: 3px; background: var(--blue);
+    border-radius: 2px; margin-bottom: 3.5vh; }
+
+  .content { flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2.4vh;
+    min-height: 0; }
+  .content.left { align-items: flex-start; text-align: left; }
+
+  p, li { font-size: 3vh; line-height: 1.5; max-width: 72vw; }
+  .lede { font-size: 3.4vh; color: var(--ink); }
+  .muted { color: var(--muted); }
+  .note { font-size: 2.3vh; color: var(--muted); max-width: 75vw;
+    text-align: center; }
+
+  img, video { max-width: 88vw; max-height: 68vh; object-fit: contain;
+    border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(31, 41, 55, 0.07); }
+  video.bare, img.bare { border: none; box-shadow: none; }
+
+  /* The opening and closing slides are their own thing. */
+  .fullbleed { align-items: center; justify-content: center;
+    text-align: center; }
+  .fullbleed video { position: fixed; inset: 0; width: 100vw; height: 100vh;
+    max-width: none; max-height: none; object-fit: cover; z-index: -1;
+    border: none; border-radius: 0; box-shadow: none;
+    filter: brightness(1.04); }
+  .card { background: rgba(255, 255, 255, 0.92); padding: 5vh 5vw;
+    border-radius: 16px; box-shadow: 0 16px 50px rgba(31, 41, 55, 0.12); }
+  .card h1 { font-size: 5.6vh; font-weight: 750; color: var(--ink);
+    letter-spacing: -0.015em; margin-bottom: 2.4vh; }
+  .card p { font-size: 3vh; color: var(--body); margin: 0.8vh 0; }
+
+  /* Mathematics is set in a serif, which reads as mathematics rather than
+     as code. */
+  .eq { font-family: Georgia, "Times New Roman", serif; font-style: italic;
+    font-size: 3.8vh; color: var(--ink); margin: 0.6vh 0; }
+  .eq sub { font-size: 60%; }
+
+  ul { text-align: left; max-width: 74vw; list-style: none; }
+  li { margin: 1.6vh 0; padding-left: 3.2vh; position: relative; }
+  li::before { content: ""; position: absolute; left: 0; top: 1.35vh;
+    width: 1.1vh; height: 1.1vh; border-radius: 50%;
+    background: var(--blue); }
+  li b { color: var(--ink); }
+
+  table { border-collapse: collapse; }
+  th { font-size: 2.1vh; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted); text-align: left;
+    padding: 1.4vh 2.6vw; border-bottom: 2px solid var(--line); }
+  td { font-size: 3vh; color: var(--body); padding: 1.7vh 2.6vw;
+    border-bottom: 1px solid var(--line); }
+  td.num { font-variant-numeric: tabular-nums; text-align: right;
+    color: var(--ink); font-weight: 600; }
+  tr.hot td { background: var(--wash); }
+
+  /* The ladder-idea slide draws the seven rungs as stacked tiles. */
+  .ladder { display: flex; flex-direction: column-reverse; gap: 1vh; }
+  .ladder div { border: 1.5px solid var(--line); border-radius: 8px;
+    padding: 1.1vh 3vw; font-size: 2.6vh; color: var(--body);
+    background: #fff; min-width: 44vw; }
+  .ladder .hot { border-color: var(--blue); background: var(--wash);
+    color: var(--blue); font-weight: 700; }
+
+  /* The heads-up display. Slide number, time on this slide against its
+     budget, and total time. It turns red when a slide runs over. */
+  #hud { position: fixed; top: 1.6vh; left: 1.4vw; z-index: 10;
+    font-variant-numeric: tabular-nums; font-size: 1.9vh;
+    color: var(--muted); background: rgba(255, 255, 255, 0.9);
+    padding: 0.6vh 1.1vw; border-radius: 8px;
+    border: 1px solid var(--line); }
+  #hud .over { color: var(--red); font-weight: 700; }
+
+  /* A thin progress bar along the very top. */
+  #progress { position: fixed; top: 0; left: 0; height: 3px;
+    background: var(--blue); z-index: 11; transition: width .25s ease; }
+
+  /* The reserved webcam area from SHOTLIST.md. Hidden by default, the
+     letter p shows its outline so the recording software can be lined up. */
+  #pip { position: fixed; right: 1.5vw; bottom: 2.5vh; width: 18vw;
+    height: 24vh; border: 2px dashed var(--faint); border-radius: 10px;
+    display: none; z-index: 9; }
+  #pip.show { display: block; }
+</style>
+</head>
+<body>
+
+<!-- 1 · the opening, 25 seconds -->
+<section class="slide fullbleed" data-dur="25" data-kicker="">
+  <video src="../results/demo_timevalue.mp4" autoplay muted loop></video>
+  <div class="card">
+    <h1>Pricing an option by solving a PDE</h1>
+    <p>How the solver works.</p>
+    <p>How it became two and a half times faster.</p>
+    <p>And the two beliefs that did not survive being measured.</p>
+  </div>
+</section>
+
+<!-- 2 · the contract, 25 seconds -->
+<section class="slide" data-dur="25" data-kicker="Introduction">
+  <div class="head"><div class="kicker">Introduction</div>
+    <h2>The right, but not the obligation</h2><div class="rule"></div></div>
+  <div class="content">
+    <img src="../results/payoff.png" alt="call payoff at expiry">
+  </div>
+</section>
+
+<!-- 3 · the smile, 30 seconds -->
+<section class="slide" data-dur="30" data-kicker="Introduction">
+  <div class="head"><div class="kicker">Introduction</div>
+    <h2>The market disagrees with Black-Scholes</h2>
+    <div class="rule"></div></div>
+  <div class="content">
+    <video src="../results/xi_smile.mp4" autoplay muted></video>
+    <p class="note">A flat line is what Black-Scholes predicts. The curve is
+      what the market actually prices.</p>
+  </div>
+</section>
+
+<!-- 4 · Heston, 20 seconds -->
+<section class="slide" data-dur="20" data-kicker="Introduction">
+  <div class="head"><div class="kicker">Introduction</div>
+    <h2>Heston in one sentence</h2><div class="rule"></div></div>
+  <div class="content">
+    <p class="lede">The share price is volatile, the volatility is itself
+      stochastic, and the two are linked.</p>
+    <div>
+      <p class="eq">dS = (r &minus; q) S dt + &radic;v S dW<sub>1</sub></p>
+      <p class="eq">dv = &kappa;(&theta; &minus; v) dt
+        + &xi;&radic;v dW<sub>2</sub></p>
+      <p class="eq">corr(dW<sub>1</sub>, dW<sub>2</sub>) = &rho;
+        = &minus;0.70</p>
+    </div>
+    <p class="note">The correlation is negative because falling markets are
+      frightened markets.</p>
+  </div>
+</section>
+
+<!-- 5 · the randomness, 20 seconds -->
+<section class="slide" data-dur="20" data-kicker="Introduction">
+  <div class="head"><div class="kicker">Introduction</div>
+    <h2>Where the randomness went</h2><div class="rule"></div></div>
+  <div class="content">
+    <p class="lede">There is no random number generator anywhere in this
+      program.</p>
+    <p>The Feynman-Kac theorem says the average outcome of a random process
+      solves a deterministic equation. Each source of noise became one term
+      of that equation.</p>
+    <div>
+      <p class="eq">the noise in S became &half; v S&sup2;
+        V<sub>SS</sub></p>
+      <p class="eq">the noise in v became &half; &xi;&sup2; v
+        V<sub>vv</sub></p>
+      <p class="eq">their correlation became &rho; &xi; v S
+        V<sub>Sv</sub></p>
+    </div>
+  </div>
+</section>
+
+<!-- 6 · the grid, 40 seconds -->
+<section class="slide" data-dur="40" data-kicker="Introduction">
+  <div class="head"><div class="kicker">Introduction</div>
+    <h2>A grid, filled in backwards from expiry</h2>
+    <div class="rule"></div></div>
+  <div class="content">
+    <video src="../results/demo_timevalue.mp4" autoplay muted loop></video>
+    <p class="note">Share price runs across, variance runs down, and colour
+      is the option's value. Time marches backwards from expiry, where the
+      answer is known exactly.</p>
+  </div>
+</section>
+
+<!-- 7 · the collapse, 20 seconds -->
+<section class="slide" data-dur="20" data-kicker="Validation">
+  <div class="head"><div class="kicker">Validation</div>
+    <h2>Switch the model off and it becomes one we can check</h2>
+    <div class="rule"></div></div>
+  <div class="content">
+    <video src="../results/bs_collapse.mp4" autoplay muted loop></video>
+  </div>
+</section>
+
+<!-- 8 · three methods, 20 seconds -->
+<section class="slide" data-dur="20" data-kicker="Validation">
+  <div class="head"><div class="kicker">Validation</div>
+    <h2>Three methods that share no code, one number</h2>
+    <div class="rule"></div></div>
+  <div class="content">
+    <table>
+      <tr><th>method</th><th>price</th></tr>
+      <tr><td>this solver, on the grid</td>
+        <td class="num">$196.1684</td></tr>
+      <tr><td>Fourier inversion, semi-analytic</td>
+        <td class="num">$196.1692</td></tr>
+      <tr><td>Monte Carlo, four hundred thousand paths</td>
+        <td class="num">$196.13, give or take $0.55</td></tr>
+    </table>
+    <p class="note">The grid and the Fourier price agree to four parts in a
+      million, and the Monte Carlo interval brackets both.</p>
+  </div>
+</section>
+
+<!-- 9 · convergence, 10 seconds -->
+<section class="slide" data-dur="10" data-kicker="Validation">
+  <div class="head"><div class="kicker">Validation</div>
+    <h2>The answer under grid refinement</h2><div class="rule"></div></div>
+  <div class="content">
+    <img src="../results/convergence.png" alt="convergence study">
+  </div>
+</section>
+
+<!-- 10 · the iron rule, 10 seconds -->
+<section class="slide" data-dur="10" data-kicker="Validation">
+  <div class="head"><div class="kicker">Validation</div>
+    <h2>No test pass, no benchmark</h2><div class="rule"></div></div>
+  <div class="content">
+    <img src="../results/code_shots/shot_iron_rule.png"
+         alt="the build_and_validate gate">
+  </div>
+</section>
+
+<!-- 11 · why a ladder, 25 seconds -->
+<section class="slide" data-dur="25" data-kicker="Optimisation">
+  <div class="head"><div class="kicker">Optimisation</div>
+    <h2>Seven solvers, each one technique apart</h2>
+    <div class="rule"></div></div>
+  <div class="content">
+    <div class="ladder">
+      <div>baseline, the reference solver</div>
+      <div>level 0 adds nothing, and anchors the harness</div>
+      <div>level 1 adds hoisting and common subexpressions</div>
+      <div class="hot">level 2 adds strength reduction</div>
+      <div>level 3 adds traversal order</div>
+      <div>level 4 adds loop splitting</div>
+      <div>level 5 adds induction variables</div>
+      <div>level 6 adds unrolling by four</div>
+    </div>
+    <p class="note">A before and after gives one ratio and no explanation.
+      A ladder says which change mattered.</p>
+  </div>
+</section>
+
+<!-- 12 · the ladder measured, 45 seconds -->
+<section class="slide" data-dur="45" data-kicker="Optimisation">
+  <div class="head"><div class="kicker">Optimisation</div>
+    <h2>Only one rung moved</h2><div class="rule"></div></div>
+  <div class="content">
+    <img src="../results/bench_ladder_hugepage.png"
+         alt="the measured ladder">
+  </div>
+</section>
+
+<!-- 13 · the level 2 diff, 30 seconds -->
+<section class="slide" data-dur="30" data-kicker="Optimisation">
+  <div class="head"><div class="kicker">Optimisation</div>
+    <h2>The change the compiler is not allowed to make</h2>
+    <div class="rule"></div></div>
+  <div class="content">
+    <img src="../results/code_shots/shot_L2_strength_reduction.png"
+         alt="divisions become multiplications">
+  </div>
+</section>
+
+<!-- 14 · the control, 20 seconds -->
+<section class="slide" data-dur="20" data-kicker="Optimisation">
+  <div class="head"><div class="kicker">Optimisation</div>
+    <h2>Write the wrong version on purpose, and time it</h2>
+    <div class="rule"></div></div>
+  <div class="content">
+    <img src="../results/code_shots/shot_ctl_order.png"
+         alt="the loops swapped on purpose">
+  </div>
+</section>
+
+<!-- 14b · the cache animation, 10 seconds -->
+<section class="slide" data-dur="10" data-kicker="Optimisation">
+  <div class="head"><div class="kicker">Optimisation</div>
+    <h2>What the cache sees</h2><div class="rule"></div></div>
+  <div class="content">
+    <video src="../results/memory_cache.mp4" autoplay muted></video>
+  </div>
+</section>
+
+<!-- 15 · the trade-off, 25 seconds -->
+<section class="slide" data-dur="25" data-kicker="Optimisation">
+  <div class="head"><div class="kicker">Optimisation</div>
+    <h2>What the speedup cost</h2><div class="rule"></div></div>
+  <div class="content">
+    <img src="../results/code_shots/shot_optmatches.png"
+         alt="the matching test's output">
+    <p class="note">The whole speedup cost fifteen units in the last place
+      of the answer, and every level is held to that. The kernel file is
+      long and repetitive on purpose, so that no rung can change what its
+      neighbour measures.</p>
+  </div>
+</section>
+
+<!-- 16 · the setup, 30 seconds -->
+<section class="slide" data-dur="30" data-kicker="Benchmarking">
+  <div class="head"><div class="kicker">Benchmarking</div>
+    <h2>A setup built so it cannot mislead</h2><div class="rule"></div></div>
+  <div class="content">
+    <img src="../results/code_shots/shot_csv_header.png"
+         alt="the provenance header">
+    <p class="note">Every job stamps its own provenance into its results.
+      The jobs run on a reserved compute node, pinned to one machine, with
+      five repetitions, and the tests re-pass before every sweep.</p>
+  </div>
+</section>
+
+<!-- 17 · scaling, 30 seconds -->
+<section class="slide" data-dur="30" data-kicker="Benchmarking">
+  <div class="head"><div class="kicker">Benchmarking</div>
+    <h2>Scaling with problem size, honestly</h2>
+    <div class="rule"></div></div>
+  <div class="content">
+    <img src="../results/bench_scaling.png" alt="the scaling sweep">
+    <p class="note">The first run of this sweep confounded page size with
+      cache. This is the re-run with the allocator pinned.</p>
+  </div>
+</section>
+
+<!-- 18 · the roofline, 35 seconds -->
+<section class="slide" data-dur="35" data-kicker="Benchmarking">
+  <div class="head"><div class="kicker">Benchmarking</div>
+    <h2>The belief that died</h2><div class="rule"></div></div>
+  <div class="content">
+    <img src="../results/roofline.png" alt="the roofline">
+    <p class="note">The solver was assumed to be memory-bound. It is not.
+      Optimisation moved it from division-bound to compute-bound.</p>
+  </div>
+</section>
+
+<!-- 19 · page size, 50 seconds -->
+<section class="slide" data-dur="50" data-kicker="Benchmarking">
+  <div class="head"><div class="kicker">Benchmarking</div>
+    <h2>The page-size discovery</h2><div class="rule"></div></div>
+  <div class="content">
+    <table>
+      <tr><th>solver</th><th>4 KiB pages</th><th>2 MiB pages</th>
+        <th>from pages alone</th></tr>
+      <tr><td>baseline</td><td class="num">44.8</td>
+        <td class="num">52.6</td><td class="num">1.17 times</td></tr>
+      <tr><td>level 2</td><td class="num">80.0</td>
+        <td class="num">131.2</td><td class="num">1.64 times</td></tr>
+      <tr class="hot"><td>level 6</td><td class="num">81.1</td>
+        <td class="num">134.8</td><td class="num">1.66 times</td></tr>
+    </table>
+    <p class="note">Million cell updates per second, same binary, same node.
+      Sixteen mebibytes is eight huge pages or four thousand small ones,
+      against a translation buffer with a thousand entries. It was found
+      because the median of five repetitions was quietly averaging two
+      different memory regimes.</p>
+  </div>
+</section>
+
+<!-- 20 · reflection, 60 seconds -->
+<section class="slide" data-dur="60" data-kicker="Reflection">
+  <div class="head"><div class="kicker">Reflection</div>
+    <h2>Four questions the spec asks</h2><div class="rule"></div></div>
+  <div class="content left">
+    <ul>
+      <li><b>The main conclusion.</b> At this optimisation level the
+        compiler has already done the textbook transformations, so the hand
+        optimisations that pay are the ones it is forbidden to do.</li>
+      <li><b>The biggest surprise.</b> Page size was worth more than five of
+        the six techniques put together, and it is not a code change at
+        all.</li>
+      <li><b>What I would do differently.</b> Reserve the node exclusively
+        from the very first job. An early shared-node measurement was real,
+        but it answered a different question than the one I asked.</li>
+      <li><b>Milestone 2.</b> The roofline says the kernel is now
+        compute-bound, so the next win is doing more arithmetic per
+        instruction, which is exactly what SIMD is. Then OpenMP across
+        rows, which needs no locking because the two-buffer design makes
+        every cell independent within a step.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 21 · the close, 15 seconds -->
+<section class="slide fullbleed" data-dur="15" data-kicker="">
+  <div class="card">
+    <h1>Delivered</h1>
+    <p>How it works. Two and a half times faster.</p>
+    <p>And two corrected beliefs, which is where most of the learning
+      was.</p>
+  </div>
+</section>
+
+<div id="progress"></div>
+<div id="hud"></div>
+<div id="pip"></div>
+
+<script>
+  // The arrow keys and the space bar move between slides. The letter f
+  // asks for fullscreen, p shows the reserved webcam outline, and r resets
+  // both clocks at the start of a take.
+  const slides = [...document.querySelectorAll(".slide")];
+  const hud = document.getElementById("hud");
+  const progress = document.getElementById("progress");
+  let current = 0, slideStart = Date.now(), deckStart = Date.now();
+
+  function show(next) {
+    slides[current].classList.remove("active");
+    current = Math.max(0, Math.min(slides.length - 1, next));
+    slides[current].classList.add("active");
+    slideStart = Date.now();
+    progress.style.width = (100 * (current + 1) / slides.length) + "vw";
+    const video = slides[current].querySelector("video");
+    if (video) { video.currentTime = 0; video.play(); }
+  }
+  function clock(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    return minutes + ":" + String(Math.floor(seconds % 60)).padStart(2, "0");
+  }
+  function tick() {
+    const inSlide = (Date.now() - slideStart) / 1000;
+    const total = (Date.now() - deckStart) / 1000;
+    const budget = +slides[current].dataset.dur || 0;
+    const over = budget && inSlide > budget;
+    hud.innerHTML =
+      (current + 1) + " of " + slides.length + "&ensp;" +
+      '<span class="' + (over ? "over" : "") + '">' +
+      clock(inSlide) + " of " + clock(budget) + "</span>&ensp;total " +
+      clock(total);
+    requestAnimationFrame(tick);
+  }
+  addEventListener("keydown", (event) => {
+    const key = event.key;
+    if (key === "ArrowRight" || key === " " || key === "PageDown") {
+      show(current + 1);
+    } else if (key === "ArrowLeft" || key === "PageUp") {
+      show(current - 1);
+    } else if (key.toLowerCase() === "f") {
+      document.documentElement.requestFullscreen();
+    } else if (key.toLowerCase() === "p") {
+      document.getElementById("pip").classList.toggle("show");
+    } else if (key.toLowerCase() === "r") {
+      deckStart = Date.now(); slideStart = Date.now();
+    }
+  });
+  // Opening deck.html#12 jumps straight to slide twelve, which is handy
+  // when re-recording a single take.
+  const requested = parseInt(location.hash.slice(1), 10);
+  show(Number.isFinite(requested) ? requested - 1 : 0);
+  deckStart = Date.now(); tick();
+</script>
+</body>
+</html>
