@@ -119,18 +119,18 @@ where it came from. So there are seven complete solvers, each a copy of
 the one below it with exactly one technique added. The difference
 between neighbouring levels measures one technique.
 
-## 4:30 The levels that measured nothing
+## 4:30 Level 0
 
-Four of the six techniques measured nothing. Level zero ran the baseline
-arithmetic through the ladder's kernel selection, a function pointer
-picked once before the time loop, and it measured identical, so the
-harness is free. Level one hoisted work that never changes, like the
-spacing product two ds, out of the loops, and GCC at O2 had already done
-it. Levels three and four walked the grid in memory order and
-gave the variance-zero row its own loop, and the baseline was already
-written both ways.
+Level zero adds no technique. It is the baseline arithmetic behind the
+ladder's kernel selection, a function pointer picked once. It measured
+identical, so the harness is free.
 
-## 5:05 Level 2, strength reduction
+## 4:40 Level 1
+
+Level one hoists work that never changes, like the spacing product two
+ds, out of the loops. No change, GCC at O2 had already done it.
+
+## 4:50 Level 2, strength reduction
 
 Level two removes the divisions, five per cell. V sub S was east minus
 west, divided by two ds. Now each spacing constant is inverted once per
@@ -139,6 +139,12 @@ up to fourteen cycles and blocks the divide unit, a multiply costs about
 one. The compiler is not allowed to make this change, because a
 reciprocal rounds differently in the last bits. Throughput went from
 52.6 to 131.2 million cell updates per second.
+
+## 5:25 Levels 3 and 4
+
+Levels three and four walk the grid in memory order and give the
+variance-zero row its own loop. Both measured zero, because the baseline
+was already written both ways.
 
 ## 5:40 Level 5, induction variables
 

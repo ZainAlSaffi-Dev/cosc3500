@@ -474,18 +474,34 @@
     techniques.}
 \end{frame}
 
-% The four null levels share one frame in the recording. Their individual
-% frames, with the code screenshots, are in the backup section.
+% Levels 0, 1 and 2 keep their own frames. Levels 3 and 4 share one frame
+% in the recording, and their individual frames are in the backup section.
 
-\begin{frame}{The levels that measured nothing}{Levels 0, 1, 3 and 4}
-  \sigtable{lll}{\textbf{Level} & \textbf{Adds} & \textbf{Why nothing moved}}{%
-    0, harness control & nothing at all & a function pointer picked once is free \\
-    1, hoisting & invariants moved out of the loops & GCC at -O2 had already hoisted them \\
-    3, traversal order & inner loop in memory layout order & the baseline already walks rows \\
-    4, loop splitting & a separate loop for the $v=0$ row & the baseline already splits it \\}
-  \sigcallout{A null is still a measurement. It says the technique was
-    already applied, by the compiler or by the baseline's design. The
-    per-level code is in the backup slides.}
+\begin{frame}{Level 0, harness control}{Adds no technique}
+  \sigrungfigure
+  \begin{center}
+    \sigfigure{../results/code_shots/shot_L0_anchor.png}{}
+  \end{center}
+  \sigrungnotes{This level runs the baseline's exact arithmetic through
+    the ladder's kernel selection, changing nothing else.}{If selecting a
+    kernel through a function pointer cost anything, every rung above would
+    be measuring the harness rather than its technique.}
+  \sigcallout{The baseline's arithmetic, line for line, behind the
+    ladder's dispatch. Throughput was unchanged, so later differences
+    measure the techniques themselves.}
+\end{frame}
+
+\begin{frame}{Level 1, hoisting}{Loop-invariant computation moved outside the loops}
+  \sigrungfigure
+  \begin{center}
+    \sigfigure[0.92\linewidth]{../results/code_shots/shot_L1_hoisting.png}{}
+  \end{center}
+  \sigrungnotes{Values that do not change inside a loop, such as grid
+    spacings, their reciprocals and per-row coefficients, are computed once
+    outside it and given names.}{The intended win is fewer repeated
+    operations per cell, if the compiler has not already removed them.}
+  \sigcallout{No measurable change. GCC at -O2 had already hoisted all of
+    this, and this level demonstrates that.}
 \end{frame}
 
 \begin{frame}{Level 2, strength reduction}{A transformation the compiler is not permitted to make}
@@ -500,6 +516,15 @@
   \sigcallout{$x/(2\,ds)$ and $x \cdot (1/(2\,ds))$ round differently in
     the last bits, so -O2 must leave the divisions alone. A divide costs
     5 to 14 cycles and does not pipeline, a multiply costs about one.}
+\end{frame}
+
+\begin{frame}{Levels 3 and 4}{Null by construction}
+  \sigtable{lll}{\textbf{Level} & \textbf{Adds} & \textbf{Why nothing moved}}{%
+    3, traversal order & inner loop in memory layout order & the baseline already walks rows \\
+    4, loop splitting & a separate loop for the $v=0$ row & the baseline already splits it \\}
+  \sigcallout{Both nulls say the baseline was already written correctly.
+    The deliberately swapped version on the ladder slide shows what the
+    traversal order is worth. The per-level code is in the backup slides.}
 \end{frame}
 
 \begin{frame}{Level 5, induction variables}{Row pointers instead of index arithmetic}
@@ -671,33 +696,6 @@
         price as the spacing halves.}
     \end{sigcolumn}
   \end{sigcolumns}
-\end{frame}
-
-\begin{frame}{Level 0, harness control}{Adds no technique}
-  \sigrungfigure
-  \begin{center}
-    \sigfigure{../results/code_shots/shot_L0_anchor.png}{}
-  \end{center}
-  \sigrungnotes{This level runs the baseline's exact arithmetic through
-    the ladder's kernel selection, changing nothing else.}{If selecting a
-    kernel through a function pointer cost anything, every rung above would
-    be measuring the harness rather than its technique.}
-  \sigcallout{The baseline's arithmetic, line for line, behind the
-    ladder's dispatch. Throughput was unchanged, so later differences
-    measure the techniques themselves.}
-\end{frame}
-
-\begin{frame}{Level 1, hoisting}{Loop-invariant computation moved outside the loops}
-  \sigrungfigure
-  \begin{center}
-    \sigfigure[0.92\linewidth]{../results/code_shots/shot_L1_hoisting.png}{}
-  \end{center}
-  \sigrungnotes{Values that do not change inside a loop, such as grid
-    spacings, their reciprocals and per-row coefficients, are computed once
-    outside it and given names.}{The intended win is fewer repeated
-    operations per cell, if the compiler has not already removed them.}
-  \sigcallout{No measurable change. GCC at -O2 had already hoisted all of
-    this, and this level demonstrates that.}
 \end{frame}
 
 \begin{frame}{Level 3, traversal order}{The inner loop follows the memory layout}

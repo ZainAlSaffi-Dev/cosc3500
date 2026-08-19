@@ -28,8 +28,10 @@ so the recording software can be lined up against it.
 | `bs_collapse.mp4`, 5 seconds | loop it twice | switch the volatility of volatility off and Heston becomes Black-Scholes | bottom right |
 | the three-prices slide | still | three methods that share no code agree | bottom right |
 | the ladder-idea slide | still | seven solvers, each one technique apart | bottom right |
-| the null-levels table | still | levels 0, 1, 3 and 4 in one pass, one reason per zero | bottom right |
+| `shot_L0_anchor.png` | still | level 0, the harness control, one sentence | bottom right |
+| `shot_L1_hoisting.png` | still | level 1, hoisting, the compiler had already done it | bottom right |
 | `shot_L2_strength_reduction.png` | still | the divisions on the left became the multiplications on the right | bottom right |
+| the levels 3 and 4 table | still | both null by construction, one reason each | bottom right |
 | `shot_L5_pointers.png` | still | index arithmetic replaced with three row pointers | bottom right |
 | `shot_L6_unroll.png` | still | the unroll by four, and the laptop regression | bottom right |
 | `bench_ladder_hugepage.png` | still | walk the bars, stop on level 2, then the loop-order control and the test tolerance from the callout | top right, because the legend sits top left |

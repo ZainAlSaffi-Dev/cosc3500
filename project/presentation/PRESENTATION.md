@@ -174,11 +174,12 @@ Lead with the method, not the result.
    a ratio and tells you nothing about which change mattered. So there are
    seven complete solvers, each a copy of the one below with exactly one
    technique added and nothing else changed.
-2. **The nulls in one pass.** Levels 0, 1, 3 and 4 share one table slide.
-   Each measured nothing and each zero has a reason, the harness is free,
-   the compiler had already hoisted, and the baseline already had the
-   right loop order and the split row. The per-level slides with their
-   code screenshots are in the backup section for the interview.
+2. **The nulls.** Levels 0 and 1 keep their own slides at about ten
+   seconds each, the harness is free and the compiler had already
+   hoisted. Levels 3 and 4 share one table slide, null by construction,
+   because the baseline already had the right loop order and the split
+   row. Their per-level slides are in the backup section for the
+   interview.
 3. **The rung that paid, then the small ones.** Level 2 gets its own slide
    and the most time, because it took the solver from 52.6 to 131.2
    million cell updates per second and it is the only transformation the
@@ -194,8 +195,9 @@ Lead with the method, not the result.
    the baseline answer within 15 units in the last place, which is the
    cost of the whole speedup said out loud.
 
-The screen shows the null-levels table, the level 2, 5 and 6 code
-screenshots, then `bench_ladder_hugepage.png`.
+The screen shows the level 0, 1 and 2 code screenshots, the levels 3 and
+4 table, the level 5 and 6 code screenshots, then
+`bench_ladder_hugepage.png`.
 
 ### 7:00 — Benchmarking (25%)
 
