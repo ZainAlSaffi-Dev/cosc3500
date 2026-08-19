@@ -471,24 +471,6 @@
     million}, and the Monte Carlo interval brackets both.}
 \end{frame}
 
-\begin{frame}{Convergence}{Error under grid refinement}
-  \begin{center}
-    \sigfigure[0.66\linewidth]{../results/convergence.png}{Error against the
-      Fourier price as the grid refines.}
-  \end{center}
-  \sigcallout{The observed order along the refinement ladder is about two,
-    and the error then lands on a discretisation floor of about \$0.014.}
-\end{frame}
-
-\begin{frame}{The test gate}{No build is benchmarked unless its tests have just passed}
-  \begin{center}
-    \sigfigure[0.8\linewidth]{../results/code_shots/shot_iron_rule.png}{}
-  \end{center}
-  \sigcallout{Every job rebuilds the binary and re-runs the full test suite
-    before timing anything. A build whose tests fail exits without timing,
-    so no wrong version was ever benchmarked.}
-\end{frame}
-
 % --------------------------------------------------------------------------
 % Optimisation. The ladder, its one big rung, and the controls.
 % --------------------------------------------------------------------------
@@ -744,6 +726,15 @@
     \midrule
     ctl-order & loops swapped on purpose & {\color{sigred} 63.6} & 2.1x slower \\
     ctl-branch & boundary branch fused back & 135.3 & free \\}
+\end{frame}
+
+\begin{frame}{Convergence}{Error under grid refinement}
+  \begin{center}
+    \sigfigure[0.66\linewidth]{../results/convergence.png}{Error against the
+      Fourier price as the grid refines.}
+  \end{center}
+  \sigcallout{The observed order along the refinement ladder is about two,
+    and the error then lands on a discretisation floor of about \$0.014.}
 \end{frame}
 
 \begin{frame}{Modelled cache traffic}{Why the swapped loop order is slower}

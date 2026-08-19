@@ -11,7 +11,7 @@ material and are not recorded. `deck.html` is the earlier HTML deck. Its
 take timer is still useful, but its slide order no longer matches this
 table, so record over the PDF.
 
-The table ends at nine minutes fifty-five. The assessors stop watching at
+The table ends at nine minutes thirty-five. The assessors stop watching at
 ten, so takes must not drift. If the recording runs long, the four null
 rungs, levels 0, 1, 3 and 4, are the place to tighten first.
 
@@ -31,25 +31,23 @@ rungs, levels 0, 1, 3 and 4, are the place to tighten first.
 | 2:45 | 0:25 | The grid, filled in backwards from expiry. | `results/demo_timevalue.mp4` again, this time explained | small webcam |
 | 3:10 | 0:20 | Validation begins. Switch the model off and it becomes one we can check exactly. | `results/bs_collapse.mp4` | small webcam |
 | 3:30 | 0:15 | Three methods that share no code agree on one number. | a table slide with the three prices | small webcam |
-| 3:45 | 0:10 | The convergence study. Say the observed order out loud, and say that the error lands on a floor. | `results/convergence.png` | small webcam |
-| 3:55 | 0:10 | The test gate. No benchmark without a passing test suite. | `results/code_shots/shot_iron_rule.png` | small webcam |
-| 4:05 | 0:15 | Why the optimisation study is a ladder rather than a before and after. | a text slide | small webcam |
-| 4:20 | 0:15 | Level 0, the harness control. It confirms the harness costs nothing. | `results/code_shots/shot_L0_anchor.png` | small webcam |
-| 4:35 | 0:15 | Level 1, hoisting. The compiler had already done it. | `results/code_shots/shot_L1_hoisting.png` | small webcam |
-| 4:50 | 0:25 | Level 2, strength reduction. The change the compiler is not allowed to make. | `results/code_shots/shot_L2_strength_reduction.png` | small webcam |
-| 5:15 | 0:15 | Level 3, traversal order. Null by construction. | `results/code_shots/shot_L3_order.png` | small webcam |
-| 5:30 | 0:15 | Level 4, loop splitting. Also null by construction. | `results/code_shots/shot_L4_split.png` | small webcam |
-| 5:45 | 0:15 | Level 5, induction variables. The one small real win after level 2. | `results/code_shots/shot_L5_pointers.png` | small webcam |
-| 6:00 | 0:15 | Level 6, unrolling. The compiler already unrolls counted loops. | `results/code_shots/shot_L6_unroll.png` | small webcam |
-| 6:15 | 0:20 | The ladder, measured. Only level 2 moved, and why. | `results/bench_ladder_hugepage.png` | small webcam |
-| 6:35 | 0:20 | The negative controls. Each removes a property the baseline already had. | `results/code_shots/shot_ctl_order.png`, then `results/memory_cache.mp4` | small webcam |
-| 6:55 | 0:15 | What the speedup cost. | `results/code_shots/shot_optmatches.png` | small webcam |
-| 7:10 | 0:30 | How the benchmarks were set up so they could not mislead. | the protocol table, with `results/code_shots/shot_csv_header.png` spliced fullscreen | small webcam |
-| 7:40 | 0:25 | How performance scales with problem size, including the page-regime split. | `results/bench_scaling.png` | small webcam |
-| 8:05 | 0:30 | The bottleneck. The solver was assumed to be memory-bound and is not. | `results/roofline.png` | small webcam |
-| 8:35 | 0:35 | The page-size effect. | a table slide with the page-size numbers | small webcam |
-| 9:10 | 0:35 | Reflection. The four questions the spec asks, one sentence each. | a text slide | face large |
-| 9:45 | 0:10 | Close by returning to the promises from the opening. | face only | face full screen |
+| 3:45 | 0:15 | Why the optimisation study is a ladder rather than a before and after. | a text slide | small webcam |
+| 4:00 | 0:15 | Level 0, the harness control. It confirms the harness costs nothing. | `results/code_shots/shot_L0_anchor.png` | small webcam |
+| 4:15 | 0:15 | Level 1, hoisting. The compiler had already done it. | `results/code_shots/shot_L1_hoisting.png` | small webcam |
+| 4:30 | 0:25 | Level 2, strength reduction. The change the compiler is not allowed to make. | `results/code_shots/shot_L2_strength_reduction.png` | small webcam |
+| 4:55 | 0:15 | Level 3, traversal order. Null by construction. | `results/code_shots/shot_L3_order.png` | small webcam |
+| 5:10 | 0:15 | Level 4, loop splitting. Also null by construction. | `results/code_shots/shot_L4_split.png` | small webcam |
+| 5:25 | 0:15 | Level 5, induction variables. The one small real win after level 2. | `results/code_shots/shot_L5_pointers.png` | small webcam |
+| 5:40 | 0:15 | Level 6, unrolling. The compiler already unrolls counted loops. | `results/code_shots/shot_L6_unroll.png` | small webcam |
+| 5:55 | 0:20 | The ladder, measured. Only level 2 moved, and why. | `results/bench_ladder_hugepage.png` | small webcam |
+| 6:15 | 0:20 | The negative controls. Each removes a property the baseline already had. | `results/code_shots/shot_ctl_order.png`, then `results/memory_cache.mp4` | small webcam |
+| 6:35 | 0:15 | What the speedup cost. | `results/code_shots/shot_optmatches.png` | small webcam |
+| 6:50 | 0:30 | How the benchmarks were set up so they could not mislead. | the protocol table, with `results/code_shots/shot_csv_header.png` spliced fullscreen | small webcam |
+| 7:20 | 0:25 | How performance scales with problem size, including the page-regime split. | `results/bench_scaling.png` | small webcam |
+| 7:45 | 0:30 | The bottleneck. The solver was assumed to be memory-bound and is not. | `results/roofline.png` | small webcam |
+| 8:15 | 0:35 | The page-size effect. | a table slide with the page-size numbers | small webcam |
+| 8:50 | 0:35 | Reflection. The four questions the spec asks, one sentence each. | a text slide | face large |
+| 9:25 | 0:10 | Close by returning to the promises from the opening. | face only | face full screen |
 
 Somewhere inside the benchmarking section, spend about fifteen seconds on
 the control that went wrong. One of my own
@@ -67,6 +65,8 @@ you look for them. The numbers behind it are in RESULTS.md section 6.
 
 | asset | reason |
 |---|---|
+| `results/convergence.png` | The convergence slide moved to the unrecorded backup section. The result stays in RESULTS.md and the code ships the study. |
+| `results/code_shots/shot_iron_rule.png` | The test-gate slide came out. Its content is one row of the protocol table and one spoken sentence in that take. |
 | `results/demo_surface.mp4` | It does the same job as the flat weather map, and the three-dimensional view is slower for a viewer to parse in the time available. |
 | `results/memory_buffers.mp4` | The two-buffer idea lands in one spoken sentence, so fifteen seconds of animation would not buy fifteen seconds of marks. |
 | `results/blowup.mp4` | The instability demonstration is an aside. PRESENTATION.md keeps it listed as a spare in case a recording comes in short. |
