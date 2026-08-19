@@ -419,8 +419,12 @@
       \begin{itemize}
         \item Share price runs across the grid and variance runs down it.
           Each cell holds the option price $V$ for that pair of inputs.
-        \item At expiry every cell is known exactly, so the solver starts
-          there and steps \sigemph{backwards} to today.
+        \item The \sigemph{spacing} is the gap between neighbouring
+          values, about \$10 between share prices here. Finer spacing
+          tracks the true curve better and multiplies the number of
+          cells.
+        \item At expiry every cell equals the payoff, so the solver
+          starts there and steps \sigemph{backwards} to today.
         \item Each step rebuilds every cell from its nine neighbours,
           reading one buffer and writing another.
       \end{itemize}

@@ -60,12 +60,12 @@ one. Milestone 1 in particular says shorter is acceptable.
 | beat | time | running |
 |---|---|---|
 | Cold open and framing | 0:20 | 0:20 |
-| Introduction and Background | 2:50 | 3:10 |
-| Validation (bridges into benchmarking) | 0:50 | 4:00 |
-| Optimisation | 3:05 | 7:05 |
-| Benchmarking | 2:00 | 9:05 |
-| Reflection and Milestone 2 | 0:35 | 9:40 |
-| Close | 0:10 | 9:50 |
+| Introduction and Background | 2:55 | 3:15 |
+| Validation (bridges into benchmarking) | 0:50 | 4:05 |
+| Optimisation | 3:05 | 7:10 |
+| Benchmarking | 2:00 | 9:10 |
+| Reflection and Milestone 2 | 0:35 | 9:45 |
+| Close | 0:10 | 9:55 |
 
 The Introduction is longer than the first draft of this plan allowed,
 because the model-to-equation run now builds the pricing equation slide by
@@ -125,6 +125,9 @@ not a finance course.
    Walk the table slides at reading pace and keep the voice brief, because
    the rows carry the detail.
 5. **The spreadsheet.** Columns are share prices, rows are variance levels, and
+   the spacing is defined here, the gap between neighbouring values, about
+   ten dollars between share prices on the production grid, so the
+   convergence beat can lean on the word. Then say
    the sheet is filled in backwards from expiry, where the answer is known
    exactly because there is no time left for anything to happen. Show the
    weather map again and let it run backwards.
@@ -138,7 +141,7 @@ the grid.
 The screen shows the payoff diagram, then `xi_smile.mp4`, then
 `demo_timevalue.mp4`.
 
-### 3:10 — Validation (0:50)
+### 3:15 — Validation (0:50)
 
 This beat is short but it buys credibility for everything after it, and it is
 scored under Benchmarking because the spec asks for a setup that avoids
@@ -163,7 +166,7 @@ test suite must pass.
 The screen shows `bs_collapse.mp4`, then the three-method table, then
 `convergence.png`.
 
-### 4:00 — Optimisation (25%)
+### 4:05 — Optimisation (25%)
 
 Lead with the method, not the result.
 
@@ -198,7 +201,7 @@ Lead with the method, not the result.
 The screen shows `bench_ladder_hugepage.png`, then `memory_cache.mp4`, then
 the `test_opt_matches` output.
 
-### 7:05 — Benchmarking (25%)
+### 7:10 — Benchmarking (25%)
 
 Hit the three things the spec names, in order.
 
@@ -237,7 +240,7 @@ Hit the three things the spec names, in order.
 The screen shows a CSV header, then `bench_scaling.png`, then
 `roofline.png`, then the page-size table from RESULTS.md.
 
-### 9:05 — Reflection and Conclusion (10%)
+### 9:10 — Reflection and Conclusion (10%)
 
 Four questions, one sentence each. The spec names all four.
 
@@ -257,7 +260,7 @@ Four questions, one sentence each. The spec names all four.
   timestep because the two-buffer design makes every cell independent of every
   other cell.
 
-### 9:40 — Close
+### 9:45 — Close
 
 Name the three promises from the cold open and confirm you delivered them.
 
