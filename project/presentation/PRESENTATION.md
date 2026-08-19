@@ -60,11 +60,11 @@ one. Milestone 1 in particular says shorter is acceptable.
 | beat | time | running |
 |---|---|---|
 | Cold open and framing | 0:20 | 0:20 |
-| Introduction and Background | 2:55 | 3:15 |
-| Validation (bridges into benchmarking) | 0:50 | 4:05 |
-| Optimisation | 3:05 | 7:10 |
-| Benchmarking | 2:00 | 9:10 |
-| Reflection and Milestone 2 | 0:35 | 9:45 |
+| Introduction and Background | 3:05 | 3:25 |
+| Validation (bridges into benchmarking) | 0:50 | 4:15 |
+| Optimisation | 3:15 | 7:30 |
+| Benchmarking | 1:45 | 9:15 |
+| Reflection and Milestone 2 | 0:30 | 9:45 |
 | Close | 0:10 | 9:55 |
 
 The Introduction is longer than the first draft of this plan allowed,
@@ -141,7 +141,7 @@ the grid.
 The screen shows the payoff diagram, then `xi_smile.mp4`, then
 `demo_timevalue.mp4`.
 
-### 3:15 — Validation (0:50)
+### 3:25 — Validation (0:50)
 
 This beat is short but it buys credibility for everything after it, and it is
 scored under Benchmarking because the spec asks for a setup that avoids
@@ -166,7 +166,7 @@ test suite must pass.
 The screen shows `bs_collapse.mp4`, then the three-method table, then
 `convergence.png`.
 
-### 4:05 — Optimisation (25%)
+### 4:15 — Optimisation (25%)
 
 Lead with the method, not the result.
 
@@ -201,7 +201,7 @@ Lead with the method, not the result.
 The screen shows `bench_ladder_hugepage.png`, then `memory_cache.mp4`, then
 the `test_opt_matches` output.
 
-### 7:10 — Benchmarking (25%)
+### 7:30 — Benchmarking (25%)
 
 Hit the three things the spec names, in order.
 
@@ -240,7 +240,7 @@ Hit the three things the spec names, in order.
 The screen shows a CSV header, then `bench_scaling.png`, then
 `roofline.png`, then the page-size table from RESULTS.md.
 
-### 9:10 — Reflection and Conclusion (10%)
+### 9:15 — Reflection and Conclusion (10%)
 
 Four questions, one sentence each. The spec names all four.
 
