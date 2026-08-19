@@ -303,24 +303,6 @@
     $\rho$ & the correlation between the two increments \\}
 \end{frame}
 
-\begin{frame}{Where the strike price enters}{The model and the contract are separate}
-  \begin{itemize}
-    \item The two equations describe how the share price moves. They do
-      not involve the option contract, which is why no strike appears in
-      them.
-    \item The contract enters at expiry, where the grid is filled with the
-      payoff, $\max(S - K,\, 0)$ for this call. That is where the strike
-      $K$ enters.
-    \item Black-Scholes merges the model and the contract into one closed
-      formula, which is why $S$ and $K$ appear together there. The PDE
-      route keeps them separate.
-  \end{itemize}
-  \sigcallout{Heston does not build on the Black-Scholes formula. It
-    relaxes one Black-Scholes assumption, the constant volatility. With
-    $\xi = 0$ the model reduces to Black-Scholes, which is the main
-    validation test.}
-\end{frame}
-
 \begin{frame}{From stochastic model to deterministic equation}{There is no random number generator in the program}
   \begin{itemize}
     \item The fair price is an average. It is the expected payoff over
@@ -475,41 +457,15 @@
     million}, and the Monte Carlo interval brackets both.}
 \end{frame}
 
-\begin{frame}{Convergence}{Halve the grid spacing and the error should fall four times over}
-  \begin{sigcolumns}
-    \begin{sigcolumn}
-      \begin{itemize}
-        \item The same option is priced on a sequence of grids, each with
-          half the spacing of the last, and each price is compared with
-          the Fourier reference.
-        \item The error falls about \sigemph{four times over per halving}.
-          That is the second-order accuracy the stencil is built to have,
-          so the slope is itself a check on the code.
-        \item Below about \$0.014 refinement stops helping. The grid has
-          to end somewhere, and the reference carries its own small
-          error, so those two set the floor.
-      \end{itemize}
-    \end{sigcolumn}
-    \begin{sigcolumn}
-      \sigfigure{../results/convergence.png}{Error against the Fourier
-        price as the spacing halves.}
-    \end{sigcolumn}
-  \end{sigcolumns}
-\end{frame}
-
 % --------------------------------------------------------------------------
 % Optimisation. The ladder, its one big rung, and the controls.
 % --------------------------------------------------------------------------
 
-\begin{frame}{How the optimisation was structured}{Seven solvers, one technique per level, two negative controls}
+\begin{frame}{How the optimisation was structured}{Seven solvers, one technique per level}
   \begin{itemize}
     \item Every level is a full copy of the level below with exactly
       \sigemph{one transformation} added, so a difference between
       neighbours measures one technique.
-    \item Level 0 adds nothing, to confirm the harness itself costs
-      nothing.
-    \item Two \sigemph{negative controls} each remove a property the
-      baseline already has, and are timed the same way.
     \item Every level must match the baseline's answer before it is
       benchmarked.
   \end{itemize}
@@ -518,35 +474,18 @@
     techniques.}
 \end{frame}
 
-% One frame per rung. Before on the left, after on the right, and the
-% measured effect in the screenshot's own caption, so the number can never
-% drift from the code it belongs to.
+% The four null levels share one frame in the recording. Their individual
+% frames, with the code screenshots, are in the backup section.
 
-\begin{frame}{Level 0, harness control}{Adds no technique}
-  \sigrungfigure
-  \begin{center}
-    \sigfigure{../results/code_shots/shot_L0_anchor.png}{}
-  \end{center}
-  \sigrungnotes{This level runs the baseline's exact arithmetic through
-    the ladder's kernel selection, changing nothing else.}{If selecting a
-    kernel through a function pointer cost anything, every rung above would
-    be measuring the harness rather than its technique.}
-  \sigcallout{The baseline's arithmetic, line for line, behind the
-    ladder's dispatch. Throughput was unchanged, so later differences
-    measure the techniques themselves.}
-\end{frame}
-
-\begin{frame}{Level 1, hoisting}{Loop-invariant computation moved outside the loops}
-  \sigrungfigure
-  \begin{center}
-    \sigfigure[0.92\linewidth]{../results/code_shots/shot_L1_hoisting.png}{}
-  \end{center}
-  \sigrungnotes{Values that do not change inside a loop, such as grid
-    spacings, their reciprocals and per-row coefficients, are computed once
-    outside it and given names.}{The intended win is fewer repeated
-    operations per cell, if the compiler has not already removed them.}
-  \sigcallout{No measurable change. GCC at -O2 had already hoisted all of
-    this, and this level demonstrates that.}
+\begin{frame}{The levels that measured nothing}{Levels 0, 1, 3 and 4}
+  \sigtable{lll}{\textbf{Level} & \textbf{Adds} & \textbf{Why nothing moved}}{%
+    0, harness control & nothing at all & a function pointer picked once is free \\
+    1, hoisting & invariants moved out of the loops & GCC at -O2 had already hoisted them \\
+    3, traversal order & inner loop in memory layout order & the baseline already walks rows \\
+    4, loop splitting & a separate loop for the $v=0$ row & the baseline already splits it \\}
+  \sigcallout{A null is still a measurement. It says the technique was
+    already applied, by the compiler or by the baseline's design. The
+    per-level code is in the backup slides.}
 \end{frame}
 
 \begin{frame}{Level 2, strength reduction}{A transformation the compiler is not permitted to make}
@@ -561,33 +500,6 @@
   \sigcallout{$x/(2\,ds)$ and $x \cdot (1/(2\,ds))$ round differently in
     the last bits, so -O2 must leave the divisions alone. A divide costs
     5 to 14 cycles and does not pipeline, a multiply costs about one.}
-\end{frame}
-
-\begin{frame}{Level 3, traversal order}{The inner loop follows the memory layout}
-  \sigrungfigure
-  \begin{center}
-    \sigfigure[0.92\linewidth]{../results/code_shots/shot_L3_order.png}{}
-  \end{center}
-  \sigrungnotes{The loop nest is arranged so the inner loop visits cells
-    in the exact order they sit in memory.}{Sequential access lets the cache
-    and prefetcher stream whole lines, while a strided walk wastes most of
-    every line it fetches.}
-  \sigcallout{No change, by construction. The baseline already traverses
-    memory in layout order.}
-\end{frame}
-
-\begin{frame}{Level 4, loop splitting}{A separate loop for the boundary row}
-  \sigrungfigure
-  \begin{center}
-    \sigfigure{../results/code_shots/shot_L4_split.png}{}
-  \end{center}
-  \sigrungnotes{The $v=0$ boundary row gets its own loop, instead of an if
-    test on every cell of the main loop.}{A branch in every cell can
-    mispredict and stall the pipeline, so splitting keeps the main loop free
-    of branches.}
-  \sigcallout{No change, by construction. The baseline already splits the
-    boundary row into its own loop, and the fused version is one of the
-    negative controls.}
 \end{frame}
 
 \begin{frame}{Level 5, induction variables}{Row pointers instead of index arithmetic}
@@ -622,17 +534,10 @@
   \end{center}
   \sigstats{52.6/baseline Mcell per s, 131.2/after strength reduction,
     134.8/level 6, 2.56x/overall speedup}
-  \sigcallout{The nulls were also checked directly. Swapping the loops on
-    purpose makes identical arithmetic \sigemph{2.1x slower}, so the
-    traversal order the baseline already had was load-bearing.}
-\end{frame}
-
-\begin{frame}{What the speedup cost}{Fifteen units in the last place of the answer}
-  \begin{center}
-    \sigfigure[0.7\linewidth]{../results/code_shots/shot_optmatches.png}{}
-  \end{center}
-  \sigcallout{The whole speedup cost 3.3e-15 relative error, and an
-    automated gate holds every level and both controls to it.}
+  \sigcallout{Swapping the loops on purpose makes identical arithmetic
+    \sigemph{2.1x slower}, so the traversal order the baseline already
+    had was doing real work. An automated test holds every level to the
+    baseline answer, within 15 units in the last decimal place.}
 \end{frame}
 
 % --------------------------------------------------------------------------
@@ -727,6 +632,108 @@
 
 \appendix
 \sigbackupbegin
+
+\begin{frame}{Where the strike price enters}{The model and the contract are separate}
+  \begin{itemize}
+    \item The two equations describe how the share price moves. They do
+      not involve the option contract, which is why no strike appears in
+      them.
+    \item The contract enters at expiry, where the grid is filled with the
+      payoff, $\max(S - K,\, 0)$ for this call. That is where the strike
+      $K$ enters.
+    \item Black-Scholes merges the model and the contract into one closed
+      formula, which is why $S$ and $K$ appear together there. The PDE
+      route keeps them separate.
+  \end{itemize}
+  \sigcallout{Heston does not build on the Black-Scholes formula. It
+    relaxes one Black-Scholes assumption, the constant volatility. With
+    $\xi = 0$ the model reduces to Black-Scholes, which is the main
+    validation test.}
+\end{frame}
+
+\begin{frame}{Convergence}{Halve the grid spacing and the error should fall four times over}
+  \begin{sigcolumns}
+    \begin{sigcolumn}
+      \begin{itemize}
+        \item The same option is priced on a sequence of grids, each with
+          half the spacing of the last, and each price is compared with
+          the Fourier reference.
+        \item The error falls about \sigemph{four times over per halving}.
+          That is the second-order accuracy the stencil is built to have,
+          so the slope is itself a check on the code.
+        \item Below about \$0.014 refinement stops helping. The grid has
+          to end somewhere, and the reference carries its own small
+          error, so those two set the floor.
+      \end{itemize}
+    \end{sigcolumn}
+    \begin{sigcolumn}
+      \sigfigure{../results/convergence.png}{Error against the Fourier
+        price as the spacing halves.}
+    \end{sigcolumn}
+  \end{sigcolumns}
+\end{frame}
+
+\begin{frame}{Level 0, harness control}{Adds no technique}
+  \sigrungfigure
+  \begin{center}
+    \sigfigure{../results/code_shots/shot_L0_anchor.png}{}
+  \end{center}
+  \sigrungnotes{This level runs the baseline's exact arithmetic through
+    the ladder's kernel selection, changing nothing else.}{If selecting a
+    kernel through a function pointer cost anything, every rung above would
+    be measuring the harness rather than its technique.}
+  \sigcallout{The baseline's arithmetic, line for line, behind the
+    ladder's dispatch. Throughput was unchanged, so later differences
+    measure the techniques themselves.}
+\end{frame}
+
+\begin{frame}{Level 1, hoisting}{Loop-invariant computation moved outside the loops}
+  \sigrungfigure
+  \begin{center}
+    \sigfigure[0.92\linewidth]{../results/code_shots/shot_L1_hoisting.png}{}
+  \end{center}
+  \sigrungnotes{Values that do not change inside a loop, such as grid
+    spacings, their reciprocals and per-row coefficients, are computed once
+    outside it and given names.}{The intended win is fewer repeated
+    operations per cell, if the compiler has not already removed them.}
+  \sigcallout{No measurable change. GCC at -O2 had already hoisted all of
+    this, and this level demonstrates that.}
+\end{frame}
+
+\begin{frame}{Level 3, traversal order}{The inner loop follows the memory layout}
+  \sigrungfigure
+  \begin{center}
+    \sigfigure[0.92\linewidth]{../results/code_shots/shot_L3_order.png}{}
+  \end{center}
+  \sigrungnotes{The loop nest is arranged so the inner loop visits cells
+    in the exact order they sit in memory.}{Sequential access lets the cache
+    and prefetcher stream whole lines, while a strided walk wastes most of
+    every line it fetches.}
+  \sigcallout{No change, by construction. The baseline already traverses
+    memory in layout order.}
+\end{frame}
+
+\begin{frame}{Level 4, loop splitting}{A separate loop for the boundary row}
+  \sigrungfigure
+  \begin{center}
+    \sigfigure{../results/code_shots/shot_L4_split.png}{}
+  \end{center}
+  \sigrungnotes{The $v=0$ boundary row gets its own loop, instead of an if
+    test on every cell of the main loop.}{A branch in every cell can
+    mispredict and stall the pipeline, so splitting keeps the main loop free
+    of branches.}
+  \sigcallout{No change, by construction. The baseline already splits the
+    boundary row into its own loop, and the fused version is one of the
+    negative controls.}
+\end{frame}
+
+\begin{frame}{What the speedup cost}{Fifteen units in the last place of the answer}
+  \begin{center}
+    \sigfigure[0.7\linewidth]{../results/code_shots/shot_optmatches.png}{}
+  \end{center}
+  \sigcallout{The whole speedup cost 3.3e-15 relative error, and an
+    automated gate holds every level and both controls to it.}
+\end{frame}
 
 \begin{frame}{The full ladder}{Sweep E, huge pages, median of five}
   \sigtable{llrr}{\textbf{Level} & \textbf{Adds} & \textbf{Mcell per s}

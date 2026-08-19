@@ -60,19 +60,21 @@ one. Milestone 1 in particular says shorter is acceptable.
 | beat | time | running |
 |---|---|---|
 | Cold open and framing | 0:20 | 0:20 |
-| Introduction and Background | 3:05 | 3:25 |
-| Validation (bridges into benchmarking) | 0:50 | 4:15 |
-| Optimisation | 3:00 | 7:15 |
-| Benchmarking | 1:45 | 9:00 |
-| Reflection and Milestone 2 | 0:30 | 9:30 |
-| Close | 0:10 | 9:40 |
+| Introduction and Background | 3:15 | 3:35 |
+| Validation (bridges into benchmarking) | 0:35 | 4:10 |
+| Optimisation | 2:50 | 7:00 |
+| Benchmarking | 1:45 | 8:45 |
+| Reflection and Milestone 2 | 0:35 | 9:20 |
+| Close | 0:20 | 9:40 |
 
-The Introduction is longer than the first draft of this plan allowed,
-because the model-to-equation run now builds the pricing equation slide by
-slide rather than asserting it. The spec permits this. It says some models
-naturally need more background than others. The extra time comes out of the
-cold open, the reflection and the slack, not out of Optimisation and
-Benchmarking, which together still hold half the talk.
+Every slot is computed from its take's word count in SCRIPT.md at 150
+words per minute, so the table is achievable at a normal speaking pace
+rather than a hopeful one. The Introduction is long because the
+model-to-equation run builds the pricing equation slide by slide rather
+than asserting it, which the spec permits. The room for it came from
+merging the four null optimisation levels into one slide, and from moving
+the strike, convergence and speedup-cost slides into the backup section,
+with their key sentences folded into neighbouring takes.
 
 ---
 
@@ -84,7 +86,7 @@ Open on the weather map already moving. Say what the video will deliver, in
 three promises, so the assessor knows the shape up front.
 
 > "This is the price of a stock option, computed by solving a partial
-> differential equation on a grid. In the next nine minutes I will show you how
+> differential equation on a grid. In the next ten minutes I will show you how
 > it works, how I made it two and a half times faster, and the two things I
 > was confident about that turned out to be wrong when I measured them."
 
@@ -106,11 +108,11 @@ not a finance course.
    is itself stochastic, and the two are negatively correlated because falling
    markets tend to be more volatile. The slide after the equations defines
    every symbol in words. Walk it in one pass so nothing on screen goes
-   undefined. The slide after that says where the strike price enters. The
-   equations describe the share and know nothing about the contract, and
-   the strike enters through the payoff at expiry. Say this plainly,
-   because a viewer used to the Black-Scholes formula will be looking
-   for K in the equations and not finding it.
+   undefined. A viewer used to the Black-Scholes formula will be looking
+   for K in the equations and not finding it, and the full-equation slide
+   answers that. The equations describe the share, not the contract, and
+   the strike enters through the payoff at expiry. The dedicated
+   strike slide is in the backup section.
 4. **Where the randomness went.** There is no random number generator
    anywhere in the program, and a five-slide run explains why, ending on the
    full equation. The Feynman-Kac slide states the idea, the fair price is an
@@ -126,8 +128,7 @@ not a finance course.
    the rows carry the detail.
 5. **The spreadsheet.** Columns are share prices, rows are variance levels, and
    the spacing is defined here, the gap between neighbouring values, about
-   ten dollars between share prices on the production grid, so the
-   convergence beat can lean on the word. Then say
+   ten dollars between share prices on the production grid. Then say
    the sheet is filled in backwards from expiry, where the answer is known
    exactly because there is no time left for anything to happen. Show the
    weather map again and let it run backwards.
@@ -141,7 +142,7 @@ the grid.
 The screen shows the payoff diagram, then `xi_smile.mp4`, then
 `demo_timevalue.mp4`.
 
-### 3:25 — Validation (0:50)
+### 3:35 — Validation (0:35)
 
 This beat is short but it buys credibility for everything after it, and it is
 scored under Benchmarking because the spec asks for a setup that avoids
@@ -154,19 +155,18 @@ misleading results.
   inversion says 196.1692, which agrees to four parts in a million. Four
   hundred thousand Monte Carlo paths say 196.1345 give or take 0.5524, which
   brackets both. Put all three on one slide.
-- **Convergence.** The same option on a sequence of grids, each halving the
-  spacing. The error falls about four times over per halving, which is the
-  second-order accuracy the stencil should have, then flattens near \$0.014
-  where the domain cut-off and the reference's own error take over.
+The convergence study moved to the backup section. If it comes up in the
+interview, the error falls about four times over per halving, which is
+second-order accuracy, then flattens near \$0.014 where the domain
+cut-off and the reference's own error take over.
 
 The test gate has no slide. It is one spoken sentence inside the benchmark
 protocol beat, that before every sweep the binary rebuilds and the full
 test suite must pass.
 
-The screen shows `bs_collapse.mp4`, then the three-method table, then
-`convergence.png`.
+The screen shows `bs_collapse.mp4`, then the three-method table.
 
-### 4:15 — Optimisation (25%)
+### 4:10 — Optimisation (25%)
 
 Lead with the method, not the result.
 
@@ -174,34 +174,30 @@ Lead with the method, not the result.
    a ratio and tells you nothing about which change mattered. So there are
    seven complete solvers, each a copy of the one below with exactly one
    technique added and nothing else changed.
-2. **Walk the ladder.** `results/bench_ladder_hugepage.png`, bar by bar.
-   Baseline, then hoisting and common subexpression elimination, then strength
-   reduction, then traversal order, loop splitting, induction variables,
-   unrolling.
-3. **The result.** Only one bar moved. Level 2 took it from 52.6 to 131.2
-   million cell updates per second and every other rung came back inside the
-   noise. Then say why. GCC at -O2 had already done all the others, and
-   level 2 is the only transformation on the list the compiler is
-   **forbidden** to make, because turning a division into a multiplication
-   by a reciprocal changes the answer in the last bits.
+2. **The nulls in one pass.** Levels 0, 1, 3 and 4 share one table slide.
+   Each measured nothing and each zero has a reason, the harness is free,
+   the compiler had already hoisted, and the baseline already had the
+   right loop order and the split row. The per-level slides with their
+   code screenshots are in the backup section for the interview.
+3. **The rung that paid, then the small ones.** Level 2 gets its own slide
+   and the most time, because it took the solver from 52.6 to 131.2
+   million cell updates per second and it is the only transformation the
+   compiler is **forbidden** to make, since turning a division into a
+   multiplication by a reciprocal changes the answer in the last bits.
+   Levels 5 and 6 follow briefly, two percent and half a percent.
    > "At -O2, the hand optimisations worth doing are the ones the compiler is
    > not allowed to do for you."
-4. **The negative controls.** Levels 3 and 4 were null by construction, because
-   the baseline already had the right loop order and already peeled the special
-   row out. So instead of pretending, write the wrong version and time it.
-   Swapping the loops costs 2.1 times. Fusing the special row back in is free,
-   because the branch predictor handles it. Play `results/memory_cache.mp4`
-   over the loop-order result.
-5. **Trade-offs, said out loud.** The speedup cost 15 units in the last place
-   of the answer, which is 3.3e-15 relative, and `test_opt_matches` holds every
-   level to that. The kernel file is long and repetitive on purpose, because
-   sharing setup between rungs would let one rung change what its neighbour
-   measures.
+4. **The ladder, measured.** Walk the bars, stop on level 2. The slide also
+   carries the two closing facts. Swapping the loops on purpose makes
+   identical arithmetic 2.1 times slower, which is what the baseline's
+   traversal order was worth, and an automated test holds every level to
+   the baseline answer within 15 units in the last place, which is the
+   cost of the whole speedup said out loud.
 
-The screen shows `bench_ladder_hugepage.png`, then `memory_cache.mp4`, then
-the `test_opt_matches` output.
+The screen shows the null-levels table, the level 2, 5 and 6 code
+screenshots, then `bench_ladder_hugepage.png`.
 
-### 7:15 — Benchmarking (25%)
+### 7:00 — Benchmarking (25%)
 
 Hit the three things the spec names, in order.
 
@@ -212,13 +208,13 @@ Hit the three things the spec names, in order.
    bandwidth, `--nodelist=r730-2` because the partition mixes 24-core Xeons
    with 8-core virtual machines, median of five with the min and max shown.
 2. **Scaling with problem size.** `results/bench_scaling.png`, four grids
-   from a working set of one mebibyte up to sixty-four. Two sentences
-   earn real marks here. The first is that the first run of this sweep
-   confounded page size with cache and was re-run with the allocator pinned.
-   The second is that the baseline's flat line across a sixty-four-fold
-   growth in working set confirms the division-bound story from another
-   direction, because only the optimised kernel is fast enough to feel the
-   memory system at all.
+   from a working set of one mebibyte up to sixty-four. The spoken point
+   is the baseline's flat line, which confirms the division-bound story
+   from another direction, because only the optimised kernel is fast
+   enough to feel the memory system at all. The slide's own caption
+   records that the first run confounded page size with cache and was
+   re-run with the allocator pinned, and the page-size beat tells that
+   story in full.
 3. **Hotspot and bottleneck.** `results/roofline.png`. State the assumption first
    and then show the measurement. The solver was assumed to be memory-bound. It is not.
    Counting arithmetic and bytes straight off the level 6 kernel gives 31 flops
@@ -240,7 +236,7 @@ Hit the three things the spec names, in order.
 The screen shows a CSV header, then `bench_scaling.png`, then
 `roofline.png`, then the page-size table from RESULTS.md.
 
-### 9:00 — Reflection and Conclusion (10%)
+### 8:45 — Reflection and Conclusion (10%)
 
 Four questions, one sentence each. The spec names all four.
 
@@ -260,7 +256,7 @@ Four questions, one sentence each. The spec names all four.
   timestep because the two-buffer design makes every cell independent of every
   other cell.
 
-### 9:30 — Close
+### 9:20 — Close
 
 Name the three promises from the cold open and confirm you delivered them.
 

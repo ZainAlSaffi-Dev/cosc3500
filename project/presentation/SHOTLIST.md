@@ -27,12 +27,12 @@ so the recording software can be lined up against it.
 | `demo_timevalue.mp4` again | loop | shares across, variance down, colour is value, time runs backwards | bottom right |
 | `bs_collapse.mp4`, 5 seconds | loop it twice | switch the volatility of volatility off and Heston becomes Black-Scholes | bottom right |
 | the three-prices slide | still | three methods that share no code agree | bottom right |
-| `convergence.png` | still | halving the spacing cuts the error four times over, then the floor | bottom right |
 | the ladder-idea slide | still | seven solvers, each one technique apart | bottom right |
-| `shot_L0_anchor.png` through `shot_L6_unroll.png` | stills, one slide per rung | one sentence per null rung, saying what it added and that the compiler had already done it | bottom right |
+| the null-levels table | still | levels 0, 1, 3 and 4 in one pass, one reason per zero | bottom right |
 | `shot_L2_strength_reduction.png` | still | the divisions on the left became the multiplications on the right | bottom right |
-| `bench_ladder_hugepage.png` | still | walk the bars left to right and stop on level 2 | top right, because the legend sits top left |
-| `shot_optmatches.png` | still | every rung is held to the baseline answer, and the speedup cost fifteen units in the last place | bottom right |
+| `shot_L5_pointers.png` | still | index arithmetic replaced with three row pointers | bottom right |
+| `shot_L6_unroll.png` | still | the unroll by four, and the laptop regression | bottom right |
+| `bench_ladder_hugepage.png` | still | walk the bars, stop on level 2, then the loop-order control and the test tolerance from the callout | top right, because the legend sits top left |
 | `shot_csv_header.png` | still | the job stamps its own provenance into every result file | bottom right |
 | `bench_scaling.png` | still | the shaded band is the page-regime split, and the first run of this sweep had to be redone | bottom right |
 | `roofline.png` | still | the measured ceiling, and the memory-bound assumption disproved | bottom left, because the label column fills the right side |

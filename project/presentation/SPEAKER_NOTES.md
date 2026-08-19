@@ -5,7 +5,9 @@ the project could deliver them and answer the obvious follow-up question.
 Each slide gets a paragraph of what to say in your own words, and where a
 follow-up is likely, a second paragraph with the answer. Two sections are
 covered, the model-to-equation run in the introduction and the whole
-optimisation section.
+optimisation section. In the recording, levels 0, 1, 3 and 4 share one
+slide and one take. The per-level notes below back the individual slides
+in the backup section, for the interview rather than the video.
 
 If you remember nothing else, the section in one sentence. Seven versions of
 the same solver, each adding exactly one textbook optimisation. Six did
