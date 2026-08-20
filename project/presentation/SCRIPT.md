@@ -148,31 +148,32 @@ every cell. The baseline already did both, so throughput did not change.
 
 ## 5:40 Level 5, induction variables
 
-Level five replaces the index arithmetic. The code computed row plus
-stock i for every neighbour, about ten integer additions per cell. Now
-the loop keeps three raw pointers, row mid, row above and row below, and
-steps them forward. Worth about two percent, the only measurable gain
-after level two.
+Level five replaces the index arithmetic, about ten integer additions
+per cell to reach the neighbours. Three raw pointers step along the rows
+instead, and each neighbour is a fixed offset computed for free inside
+the load instruction. Worth two percent, small because address adds run
+on separate execution ports and were already overlapping the floating
+point.
 
 ## 6:00 Level 6, unrolling
 
-Level six unrolls the inner loop by four. The body is copied with
-numbered locals, V zero to V three, so four independent chains of
-arithmetic sit between each pair of loop tests. Worth half a percent,
-the compiler already unrolls counted loops. On my laptop the same change
-was a 23 percent regression, which is why every number in this talk
+Level six unrolls the inner loop by four. Four independent chains of
+arithmetic sit between each pair of loop tests, so the core keeps
+starting new cells while earlier results are still in flight. Worth half
+a percent, the compiler already unrolls counted loops. On my laptop the
+same change was a 23 percent regression, which is why every number here
 comes from the cluster.
 
 ## 6:25 The ladder, measured
 
 Here is the whole ladder measured on the cluster, and only level two
 moved. Everything the compiler was allowed to do, it had already done.
-The one optimisation that paid is the one it is forbidden to make.
 Swapping the loop order on purpose makes identical arithmetic 2.1 times
-slower, so the traversal order the baseline already had was doing real
-work. Overall the solver is 2.56 times faster, and an automated test
-holds every level to the baseline answer, within fifteen units in the
-last decimal place.
+slower, because each cache line now serves one cell and is evicted
+before its neighbours need it, five times the memory traffic per update.
+Overall the solver is 2.56 times faster, and an automated test holds
+every level to the baseline answer, within fifteen units in the last
+decimal place.
 
 ## 7:00 The benchmark protocol
 

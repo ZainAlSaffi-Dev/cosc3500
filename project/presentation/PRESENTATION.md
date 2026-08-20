@@ -188,15 +188,20 @@ Lead with the method, not the result.
    million cell updates per second and it is the only transformation the
    compiler is **forbidden** to make, since turning a division into a
    multiplication by a reciprocal changes the answer in the last bits.
-   Levels 5 and 6 follow briefly, two percent and half a percent.
+   Levels 5 and 6 follow briefly, two percent and half a percent, and
+   each take names its mechanism in one sentence. The pointer win is
+   small because address adds run on separate execution ports and were
+   already overlapped with the floating point, and unrolling pays by
+   keeping independent arithmetic in flight while earlier results wait.
    > "At -O2, the hand optimisations worth doing are the ones the compiler is
    > not allowed to do for you."
 4. **The ladder, measured.** Walk the bars, stop on level 2. The slide also
    carries the two closing facts. Swapping the loops on purpose makes
-   identical arithmetic 2.1 times slower, which is what the baseline's
-   traversal order was worth, and an automated test holds every level to
-   the baseline answer within 15 units in the last place, which is the
-   cost of the whole speedup said out loud.
+   identical arithmetic 2.1 times slower, and the take says why, each
+   cache line serves one cell and is evicted before its neighbours need
+   it, five times the memory traffic per update. An automated test holds
+   every level to the baseline answer within 15 units in the last place,
+   which is the cost of the whole speedup said out loud.
 
 The screen shows the level 0, 1 and 2 code screenshots, the levels 3 and
 4 table, the level 5 and 6 code screenshots, then

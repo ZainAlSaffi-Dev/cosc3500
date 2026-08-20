@@ -524,7 +524,8 @@
     \begin{sigcolumn}
       \sigfigure{../results/code_shots/shot_L3_order.png}{Level 3,
         traversal order. The loops walk each row in the order it sits in
-        memory.}
+        memory, so every 64-byte cache line is fully used before it is
+        evicted.}
     \end{sigcolumn}
     \begin{sigcolumn}
       \sigfigure{../results/code_shots/shot_L4_split.png}{Level 4, loop
@@ -545,10 +546,12 @@
   \end{center}
   \sigrungnotes{Each row is walked with pointers that advance one step per
     cell, instead of recomputing row times width plus column for every
-    neighbour.}{About ten integer additions per cell fold into the address
-    arithmetic the hardware does anyway.}
-  \sigcallout{A small gain, the only one after level 2. About ten integer
-    additions per cell fold into the hardware's addressing modes.}
+    neighbour.}{The intended win is about ten fewer integer additions per
+    cell, if that work is not already hidden.}
+  \sigcallout{A small gain, the only one after level 2. Neighbour offsets
+    are computed inside the load instructions at no extra cost, and address
+    adds run on separate execution ports, so most of this work was already
+    hidden behind the floating point.}
 \end{frame}
 
 \begin{frame}{Level 6, unrolling}{Four cells per loop iteration}

@@ -175,13 +175,18 @@ percent, which is real, and the only measurable effect after level 2.
 
 It is small because the core does integer address arithmetic on separate
 execution ports from floating point, so most of that work was already
-happening alongside the floating-point math.
+happening alongside the floating-point math. The neighbour offsets that
+remain are fixed displacements inside the load instructions, so the
+address unit computes them as part of the load and no separate add
+instruction is issued.
 
 ## Level 6, unrolling
 
 Level 6 processes four cells per trip around the loop instead of one, giving
-a quarter of the loop tests and more independent arithmetic in flight. It
-was worth half a percent. The compiler already unrolls counted loops at -O2,
+a quarter of the loop tests and more independent arithmetic in flight. Each
+cell's update is a chain of dependent operations, so while one chain waits
+on a result the core can issue from another, which hides instruction
+latency. It was worth half a percent. The compiler already unrolls counted loops at -O2,
 so doing it by hand mostly duplicated its work. That completes the ladder.
 One rung out of six moved.
 
