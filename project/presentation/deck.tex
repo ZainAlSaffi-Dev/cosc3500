@@ -518,13 +518,24 @@
     5 to 14 cycles and does not pipeline, a multiply costs about one.}
 \end{frame}
 
-\begin{frame}{Levels 3 and 4}{Null by construction}
-  \sigtable{lll}{\textbf{Level} & \textbf{Adds} & \textbf{Why nothing moved}}{%
-    3, traversal order & inner loop in memory layout order & the baseline already walks rows \\
-    4, loop splitting & a separate loop for the $v=0$ row & the baseline already splits it \\}
-  \sigcallout{Both nulls say the baseline was already written correctly.
-    The deliberately swapped version on the ladder slide shows what the
-    traversal order is worth. The per-level code is in the backup slides.}
+\begin{frame}{Levels 3 and 4}{The baseline already did both, so throughput did not change}
+  \setlength{\sigslotheight}{0.5\textheight}
+  \begin{sigcolumns}
+    \begin{sigcolumn}
+      \sigfigure{../results/code_shots/shot_L3_order.png}{Level 3,
+        traversal order. The loops walk each row in the order it sits in
+        memory.}
+    \end{sigcolumn}
+    \begin{sigcolumn}
+      \sigfigure{../results/code_shots/shot_L4_split.png}{Level 4, loop
+        splitting. The $v=0$ row gets its own loop instead of an if in
+        every cell.}
+    \end{sigcolumn}
+  \end{sigcolumns}
+  \sigcallout{Throughput did not change at either level, because the
+    baseline already walked rows in memory order and already split the
+    $v=0$ row out. What the walking order is worth, the deliberately
+    swapped version on the ladder slide shows.}
 \end{frame}
 
 \begin{frame}{Level 5, induction variables}{Row pointers instead of index arithmetic}

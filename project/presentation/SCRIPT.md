@@ -142,9 +142,9 @@ reciprocal rounds differently in the last bits. Throughput went from
 
 ## 5:25 Levels 3 and 4
 
-Levels three and four walk the grid in memory order and give the
-variance-zero row its own loop. Both measured zero, because the baseline
-was already written both ways.
+Levels three and four. The loops walk each row in the order it sits in
+memory, and the variance-zero row gets its own loop instead of an if in
+every cell. The baseline already did both, so throughput did not change.
 
 ## 5:40 Level 5, induction variables
 

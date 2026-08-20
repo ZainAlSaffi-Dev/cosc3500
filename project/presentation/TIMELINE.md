@@ -36,10 +36,10 @@ letting the drift accumulate.
 | 4:30 | 0:10 | Level 0, the harness control. One sentence, keep moving. | `results/code_shots/shot_L0_anchor.png` | small webcam |
 | 4:40 | 0:10 | Level 1, hoisting. The compiler had already done it. Keep moving. | `results/code_shots/shot_L1_hoisting.png` | small webcam |
 | 4:50 | 0:35 | Level 2, strength reduction. The change the compiler is not allowed to make. | `results/code_shots/shot_L2_strength_reduction.png` | small webcam |
-| 5:25 | 0:15 | Levels 3 and 4, null by construction, in one pass. | the levels 3 and 4 table slide | small webcam |
+| 5:25 | 0:15 | Levels 3 and 4 in one pass. The baseline already did both, so throughput did not change. | `shot_L3_order.png` and `shot_L4_split.png` side by side | small webcam |
 | 5:40 | 0:20 | Level 5, induction variables. The one small real win after level 2. | `results/code_shots/shot_L5_pointers.png` | small webcam |
 | 6:00 | 0:25 | Level 6, unrolling, and the laptop regression that justifies the cluster. | `results/code_shots/shot_L6_unroll.png` | small webcam |
-| 6:25 | 0:35 | The ladder, measured. Only level 2 moved, the loop-order control proves the nulls, and the test holds every level to the answer. | `results/bench_ladder_hugepage.png` | small webcam |
+| 6:25 | 0:35 | The ladder, measured. Only level 2 moved, the swapped loop order shows what the traversal order is worth, and the test holds every level to the answer. | `results/bench_ladder_hugepage.png` | small webcam |
 | 7:00 | 0:30 | How the benchmarks were set up so they could not mislead, and the control that misled anyway. | the protocol table, with `results/code_shots/shot_csv_header.png` spliced fullscreen | small webcam |
 | 7:30 | 0:20 | How performance scales with problem size. | `results/bench_scaling.png` | small webcam |
 | 7:50 | 0:25 | The bottleneck. The solver was assumed to be memory-bound and is not. | `results/roofline.png` | small webcam |
@@ -63,7 +63,7 @@ it are in RESULTS.md section 6.
 |---|---|
 | the strike-price slide | Its point survives as one sentence in the full-equation take. The slide is in the backup section. |
 | `results/convergence.png` | The convergence slide moved to the backup section. Validation is carried by the Black-Scholes collapse and the three-method agreement. |
-| the level 3 and 4 slides | Levels 3 and 4 share one table slide in the recording. Their per-level slides with the code screenshots are in the backup section for the interview. Levels 0 and 1 kept their own slides with short takes. |
+| the level 3 and 4 slides | Levels 3 and 4 share one slide in the recording, with both code screenshots side by side. Their full per-level slides are in the backup section for the interview. Levels 0 and 1 kept their own slides with short takes. |
 | `results/code_shots/shot_optmatches.png` | The speedup-cost slide moved to the backup section. Its number, 15 units in the last place under an automated test, is one sentence on the ladder slide. |
 | `results/code_shots/shot_iron_rule.png` | The test-gate slide came out. Its content is one row of the protocol table and one spoken sentence in that take. |
 | `results/code_shots/shot_ctl_order.png`, `results/memory_cache.mp4` | The negative-controls slide moved to the backup section. Its headline number, the 2.1x loop-order cost, is one sentence on the ladder slide. |

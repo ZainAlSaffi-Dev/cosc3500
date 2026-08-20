@@ -31,7 +31,7 @@ so the recording software can be lined up against it.
 | `shot_L0_anchor.png` | still | level 0, the harness control, one sentence | bottom right |
 | `shot_L1_hoisting.png` | still | level 1, hoisting, the compiler had already done it | bottom right |
 | `shot_L2_strength_reduction.png` | still | the divisions on the left became the multiplications on the right | bottom right |
-| the levels 3 and 4 table | still | both null by construction, one reason each | bottom right |
+| `shot_L3_order.png` and `shot_L4_split.png`, side by side | still | the loop order and the split row, and that throughput did not change at either | bottom right |
 | `shot_L5_pointers.png` | still | index arithmetic replaced with three row pointers | bottom right |
 | `shot_L6_unroll.png` | still | the unroll by four, and the laptop regression | bottom right |
 | `bench_ladder_hugepage.png` | still | walk the bars, stop on level 2, then the loop-order control and the test tolerance from the callout | top right, because the legend sits top left |

@@ -72,7 +72,8 @@ words per minute, so the table is achievable at a normal speaking pace
 rather than a hopeful one. The Introduction is long because the
 model-to-equation run builds the pricing equation slide by slide rather
 than asserting it, which the spec permits. The room for it came from
-merging the four null optimisation levels into one slide, and from moving
+giving levels 0 and 1 ten-second takes, sharing one slide between levels
+3 and 4, and from moving
 the strike, convergence and speedup-cost slides into the backup section,
 with their key sentences folded into neighbouring takes.
 
@@ -174,11 +175,13 @@ Lead with the method, not the result.
    a ratio and tells you nothing about which change mattered. So there are
    seven complete solvers, each a copy of the one below with exactly one
    technique added and nothing else changed.
-2. **The nulls.** Levels 0 and 1 keep their own slides at about ten
-   seconds each, the harness is free and the compiler had already
-   hoisted. Levels 3 and 4 share one table slide, null by construction,
-   because the baseline already had the right loop order and the split
-   row. Their per-level slides are in the backup section for the
+2. **The levels where throughput did not change.** Levels 0 and 1 keep
+   their own slides at about ten seconds each, the harness is free and
+   the compiler had already hoisted. Levels 3 and 4 share one slide with
+   their code screenshots side by side, the loop order that walks each
+   row in memory order on the left, the split $v=0$ loop on the right.
+   Throughput did not change at either, because the baseline already had
+   both. Their full per-level slides are in the backup section for the
    interview.
 3. **The rung that paid, then the small ones.** Level 2 gets its own slide
    and the most time, because it took the solver from 52.6 to 131.2
