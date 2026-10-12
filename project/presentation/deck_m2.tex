@@ -1,0 +1,513 @@
+% The Milestone 2 recording deck. Same Beamer skeleton and palette as the
+% Milestone 1 deck (deck.tex), one frame per on-screen item in
+% presentation/M2_SCRIPT.md, in the same order. Compile with
+% `make slides-m2` (tectonic presentation/deck_m2.tex). Asset paths are
+% relative to the presentation/ directory.
+%
+% The bottom-right corner of every frame is kept empty for the webcam box,
+% which is why the callout band below is narrower than the M1 one. The M1
+% feedback found a streaming overlay covering slide headers.
+
+\documentclass[aspectratio=169,11pt]{beamer}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{xstring}
+\usepackage{amsmath}
+\usepackage{bm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{colortbl}
+\usepackage{tikz}
+
+% ***************************************************
+% Palette
+% ***************************************************
+% figstyle.py values wearing the sig* role names, so slide code written
+% for either deck compiles against either palette.
+
+\definecolor{sigblue}{HTML}{2563EB}   % BLUE, the thing that worked
+\definecolor{sigink}{HTML}{1F2937}    % deck.html --ink, titles and text
+\definecolor{signavy}{HTML}{111827}   % darker ink for the head and foot bars
+\definecolor{sigslate}{HTML}{6B7280}  % DARK_GREY, captions and notes
+\definecolor{sigmist}{HTML}{F0F3F9}   % background canvas, a shade of wash
+\definecolor{sigcard}{HTML}{FFFFFF}   % figure and block bodies
+\definecolor{sigline}{HTML}{D1D5DB}   % SPINE, hairlines
+\definecolor{sigwhite}{HTML}{FFFFFF}
+\definecolor{siggreen}{HTML}{059669}  % example blocks
+\definecolor{sigamber}{HTML}{D97706}  % AMBER, alert blocks
+\definecolor{sigred}{HTML}{DC2626}    % RED, negative controls
+
+% ***************************************************
+% Theme
+% ***************************************************
+
+\usetheme{Madrid}
+\usecolortheme{default}
+\usefonttheme{professionalfonts}
+\usefonttheme[onlymath]{serif}
+
+\setbeamercolor{background canvas}{bg=sigmist}
+
+\setbeamercolor*{palette primary}{bg=signavy, fg=sigwhite}
+\setbeamercolor*{palette secondary}{bg=sigblue, fg=sigwhite}
+\setbeamercolor*{palette tertiary}{bg=sigink, fg=sigwhite}
+\setbeamercolor*{palette quaternary}{bg=signavy, fg=sigwhite}
+
+% Every beamer element that carries a palette colour, assigned in one pass
+% so the theme has a single source of truth.
+\makeatletter
+\@for\@entry:={%
+  normal text/fg/sigink,structure/fg/sigblue,%
+  itemize item/fg/sigblue,itemize subitem/fg/sigslate,%
+  enumerate item/fg/sigblue,alerted text/fg/sigblue,caption name/fg/sigblue,%
+  section in toc/fg/sigink,subsection in toc/fg/sigslate,%
+  block title/bg/sigblue,block title/fg/sigwhite,%
+  block title alerted/bg/sigamber,block title alerted/fg/sigwhite,%
+  block title example/bg/siggreen,block title example/fg/sigwhite,%
+  block body/bg/sigcard,block body/fg/sigink,%
+  block body alerted/bg/sigcard,block body alerted/fg/sigink,%
+  block body example/bg/sigcard,block body example/fg/sigink%
+}\do{%
+  \StrCut{\@entry}{/}\@element\@rest
+  \StrCut{\@rest}{/}\@channel\@value
+  % Beamer stores the key list unexpanded, so the assignment is built now.
+  \edef\@assign{\noexpand\setbeamercolor{\@element}{\@channel=\@value}}%
+  \@assign
+}
+\makeatother
+
+\setbeamerfont{author in head/foot}{size=\tiny}
+\setbeamertemplate{footline}{%
+  \leavevmode%
+  \hbox{%
+    \begin{beamercolorbox}[wd=.44\paperwidth,ht=2.25ex,dp=1ex,center]{author in head/foot}%
+      \usebeamerfont{author in head/foot}\insertshortauthor
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.31\paperwidth,ht=2.25ex,dp=1ex,center]{title in head/foot}%
+      \usebeamerfont{title in head/foot}\insertshorttitle
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.25\paperwidth,ht=2.25ex,dp=1ex,right]{date in head/foot}%
+      \usebeamerfont{date in head/foot}\insertshortdate{}\hspace*{2em}%
+      \insertframenumber{} / \inserttotalframenumber\hspace*{2ex}%
+    \end{beamercolorbox}}%
+  \vskip0pt%
+}
+
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize item}{\raisebox{0.15ex}{\rule{0.6ex}{0.6ex}}}
+\setbeamertemplate{itemize subitem}{\raisebox{0.2ex}{\rule{0.45ex}{0.45ex}}}
+\setbeamertemplate{blocks}[rounded][shadow=false]
+
+% ***************************************************
+% Furniture
+% ***************************************************
+
+\newcommand{\sigemph}[1]{{\color{sigblue}\bfseries #1}}
+
+% ***************************************************
+% Slide structures
+% ***************************************************
+
+% Row of figures with captions beneath. Column width follows the number of
+% entries. Values must not contain a slash, it is the pair separator.
+\newcounter{sigentries}
+\newcommand{\sigstats}[1]{%
+  \setcounter{sigentries}{0}%
+  \foreach \sigignored in {#1}{\stepcounter{sigentries}}%
+  \pgfmathsetmacro{\sigcolwidth}{(1 - 0.04*(\value{sigentries}-1))/\value{sigentries}}%
+  \par\medskip\noindent
+  \foreach \sigvalue/\sigcaption [count=\sigindex] in {#1}{%
+    \ifnum\sigindex>1\hfill\fi
+    \begin{minipage}[t]{\sigcolwidth\linewidth}
+      \raggedright{\color{sigblue}\Large\bfseries \sigvalue}\par\vspace{0.15em}
+      {\color{sigslate}\scriptsize \sigcaption}
+    \end{minipage}%
+  }%
+  \par
+}
+
+% Tinted band across the foot of a slide, for one sentence.
+\newcommand{\sigcallout}[1]{%
+  \vfill
+  \begin{beamercolorbox}[wd=\linewidth,sep=0.7em,rounded=true]{block body}
+    {\color{sigblue}\rule{0.9ex}{0.9ex}}\hspace{0.5em}#1
+  \end{beamercolorbox}%
+}
+
+% Two plain dot points under a rung's screenshot. The first says what the
+% technique changes, the second why it was expected to pay. The measured
+% verdict stays in the callout beneath them.
+\newcommand{\sigrungnotes}[2]{%
+  \par\vspace{0.25em}
+  {\footnotesize
+  \begin{itemize}\setlength{\itemsep}{0.1em}
+    \item #1
+    \item #2
+  \end{itemize}}%
+}
+
+% Balanced two-column body, gutter set once.
+\newenvironment{sigcolumns}{\begin{columns}[T,onlytextwidth]}{\end{columns}}
+\newenvironment{sigcolumn}{\begin{column}{0.48\textwidth}}{\end{column}}
+
+% Booktabs table with the rules, sizing and stretch set once.
+\newcommand{\sigtable}[3]{%
+  \begingroup
+  \renewcommand{\arraystretch}{1.15}%
+  \begin{table}\small
+    \begin{tabular}{#1}
+      \toprule
+      #2 \\
+      \midrule
+      #3
+      \bottomrule
+    \end{tabular}
+  \end{table}%
+  \endgroup
+}
+
+% Figure slot. Takes the rendered asset's path; until the asset exists the
+% slot reserves the same space and names the file it wants, so the layout
+% can be judged before make stills / make code-shots have run.
+\newlength{\sigslotheight}
+\setlength{\sigslotheight}{0.54\textheight}
+% Setting \sigslotheight inside a frame stays local to that frame, which is
+% how the rung frames trade figure height for their dot points.
+\newcommand{\sigrungfigure}{\setlength{\sigslotheight}{0.34\textheight}}
+\newcommand{\sigfigure}[3][\linewidth]{%
+  \begin{minipage}{#1}
+    \centering
+    \IfFileExists{#2}{%
+      \includegraphics[width=\linewidth,height=\sigslotheight,keepaspectratio]{#2}%
+    }{%
+      \setlength{\fboxsep}{0pt}%
+      \fcolorbox{sigline}{sigcard}{%
+        \begin{minipage}[c][\sigslotheight][c]{\dimexpr\linewidth-2\fboxrule\relax}
+          \centering
+          {\color{sigslate}\scriptsize\texttt{#2}}
+        \end{minipage}%
+      }%
+    }%
+    \par\vspace{0.45em}
+    {\scriptsize\color{sigslate} #3\par}
+  \end{minipage}%
+}
+
+% Supporting frames sit after the appendix marker and outside the count.
+\newcounter{siglastframe}
+\newcommand{\sigbackupbegin}{\setcounter{siglastframe}{\value{framenumber}}}
+\newcommand{\sigbackupend}{\setcounter{framenumber}{\value{siglastframe}}}
+
+
+% Callout band stops short of the bottom-right corner, which holds the webcam.
+\renewcommand{\sigcallout}[1]{%
+  \vfill
+  \begin{beamercolorbox}[wd=0.74\linewidth,sep=0.7em,rounded=true]{block body}
+    {\color{sigblue}\rule{0.9ex}{0.9ex}}\hspace{0.5em}#1
+  \end{beamercolorbox}%
+}
+
+% ***************************************************
+% Title data
+% ***************************************************
+
+\title[Parallel Heston PDE pricer]{Pricing an option on many cores}
+\subtitle{SIMD, OpenMP and hybrid MPI for a Heston PDE solver}
+\author[Zain Al-Saffi]{Zain Al-Saffi, 48008361}
+\institute[]{COSC3500 Milestone 2}
+\date{October 2026}
+
+\begin{document}
+
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 0:00 Cold open
+% --------------------------------------------------------------------------
+
+\begin{frame}{101 times faster on one node}{Every version gives the same answer to 15 digits}
+  \setlength{\sigslotheight}{0.56\textheight}
+  \begin{center}
+    \sigfigure[0.95\linewidth]{../results/m2/f1_ladder.png}{}
+  \end{center}
+  \sigcallout{Four techniques, each measured on its own, from 57 to 5729
+    million cell updates per second.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 0:20 The problem
+% --------------------------------------------------------------------------
+
+\begin{frame}{The problem}{The price today of the right to buy at a fixed strike}
+  \begin{sigcolumns}
+    \begin{sigcolumn}
+      \sigfigure{../results/payoff.png}{At expiry the value is the payoff.}
+    \end{sigcolumn}
+    \begin{sigcolumn}
+      \sigfigure{stills/still_timevalue.png}{Mid-solve. Each step walks one
+        step back towards today.}
+    \end{sigcolumn}
+  \end{sigcolumns}
+  \sigcallout{Heston turns the price into a PDE in stock price, variance and
+    time. The same formula runs on a million cells every step.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 1:20 The data structure
+% --------------------------------------------------------------------------
+
+\begin{frame}{The data structure}{Two flat arrays of doubles, read one, write the other, swap}
+  \setlength{\sigslotheight}{0.42\textheight}
+  \begin{center}
+    \sigfigure[0.97\linewidth]{../results/m2/code_shots/shot_data_layout.png}{}
+  \end{center}
+  \sigstats{16 KiB/one row of 2048 doubles, 8 MiB/one sheet at 2048 x 512,
+    16 MiB/both sheets}
+  \sigcallout{The stock axis is contiguous, so the inner loop walks memory
+    in order.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 2:00 Where the time goes
+% --------------------------------------------------------------------------
+
+\begin{frame}{Where the time goes}{gprof flat profile, one thread, 2048 x 512}
+  \setlength{\sigslotheight}{0.45\textheight}
+  \begin{center}
+    \sigfigure[0.97\linewidth]{../results/m2/f12_profile.png}{}
+  \end{center}
+  \sigcallout{The interior row update holds 99 percent of the time. The
+    boundaries are under half a percent on one thread.}
+\end{frame}
+
+\begin{frame}{What the compiler does alone}{The baseline at -O0 to -O3, same answer at every level}
+  \setlength{\sigslotheight}{0.54\textheight}
+  \begin{center}
+    \sigfigure[0.7\linewidth]{../results/m2/f11_optlevels.png}{}
+  \end{center}
+  \sigcallout{11 at -O0, 58 at -O2. -O3 doubles it by vectorising with
+    two-lane SSE.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 2:40 The serial rung
+% --------------------------------------------------------------------------
+
+\begin{frame}{The serial rung}{Divisions replaced by multiplications, once per solve}
+  \setlength{\sigslotheight}{0.48\textheight}
+  \begin{center}
+    \sigfigure[0.95\linewidth]{../results/m2/code_shots/shot_serial_row.png}{}
+  \end{center}
+  \sigcallout{The compiler may not do this, because it changes the last bits.
+    159 million updates a second, \sigemph{2.8x} the baseline.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 3:10 SIMD
+% --------------------------------------------------------------------------
+
+\begin{frame}{SIMD with AVX2}{Four neighbouring cells per instruction, fused multiply-add}
+  \setlength{\sigslotheight}{0.4\textheight}
+  \begin{center}
+    \sigfigure[0.98\linewidth]{../results/m2/code_shots/shot_simd_fma.png}{}
+  \end{center}
+  \sigstats{96\%/of scalar peak before SIMD, 1.5x/compiler at -O3 with two
+    lanes, 2.4x/by hand with four lanes and FMA}
+  \sigcallout{379 million updates a second. Not 4x, because each group of
+    four loads nine overlapping windows.}
+\end{frame}
+
+\begin{frame}{SIMD on the roofline}{Measured ceilings on one r730 node}
+  \setlength{\sigslotheight}{0.54\textheight}
+  \begin{center}
+    \sigfigure[0.62\linewidth]{../results/m2/f5_roofline.png}{}
+  \end{center}
+  \sigcallout{The SIMD rung does 12 GFLOP/s against an AVX2 ceiling of 43
+    for one core.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 4:10 OpenMP
+% --------------------------------------------------------------------------
+
+\begin{frame}{OpenMP}{One pragma shares the rows of each step between threads}
+  \setlength{\sigslotheight}{0.28\textheight}
+  \begin{center}
+    \sigfigure[0.98\linewidth]{../results/m2/code_shots/shot_omp_pragma.png}{}
+  \end{center}
+  \begin{itemize}
+    \item Each thread reads only the old sheet and writes only its own rows.
+    \item So there are no locks, and the answer equals one thread bit for bit.
+  \end{itemize}
+  \sigcallout{\sigemph{15.8x} on 24 cores.}
+\end{frame}
+
+\begin{frame}{Strong scaling}{Fixed 2048 x 512 grid, 1 to 24 threads}
+  \setlength{\sigslotheight}{0.56\textheight}
+  \begin{center}
+    \sigfigure[0.95\linewidth]{../results/m2/f2_strong.png}{}
+  \end{center}
+  \sigcallout{Amdahl fit, serial fraction 1.2 percent. The scalar row
+    scales better, 18.5x, because it moves data at half the rate.}
+\end{frame}
+
+\begin{frame}{Placement}{Which socket the threads and the pages sit on}
+  \setlength{\sigslotheight}{0.56\textheight}
+  \begin{center}
+    \sigfigure[0.95\linewidth]{../results/m2/f7_placement.png}{}
+  \end{center}
+  \sigcallout{12 threads on one socket 1880, over both sockets 3319.
+    Interleaving the pages gave the big grid 28 percent more.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 5:25 Hybrid MPI
+% --------------------------------------------------------------------------
+
+\begin{frame}{Hybrid MPI}{A slab of rows per process, one halo row swapped with each neighbour}
+  \begin{sigcolumns}
+    \begin{sigcolumn}
+      \sigfigure{../results/m2/code_shots/shot_mpi_halo.png}{Receives are
+        posted before sends.}
+    \end{sigcolumn}
+    \begin{sigcolumn}
+      \sigfigure{../results/m2/f10_decomposition.png}{Which cells each lane,
+        thread and rank owns.}
+    \end{sigcolumn}
+  \end{sigcolumns}
+  \sigcallout{One process of 12 threads per socket first-touches its own
+    copy of the grid on its own socket.}
+\end{frame}
+
+\begin{frame}{Hybrid layouts}{One and two nodes, two grid sizes}
+  \setlength{\sigslotheight}{0.56\textheight}
+  \begin{center}
+    \sigfigure[0.95\linewidth]{../results/m2/f8_layouts.png}{}
+  \end{center}
+  \sigcallout{Two nodes give \sigemph{1.41x} one node, 70 percent efficient.
+    Each halo exchange costs about 45 microseconds.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 6:15 Same answer on every rung
+% --------------------------------------------------------------------------
+
+\begin{frame}{Same answer on every rung}{Price, delta, gamma and vega against the baseline}
+  \setlength{\sigslotheight}{0.54\textheight}
+  \begin{center}
+    \sigfigure[0.68\linewidth]{../results/m2/f9_correctness.png}{}
+  \end{center}
+  \sigcallout{Every rung within 3.3e-15. OpenMP and MPI equal the SIMD rung
+    exactly, and every job reran the tests before timing.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 6:40 Weak scaling and grid size
+% --------------------------------------------------------------------------
+
+\begin{frame}{Weak scaling}{21 rows per thread, the grid grows with the threads}
+  \setlength{\sigslotheight}{0.56\textheight}
+  \begin{center}
+    \sigfigure[0.95\linewidth]{../results/m2/f3_weak.png}{}
+  \end{center}
+  \sigcallout{Step time 0.14 to 0.18 ms, a scaled speedup of 19 on 24
+    threads.}
+\end{frame}
+
+\begin{frame}{Grid size}{1 MiB to 128 MiB of working set}
+  \setlength{\sigslotheight}{0.56\textheight}
+  \begin{center}
+    \sigfigure[0.95\linewidth]{../results/m2/f4_size.png}{}
+  \end{center}
+  \sigcallout{The 2048 grid fits in the two L3 caches and runs 36x serial.
+    At 4096 by 1024 it spills to memory and the rate halves.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 7:25 Bottlenecks
+% --------------------------------------------------------------------------
+
+\begin{frame}{Where each step goes}{Parallel rows, serial boundaries and halo exchange}
+  \setlength{\sigslotheight}{0.56\textheight}
+  \begin{center}
+    \sigfigure[0.95\linewidth]{../results/m2/f6_breakdown.png}{}
+  \end{center}
+  \sigcallout{At 24 threads the serial boundaries are 8 percent of the step,
+    not the half percent I expected.}
+\end{frame}
+
+\begin{frame}{After threads, bandwidth}{The roofline again}
+  \setlength{\sigslotheight}{0.54\textheight}
+  \begin{center}
+    \sigfigure[0.62\linewidth]{../results/m2/f5_roofline.png}{}
+  \end{center}
+  \sigcallout{The large grid sits on the memory roof, so the limit is
+    bandwidth, not arithmetic.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 8:00 Tried and rejected
+% --------------------------------------------------------------------------
+
+\begin{frame}{Tried and rejected}{Each bar is a variant against the OpenMP rung}
+  \setlength{\sigslotheight}{0.56\textheight}
+  \begin{center}
+    \sigfigure[0.95\linewidth]{../results/m2/f1_ladder.png}{}
+  \end{center}
+  \sigcallout{Float was 1.75x faster and 4.5x on the big grid, but moved the
+    price by 4 cents and gamma by 12 percent.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 8:30 Conclusion
+% --------------------------------------------------------------------------
+
+\begin{frame}{Conclusion}{The ladder against the measured ceilings}
+  \vspace*{-0.6em}
+  \begin{sigcolumns}
+    \begin{sigcolumn}
+      \sigtable{lrr}{\textbf{Rung} & \textbf{Mcell/s} & \textbf{Total}}{%
+        baseline & 57 & 1x \\
+        serial & 159 & 2.8x \\
+        simd & 379 & 6.7x \\
+        omp, 24 threads & 5729 & 101x \\
+        \rowcolor{sigblue!12}
+        mpi, two nodes & 8769 & \textbf{155x} \\}
+    \end{sigcolumn}
+    \begin{sigcolumn}
+      \sigtable{lr}{\textbf{Ceiling} & \textbf{Measured}}{%
+        scalar peak, one core & 5.1 GFLOP/s \\
+        AVX2 peak, one core & 43 GFLOP/s \\
+        DRAM triad, 24 threads & 68 GB/s \\}
+      {\footnotesize
+      \begin{itemize}
+        \item Serial sat at the scalar peak, so SIMD was the only way up.
+        \item Threads took the large grid onto the memory roof.
+      \end{itemize}}
+    \end{sigcolumn}
+  \end{sigcolumns}
+  \sigcallout{Four of six hypotheses held. The serial boundary and the
+    network did not. Next is overlapping the halo with the interior rows.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 9:10 Close
+% --------------------------------------------------------------------------
+
+\begin{frame}[plain]
+  \vfill
+  \centering
+  {\Large\color{sigink}\bfseries 101x on one node, 155x on two,
+    the same answer on every rung}
+  \par\vspace{0.6em}
+  {\color{sigslate} Every number has a job id in docs/RESULTS.md}
+  \par\vspace{0.3em}
+  {\color{sigslate} COSC3500 Milestone 2, Zain Al-Saffi}
+  \vfill
+\end{frame}
+
+\end{document}
