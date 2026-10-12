@@ -572,3 +572,235 @@ collect them.
 9. **The convergence ladder co-varies ns, nv and nt.** Legitimate for a
    convergence study along a fixed refinement path, but it means no single
    axis's order is isolated, and the reported ≈ 2.2 belongs to the path.
+
+---
+
+# Milestone 2 results
+
+Every number below comes from an exclusive r730 node (dual Xeon E5-2670 v3,
+2 x 12 cores, no hyper-threading, two NUMA nodes, 30 MiB L3 per socket,
+g++ 8.5.0, Open MPI 4.1.1) through `sbatch`. Each is the median of 5 reps,
+with huge pages pinned (`MALLOC_MMAP_THRESHOLD_=1048576`), denormals
+flushed to zero (`slurm/flush_denormals.c`, see M2.7), and
+`OMP_PLACES=cores OMP_PROC_BIND=close` unless a row says otherwise. The CSVs
+carry the full provenance in their headers. `make m2-figures` rebuilds
+every figure in `results/m2/` from exactly these files. Rates are in
+Mcell-updates/s (million cell updates per second) on the 2048 by 512 grid
+unless stated.
+
+The first round of sweeps (jobs 651147 to 651151 and 651154) ran without
+flushing denormals and is kept in `results/superseded/`. It is not quoted
+here, for the reason in M2.7.
+
+## M2.1 The ladder (job 651295, figure F1)
+
+| Rung | Rate | Gain over the rung below | Total over baseline |
+|---|---|---|---|
+| baseline | 57 | | 1.0x |
+| serial | 159 | 2.81x | 2.8x |
+| simd (AVX2 and FMA) | 379 | 2.39x | 6.7x |
+| omp, 24 threads | 5729 | 15.1x | 101x |
+| mpi, 2 ranks x 12 threads, one node | 6019 | 1.05x | 106x |
+
+Every rung matches the baseline to 3.3e-15 or better, and omp and mpi match
+simd bit for bit (test log `slurm-651295.out`, figure F9).
+
+## M2.2 Strong scaling (jobs 651296 and 651297, figure F2)
+
+| Threads | omp (AVX2 row) | speedup | omp_scalar | speedup |
+|---|---|---|---|---|
+| 1 | 363 | 1.0 | 158 | 1.0 |
+| 12 | 3781 | 10.4 | 1603 | 10.1 |
+| 24 | 5733 | 15.8 | 2922 | 18.5 |
+
+Amdahl fits give a serial fraction of 1.18% for the AVX2 row and 1.57% for
+the scalar row. The boundary work alone is 0.36% of a one-thread step, so
+most of the fitted fraction is something else. The measured serial boundary
+time grows from 0.010 ms per step on one thread to 0.015 ms on 24, because
+the main thread then has to fetch rows that other cores have just written.
+At 24 threads it is 8.2% of the step.
+
+The AVX2 row scales worse than the scalar row above 16 threads (efficiency
+66% against 77% at 24). At 24 threads the AVX2 kernel moves about
+5.7e9 x 24 bytes = 138 GB/s through the cache hierarchy, twice the measured
+DRAM triad bandwidth, so it is running out of shared cache and memory
+bandwidth before the scalar row does. SIMD and threads still multiply, the
+AVX2 rung is 1.96 times the scalar rung at 24 threads.
+
+On this node `OMP_PROC_BIND=close` alternates sockets from the second
+thread, because the CPUs are numbered even on socket 0 and odd on socket 1
+(job 651500 printed each thread's CPU). So every even thread count in this
+sweep is split evenly over the two sockets.
+
+## M2.3 Weak scaling (job 651298, figure F3)
+
+21 interior rows per thread, `vmax` grown with the rows so the spacing stays
+the same. The step time rose from 0.142 ms on 1 thread to 0.179 ms on 24, so
+the scaled speedup on 24 threads is 24 x 0.142 / 0.179 = 19.1 against an
+ideal 24. The one-thread grid (23 rows, 370 KiB per sheet) sits in L2, which
+flatters the one-thread point.
+
+## M2.4 Grid size (job 651299, figure F4)
+
+| Grid | Working set | serial | simd | omp 24 | omp over serial |
+|---|---|---|---|---|---|
+| 512 x 128 | 1 MiB | 143 | 342 | 1181 | 8x |
+| 1024 x 256 | 4 MiB | 158 | 379 | 4097 | 26x |
+| 2048 x 512 | 16 MiB | 158 | 381 | 5694 | 36x |
+| 2896 x 724 | 32 MiB | 167 | 171 | 6538 | 39x |
+| 4096 x 1024 | 64 MiB | 156 | 342 | 2997 | 19x |
+| 8192 x 1024 | 128 MiB | 154 | 321 | 1852 | 12x |
+
+Serial and simd barely care about size, because one core cannot pull data
+fast enough for memory to be its limit. The 24-thread rung peaks while the
+grid fits in the two L3 caches (60 MiB) and halves once it does not.
+Small grids lose to the fork and barrier every step, which costs the same
+whatever the size. The simd point at 2896 x 724 is an address effect, not a
+size effect (M2.8).
+
+## M2.5 Roofline (jobs 651302, 651295, 651299, figure F5)
+
+`bench_peak.sh` measured, on r730-2, a scalar peak of 5.12 GFLOP/s, an AVX2
+FMA peak of 43.4 GFLOP/s on one core and 971 on 24, and a triad bandwidth of
+12.4 GB/s on one thread and 67.9 GB/s on 24. The kernel does 31 flops per
+cell update over 24 bytes, so the DRAM roof at its intensity of 1.29 is
+about 88 GFLOP/s. omp on 24 threads reaches 178 GFLOP/s at 2048 by 512, twice
+the DRAM roof, because the grid is in L3. At 4096 by 1024 it is 93 GFLOP/s,
+on the DRAM roof. PLAN §5 hypothesis 3 held. The kernel turns from
+cache-fed to memory-bound once the grid leaves L3.
+
+The first peak job (651154) reported only 24.8 GB/s on 24 threads, because
+its arrays were `std::vector`, zero-filled on the main thread, so every page
+sat on socket 0. Allocating with `new double[n]` and touching in parallel
+gave 67.9 GB/s.
+
+## M2.6 Experiments (jobs 651300, 651301, 651474, 652647, figures F1 side panel, F7 and F9)
+
+All at 24 threads on 2048 by 512 unless stated, relative to the omp rung in
+the same job.
+
+| Id | Variant | Result |
+|---|---|---|
+| E4 | one parallel region for the whole solve | 1.035x at 2048 x 512, 1.155x at 512 x 128 |
+| E5 | `schedule(dynamic,1)`, `(dynamic,8)`, `guided` | 0.60x, 0.72x, 0.84x, static wins |
+| E8 | v = 0 row and stock edges inside the parallel loop | 1.05x at 2048 x 512, 1.07x at 512 x 128, serial share 8.2% to 1.9% |
+| E6 | 12 threads `spread` (socket 0 only) against `close` (both sockets), 4096 x 1024 | 1880 against 3319 |
+| E6 | unbound threads (`OMP_PROC_BIND=false`), 24 threads | 1.165x at 2048 x 512, 1.141x at 4096 x 1024, not explained |
+| E7 | `numactl --interleave=all`, 24 threads | 1.065x at 2048 x 512, 1.28x at 4096 x 1024, and far less spread between reps |
+| E11 | glibc default allocator against huge pages pinned | omp 24: 3990 against 5883 (0.68x), serial 88 against 158 (0.56x). Only the first rep of each run gets huge pages |
+| E12 | denormals not flushed (job 651294) | see M2.7 |
+| E3 | float sheets, `omp_float` (job 652647) | 1 thread 735 against simd 383 (1.92x), 24 threads 10048 against 5732 at 2048 x 512 (1.75x), 12945 against 2902 at 4096 x 1024 (4.46x). Rejected for accuracy, see below |
+
+E4 and E8 are small wins that matter most on small grids, where the per-step
+cost is a larger share. E7 confirms the first-touch problem. Every page of
+the grid is written first by the main thread, so it all lives in socket 0's
+memory, and spreading the pages gives the big grid 28% more.
+
+E3 is the one experiment that is much faster and was still not kept. On the
+reference grid (2048 x 512, 980000 steps, 24 threads, one run each) the
+float solver took 95.6 s against 170.2 s, but gave a price of 196.1256
+against the double 196.1684 and the Fourier price 196.1692. The float error
+of $0.044 is larger than the double error of the 841 x 65 grid in §7
+($0.026). Gamma moved by 11.9%, vega by 2.3% and delta by 0.46%. On the
+128 x 32 test grid with 5200 steps the worst float gap from the baseline is
+8.2e-6 (put) and 2.1e-6 (call), held by its own 1e-4 limit in
+`test_ladder_matches`. The 4096 x 1024 gain is more than 2x because the
+float sheets (32 MB) fit in the two L3 caches (60 MB) and the double sheets
+(64 MB) do not.
+
+## M2.7 Denormals (jobs 651284 and 651294)
+
+| Rung | not flushed | flushed | gain |
+|---|---|---|---|
+| baseline | 52 | 56 | 1.08x |
+| serial | 122 | 157 | 1.29x |
+| simd | 276 | 382 | 1.38x |
+| omp, 24 threads | 4552 | 5743 | 1.26x |
+
+Short benchmark runs leave many cells holding numbers below 2.2e-308, which
+this CPU handles through a slow microcode path. The number of such cells
+depends on the grid and `nt`, so without flushing, rungs and thread counts
+run with different `nt` were being compared in different regimes. Every
+price in the table is identical to ten digits with and without flushing.
+
+## M2.8 The 2^24 byte sheet distance (jobs 651439, 651445, 651450)
+
+simd on one thread runs at 169 to 183 on any grid whose two sheets land
+exactly 2^24 bytes apart (2896 x 724, 1448 x 1448, 2044 x 1026), and at about
+405 on neighbouring grids. omp on 2 threads shows the same (336 against
+814). The trigger is established, the hardware mechanism is not
+(CHANGELOG Phase 5, Finding 1).
+
+## M2.9 Hybrid MPI and OpenMP (job 651303, figures F6 and F8)
+
+| Layout | 2048 x 512 | halo share | 4096 x 1024 | halo share |
+|---|---|---|---|---|
+| 1 node, 1 rank x 24 threads | 5714 | 0 | 2925 | 0 |
+| 1 node, 2 ranks x 12 (one per socket) | 6232 | 18% | 6314 | 10% |
+| 2 nodes, 1 rank x 24 each | 5616 | 38% | 8483 | 28% |
+| 2 nodes, 2 ranks x 12 each | 8768 | 38% | 9900 | 28% |
+
+One rank per socket beats one rank of 24 threads by 9% on the small grid and
+by 2.16 times on the big one, because each rank allocates and first-touches
+its own copy of the grid on its own socket (PLAN §5 hypothesis 5, held).
+Across two nodes the best layout gains 1.41 times at 2048 x 512 (70%
+efficiency) and 1.57 times at 4096 x 1024 (78%). The halo exchange is 38%
+of a 0.12 ms step on the small grid, about 45 microseconds, far more than
+64 KiB needs at any network speed, so it is dominated by per-message
+latency and by waiting for the slower neighbour, not by bandwidth. PLAN §5
+hypothesis 6 (above 80% efficiency) did not hold. The run excludes Open MPI's
+fast transports (`OMPI_MCA_mtl`, `OMPI_MCA_btl`), as the matrixass MPI runs
+needed, so messages go over TCP.
+
+## M2.10 Hypotheses from PLAN §5 against the data
+
+| # | Hypothesis | Outcome |
+|---|---|---|
+| 1 | SIMD gives 2 to 3.5x over serial | held, 2.39x |
+| 2 | OpenMP scales close to linearly to 12 threads | held, 10.4x at 12 (87%) |
+| 3 | the large grid becomes memory-bound | held, 2997 at 4096 x 1024 against 5694, on the DRAM roof |
+| 4 | the serial boundary is about 0.5% and does not limit scaling | overturned, it grows to 8.2% at 24 threads |
+| 5 | one rank per socket beats one rank of 24 threads | held, 1.09x and 2.16x |
+| 6 | two nodes above 80% efficient | overturned, 70% and 78% |
+
+Not run: E2 (aligned loads) and E9 (overlapping the halo with compute). E3
+(float32) ran in P7, see M2.6.
+
+## M2.11 Profile and optimisation levels (jobs 652696 and 652697, figures F11 and F12)
+
+Added after the Milestone 1 feedback asked for a flat profile of the
+baseline and a four-bar -O0 to -O3 chart. Both on one thread at 2048 x 512.
+
+gprof flat profile, built with `-O2 -pg` (job 652697).
+
+| Rung | Hot function | Share | Everything else |
+|---|---|---|---|
+| baseline | `BaselineSolver::solve` | 99.9% | 0.1%, filling the new sheets with zeros (`vector::assign`) |
+| serial | `update_cells_scalar` | 99.4% | `update_zero_row` 0.3%, `copy_top_row` 0.15%, filling the sheets 0.15% |
+| simd | `update_row_avx` | 98.9% | the scalar remainder 0.4%, `update_zero_row` 0.4%, filling the sheets 0.4% |
+
+The baseline is one function because the whole algorithm is one loop nest,
+so the flat profile can only say the time is in that nest. The later rungs
+split the work into functions, and the profile shows the interior update
+holds 99% of the time and the boundaries under half a percent on one
+thread. That is the serial fraction a parallel version starts from.
+
+Optimisation levels (job 652696), in Mcell-updates/s. Each pair was built
+with its own level in place of `-O2`, and every level gave exactly the
+`-O2` price, delta, gamma and vega.
+
+| Level | baseline | serial |
+|---|---|---|
+| `-O0` | 10.7 | 44.8 |
+| `-O1` | 57.6 | 156.1 |
+| `-O2` | 57.7 | 158.4 |
+| `-O3` | 112.5 | 238.6 |
+
+`-O0` keeps every variable in memory, so the baseline is 5.4 times slower
+than `-O1`. `-O1` and `-O2` are the same for this loop. `-O3` turns on
+GCC 8's auto-vectoriser, which uses two-lane SSE2 because no `-mavx2` is
+given, and gains 1.95 times on the baseline and 1.51 times on the serial
+rung. The hand-written AVX2 rung, built at `-O2`, reaches 379, which is
+1.59 times the `-O3` serial rung. This also answers most of experiment E1
+(`-O3` on the serial rung). `-ffast-math` was not tried.
+
