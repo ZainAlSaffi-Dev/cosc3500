@@ -1,551 +1,538 @@
-# Milestone 1 Build Plan — Heston PDE Option Pricer (Serial)
+# Milestone 2 Build Plan. Parallel Heston PDE Option Pricer
 
-Spec: `docs/InitialSpecDesign.md`. Rubric: Intro/Background 20%, Optimisation 25%,
-Benchmarking 25%, Presentation 20%, Reflection 10%, Code submission pass/fail.
-Milestone 1 is **serial only** — no SIMD intrinsics, no OpenMP, no CUDA.
+Milestone 1 (serial) is finished and scored 20/24. Most of the lost marks were
+for presentation, not the engineering. The Milestone 1 code, ladder and
+numbers are frozen at the git tag `milestone1` (`git checkout milestone1`
+reproduces every M1 figure). This file replaces the M1 plan and is the single
+source of truth for Milestone 2.
+
+Spec: `COSC3500_Milestone.pdf` (one rubric shared by both milestones, page 2).
+Model background: `docs/InitialSpecDesign.md`. M1 findings: `docs/RESULTS.md`.
 
 ---
 
 ## 0. The one-paragraph mental model
 
-We price one European option under Heston by filling a 2-D grid of "what-if"
-scenarios (stock price × variance) backwards in time from expiry to today.
-Each backward step blends, for every interior cell, nine cells of the later
-sheet (3×3 stencil — the diagonal entries carry the price/vol correlation).
-Two buffers, swap per step. Price = cell nearest (spot, v0); Greeks = finite
-differences around it. Explicit scheme ⇒ conditionally stable ⇒ the stability
-boundary is itself a deliverable, not a bug.
+We price one European option under Heston by filling a 2-D grid of what-if
+scenarios (stock price by variance) backwards in time from expiry to today.
+Every timestep, each interior cell is rewritten from the nine cells around it
+in the previous sheet. Two buffers, swap per step. Because each step only
+reads the old sheet and only writes the new one, every cell in a step is
+independent of every other cell. That independence is the whole Milestone 2
+story. It lets four neighbouring cells share one AVX instruction (SIMD), lets
+24 cores each own a band of rows (OpenMP), and lets two machines each own
+half the rows and swap one edge row per step (MPI).
 
-## 1. Numerical scheme (decisions locked)
+---
 
-| Decision | Choice | Rationale |
-|---|---|---|
-| Scheme | Explicit Euler in time, central differences in S and v, central cross-term | Simplest correct; stability study is a deliverable |
-| Grid layout | One flat `std::vector<double>`, **row-major with S contiguous**: `idx = j*Ns + i` (`i` = stock index, `j` = variance index) | Inner loop walks contiguous memory; sets up SIMD/OpenMP for M2 |
-| Buffers | Exactly two (`cur` read-only, `next` write-only), pointer swap per step | Spec §4; no half-read sheets |
-| S domain | `[0, s_max_mult * strike]`, uniform. Default `s_max_mult = 4` | Standard practice; far boundary ≈ linear payoff |
-| v domain | `[0, v_max]`, uniform. Default `v_max = 1.0` (vol 100%) | Covers crash scenarios (v0=0.36 in M2 replay) |
-| Boundary S=0 | Call: `V=0`. Put: `V = K*exp(-r*(T-t))` | Exact — stock absorbed at 0 |
-| Boundary S=Smax | Call: `V = S*exp(-q*τ) - K*exp(-r*τ)` (deep ITM). Put: `V=0` | Asymptotic payoff |
-| Boundary v=0 | **Degenerate-PDE row — see §1c.** No condition imposed; solve `V_t + (r−q)S·V_S + kappa·theta·V_v − rV = 0` with central S-diff + forward (upwind) v-diff. Never Dirichlet, never central-in-v | in't Hout & Foulon treatment; drift kappa·theta > 0 flows inward |
-| Boundary v=vmax | `dV/dv = 0` (Neumann): copy row `j=Nv-1` update from `j=Nv-2` curvature-free form | Vega saturates for huge v |
-| Greeks | delta/gamma: central differences in S at nearest cell to (spot, v0); vega: central difference in v, chain rule ×(2*sqrt(v)) noted in write-up | Free from finished sheet |
-| Timestep | User-set `nt`; solver also computes and reports the explicit stability estimate `dt_stable ≈ min over grid of 1/( v*S²/ΔS² + xi²*v/Δv² + r )`-style bound | Enables the instability demo and the stability-boundary study |
-| Precision | `double` everywhere | Correctness first; float experiments are M2 territory |
-| Config format | Plain `key = value` text file (`config/*.cfg`), hand-rolled parser | Zero dependencies on rangpur |
-| Compiler flags | Baseline benchmark: `-O2`. Report flags in every benchmark. Add `-fno-tree-vectorize` variant to prove serial-opt gains are not hidden auto-SIMD | M1 forbids SIMD; keep the story clean |
-| Timing | `std::chrono::steady_clock` around the time loop only (exclude I/O); metric = **cell-updates per second** = Ns*Nv*nt / seconds | Comparable across grid sizes |
+## 1. Task sheet cross-check (what earns the marks)
 
-Weights: for a given variance row `j`, the nine stencil coefficients depend on
-(j, i) only through simple per-row and per-column factors. Baseline recomputes
-per cell; optimised solver precomputes per row (see §4).
+The same rubric as Milestone 1, with three Milestone 2 additions marked M2.
+Every row says what we deliver and which figure or artefact proves it.
 
-## 1b. Code style — "OOP-shaped modern C++, memory-safe" (locked)
-
-Author knows Python OOP (some Java, some C), is learning C++. Rules for ALL
-project C++, with the Python mapping stated so the code doubles as a tutorial:
-
-| C++ construct | Python equivalent | Where used |
-|---|---|---|
-| `class` with `private:` fields (`name_`), public getters/methods | class with `_attrs` — but privacy compiler-enforced | `Grid` |
-| abstract base: `virtual m() = 0;` + `virtual ~T() = default;` | `ABC` + `@abstractmethod` | `Solver` |
-| `class B : public A` + `override` | subclassing; `override` catches method-name typos at compile | `BaselineSolver`, `OptSolver` |
-| `const` method suffix | no analogue — "doesn't mutate self", compiler-checked | all getters |
-| plain `struct` (all public data, no methods) | `@dataclass` | `Config`, `SolveResult` |
-| constructor + RAII (destructor auto-frees members) | GC/`with`-block, but deterministic at scope exit | `Grid` owns its vectors |
-| `std::unique_ptr<Solver>` via `make_solver` factory | factory function; ownership explicit (Python GC hides it) | polymorphic dispatch only |
-| `const Config&` parameter | object passing, but never-null + read-only enforced | everywhere |
-
-Two concepts Python has no instinct for — flag them in comments wherever
-they appear:
-1. **Value vs reference semantics.** Python variables are all references to
-   heap objects. C++ `Grid g` IS the object, on the stack, destroyed at
-   scope exit. References are opt-in (`Grid&`). This is why RAII works and
-   why the memory is contiguous (fast).
-2. **Explicit ownership.** Every byte has exactly one owner: a vector or a
-   unique_ptr. Scope exit frees it. No GC needed, no leaks representable.
-
-Memory-safety rules (the point):
-- **No raw `new`/`delete` anywhere.** `std::make_unique` in the factory is
-  the only allocation of a polymorphic object; `std::vector<double>` owns
-  all grid memory.
-- **No raw owning pointers, ever.** `.data()` raw pointers appear only
-  inside OptSolver's hot kernel, as locals, never stored.
-- References over pointers for parameters; nothing is nullable.
-- Exceptions only at the edges: `load_config` / `make_solver` throw
-  `std::runtime_error`; `main` has the single try/catch.
-- No templates of our own, no lambdas, no `std::function`, no inheritance
-  deeper than `Solver` → implementations. `auto` only where the type is
-  obvious on the same line.
-- `std::string` for paths/names; `printf`-family for output (CSV lines).
-- One class per header; files stay under ~200 lines.
-
-Naming (locked at P2 start): descriptive identifiers over abbreviations —
-`num_stock_nodes` not `ns`, `stock_spacing` not `ds`, `current()`/`next()`
-sheets, loop indices `stock_i`/`var_j`. Docs and cfg/CLI keys keep the short
-maths shorthand (`ns`, `nv`, `nt`, `idx = j*ns + i`); `load_config` maps the
-short keys onto the descriptive fields. Exception: Heston parameters keep
-their maths symbols (`kappa`, `theta`, `xi`, `rho`, `v0`) — they must stay
-recognisable against the PDE and the literature.
-
-Narration comments (so the author can follow along line-by-line):
-- **Every serial-optimisation technique gets a one-line plain-English label
-  on the line (or block) where it is applied** — e.g.
-  `// loop-invariant hoisting: coefficients depend only on j, computed once per row`,
-  `// strength reduction: replace divide with precomputed reciprocal`,
-  `// row-major traversal: j outer, i inner, so memory access is contiguous`.
-- **Every boundary-condition handling site gets a one-line comment** naming
-  which boundary it is and what condition is imposed — e.g.
-  `// v=0 boundary: one-sided derivative, diffusion term vanishes here`.
-- **Every non-obvious decision gets a one-line comment stating the choice
-  and the reason** — e.g. `// two buffers, swap pointers: avoids copying the
-  whole grid each timestep`.
-- **New-construct comments explain to a beginner first, in plain English**
-  — say what the construct does on its own terms; at most end with
-  "similar to X in Python". Never a labelled "Python analogy:" comment.
-- Keep these to one line each, plain English, on/above the relevant line.
-  They are teaching aids for the 10-min video and interview prep, same
-  spirit as the new-construct comments above.
-
-Why this is safe: every byte is owned by exactly one vector or unique_ptr,
-and scope exit frees it — leaks and double-frees are unrepresentable.
-
-## 1c. The v=0 boundary, spelled out (the trap boundary)
-
-At v=0 every diffusion term carries a factor v and vanishes; the PDE
-degenerates to pure transport on that row:
-
-```text
-V_t + (r−q)·S·V_S + kappa·theta·V_v − r·V = 0
-```
-
-The v-drift at the boundary is kappa·theta > 0 — pointing INTO the domain —
-so the correct treatment is to solve this degenerate equation on the j=0
-row, not to impose a value:
-
-- 4-point stencil: self, S-left, S-right (central), one v-neighbour above
-  (forward one-sided difference for V_v; upwind matches the positive drift).
-- FORBIDDEN: Dirichlet at v=0 (over-determines), central v-difference
-  (needs a v<0 ghost point — meaningless).
-
-**Feller check (report at startup):** 2·kappa·theta ≥ xi² decides whether
-variance can touch zero. Reference params: 0.1200 < 0.1225 — VIOLATED
-(marginally), as is typical for equity calibrations. Scheme stays valid;
-consequence is solution mass near v=0 that a uniform v-grid slightly
-under-resolves. State as a known limitation (video beat); non-uniform
-v-grid is a stretch goal, not M1. Solver should print the Feller status
-alongside dt_stable_estimate.
-
-Stability note: the v=0 row is the least stiff (its coefficients vanished);
-the explicit dt bound binds at the high-v/high-S corner — which is exactly
-where the instability checkerboard erupts first.
-
-## 1d. Working agreement — learning by building (locked)
-
-The author wants to finish the project AND understand every line (interview
-prep for M2, video narration for M1). Rules for every coding session:
-
-- **Explain before code.** Before any file is written/changed, state in 2–3
-  plain-English sentences what it will do and which STUDY_GUIDE section it
-  maps to. New concept → STUDY_GUIDE gets a section before the code lands.
-- **Author-writes list.** These core pieces the author types themself, with
-  guidance (skeleton + hints first, review after): payoff initialisation,
-  the interior stencil update, ONE boundary (v=0 — the trap one), and ONE
-  opt-level kernel (level 1, hoisting — the biggest idea). Everything else
-  (plumbing, CLI, tests, scripts, remaining boundaries/levels) can be
-  scaffolded by the assistant, but always walked through afterwards.
-  - **WAIVER, P7 session (2026-08-09):** the author explicitly waived the
-    `step_level1` reservation for that session, so all of levels 1–6 plus
-    the two negative controls were assistant-written. The condition attached
-    to the waiver was that the kernels be commented well enough to learn
-    them from afterwards — see the block comment at the top of
-    `src/solver_opt_kernels.cpp` and the bit-identity rule spelled out above
-    `step_level1`. Everything else on this list still stands.
-- **Narration comments** (§1b) are mandatory everywhere — they are the
-  follow-along thread through the code.
-- **The author's comments are theirs.** In author-written pieces, comments
-  are personal study notes — review the code, not the comments. Conceptual
-  corrections go in conversation, never as requested comment edits.
-- **Checkpoint quiz.** At the end of each phase (P1–P8), 3–5 rapid-fire
-  questions on what was just built (same style as STUDY_GUIDE Part V).
-  Wrong answer → that topic gets re-explained and added to the drill list.
-- **STUDY_GUIDE stays in sync.** Any decision change lands in the guide in
-  the same session (already a repo rule; restated here because it's the
-  learning backbone).
-
-## 2. Repo layout (this scaffold)
-
-```
-project/
-├── PLAN.md                  ← this file
-├── Makefile                 ← build + test + sync + remote-bench targets
-├── .gitignore               ← results/, binaries, frames
-├── config/
-│   ├── reference.cfg        ← spec §8 reference run (SPX 5250 call)
-│   ├── demo.cfg             ← node-aligned animation grid (P6); the quoted 196.105
-│   ├── bench.cfg            ← reference FOOTPRINT, short maturity: throughput only
-│   ├── smoke.cfg            ← tiny grid, seconds to run, for tests/CI
-│   └── unstable.cfg         ← 4× stable dt — instability horror show
-├── include/
-│   ├── params.h             ← Option/Market/Heston/Grid/Config structs + parser decl
-│   ├── grid.h               ← flat 2-buffer grid, idx(), swap
-│   ├── solver.h             ← SolveResult, solver interface (baseline & opt)
-│   ├── solver_opt_kernels.h ← StepKernel function-pointer type + kernel_for_level()
-│   ├── black_scholes.h      ← closed form + norm_cdf (validation only)
-│   └── io.h                 ← grid snapshot dumps, result CSV line
-├── src/
-│   ├── main.cpp             ← CLI: --config --solver --dump-every --bench
-│   ├── params.cpp
-│   ├── grid.cpp
-│   ├── solver.cpp           ← shared extract_result() readout + make_solver() factory
-│   ├── solver_baseline.cpp  ← correct-first serial solver
-│   ├── solver_opt.cpp       ← optimised serial (same interface, same answers); dispatches on --opt-level
-│   ├── solver_opt_kernels.cpp ← step_level1()..step_level6() ladder kernels (§4b)
-│   ├── black_scholes.cpp
-│   └── io.cpp
-├── tests/
-│   ├── test_bs_collapse.cpp ← xi=0, v0=theta ⇒ match Black-Scholes formula
-│   ├── test_parity.cpp      ← C - P = S*exp(-qT) - K*exp(-rT)
-│   └── test_opt_matches.cpp ← every --opt-level 0..6 + both controls ≡ baseline
-│                              (bit-identical to L1; measured 3.3e-15 rel above)
-├── scripts/
-│   ├── weather_map.py       ← snapshots → coloured frames → gif/mp4 (ffmpeg)
-│   ├── convergence_plot.py  ← refinement study → convergence figure
-│   ├── bench_plot.py        ← bench CSVs → opt-level ladder bars + scaling figure
-│   ├── memory_anim.py       ← cache-line sweep + double-buffer ping-pong clips
-│   ├── roofline.py          ← flops/bytes per cell → roofline; TESTS the bound
-│   ├── monte_carlo_check.py ← independent MC + Fourier price (external reference)
-│   ├── bs_collapse_anim.py  ← xi→0 collapse to Black-Scholes, animated
-│   └── xi_sweep_smile.py    ← implied-vol smile flattening as xi→0
-├── slurm/                   ← how to run these: RUNNING.md §2–§3
-│   ├── debug_serial.sh      ← 5-min sanity job (build + smoke run)
-│   ├── bench_common.sh      ← shared header/run helpers, sourced by the five sweeps
-│   ├── bench_ladder.sh      ← sweep A (ladder, default allocator)
-│   ├── bench_scaling.sh     ← sweep B (baseline vs level 6 across four grids)
-│   ├── bench_novec.sh       ← sweep C (-fno-tree-vectorize rebuild)
-│   ├── bench_controls.sh    ← sweep D (ctl-order, ctl-branch + paired reference)
-│   ├── bench_pages.sh       ← sweep E (ladder again, huge-page regime — headline 2.56×)
-│   ├── bench_peak.sh        ← measured scalar FLOP ceiling for the roofline
-│   ├── diag_alloc.sh        ← diagnostic: proved the page-size effect
-│   └── diag_denormal.sh     ← diagnostic: ruled out denormal stalls
-└── results/                 ← gitignored; snapshots, CSVs, frames land here
-                               (RESULTS.md carries the tracked copy of the numbers)
-```
-
-One binary `heston`; tests are three tiny extra binaries reusing the same
-objects. No external C++ dependencies. Python (matplotlib, ffmpeg) local only —
-never needed on rangpur.
-
-## 3. CLI contract (fixed now so scripts can be written against it)
-
-```
-./heston --config config/reference.cfg [options]
-  --solver baseline|opt        (default baseline)
-  --opt-level 0..6             (opt solver only; cumulative technique ladder, default 6 = all)
-              7 | 8            (NEGATIVE CONTROLS: ctl-order, ctl-branch — §4b)
-  --type call|put              (overrides config)
-  --dump-every N               (snapshot every N steps → --dump-dir)
-  --dump-dir results/run1      (default results/)
-  --bench R                    (repeat solve R times, print per-rep timings CSV)
-  --nt/--ns/--nv X             (override grid, for convergence & stability sweeps)
-  --maturity Y                 (override option.maturity_years; benchmark knob —
-                                dt = maturity/nt, so this is how a bigger grid is
-                                held inside its stability bound without changing
-                                the footprint being timed. Never for pricing.)
-Output (stdout, one CSV line):
-  price,delta,gamma,vega,ns,nv,nt,solver,seconds,cell_updates_per_sec
-```
-
-The `solver` column self-describes: `baseline`, `opt-L0`..`opt-L6`, and
-`opt-ctl-order` / `opt-ctl-branch` for the controls — deliberately NOT
-`opt-L7/L8`, so a CSV row can never be misread as the ladder continuing up.
-The benchmark scripts prefix two more columns, `sweep,build`, ahead of this
-line; see `slurm/bench_common.sh`.
-
-## 4. Serial optimisation menu (the 25% Optimisation story)
-
-Aligned with the techniques the course actually teaches (L03 — use the
-lecturer's names for them in the video). Baseline is written deliberately
-straightforward (weights recomputed per cell, generic indexing). Optimised
-version applies, in order, each measured separately:
-
-1. **Loop-invariant code motion / hoisting + lookup table**: precompute the
-   nine stencil weights per variance-row into a table before the time loop —
-   hoists thousands of per-cell multiplications into a per-row lookup.
-   (L03 techniques #7 hoisting + #9 lookup tables + #13 common
-   subexpression elimination, all in one move.)
-2. **Strength reduction**: no divisions in the hot loop — precompute
-   reciprocals (1/ds², 1/dv², …) once; division throughput is 5–14 cycles
-   vs 0–1 for multiply (L03 #15).
-3. **Cache-friendly loop order**: outer j, inner i, contiguous walk matching
-   the row-major layout — spatial/temporal locality, 64-byte cache lines
-   (L03 #22; lecturer measured 8x from loop order alone).
-4. **Hoist conditionals out of the loop**: interior loop runs `i=1..Ns-2`,
-   `j=1..Nv-2` branch-free; boundaries in separate small loops (L03 #18/#20
-   loop splitting).
-5. **Induction-variable simplification**: replace per-cell `j*ns+i` index
-   math with an incremented running index/pointer (L03 #14 — explicitly
-   framed in lecture as the 2D→1D address-calculation case).
-6. (Optional, measure) **loop unrolling** of the inner loop (L03 #17).
-
-NOT doing: tiling/blocking (not course content), restrict tricks beyond
-local raw pointers, fast-math (correctness story comes first). Precision
-stays double for M1; float32 is noted as an M2 experiment (L03 #1 pairs it
-with SIMD width).
-
-### 4b. Ablation ladder — `--opt-level 0..6` (locked)
-
-The "measured separately" promise is delivered as a **cumulative ladder**,
-re-runnable by anyone (including the markers) with one sbatch sweep:
-
-| Level | Adds technique | L03 name | Expectation |
+| Criterion | Weight | Spec asks for | Our evidence |
 |---|---|---|---|
-| 0 | none — identical algorithm to BaselineSolver (sanity anchor) | — | null by design |
-| 1 | per-row constants, S table, named spacing products, CSE | hoisting + lookup + CSE | real gain |
-| 2 | no divisions in hot loop, S² table | strength reduction | real gain; first rung whose last bits move |
-| 3 | contiguous traversal (outer j, inner i), row bases hoisted | loop order / locality | **null by construction** |
-| 4 | branch-free interior, v=0 row peeled, bounds hoisted | loop splitting | **null by construction** |
-| 5 | row pointers instead of `j*ns+i` per access | induction variable | measure |
-| 6 | inner-loop unrolling ×4 | unrolling (optional) | measure |
+| Introduction and Background | 20% | Self-contained. Assessors will not remember M1. | Retell the model in under 2:30 with the M1 weather-map and BS-collapse animations (`results/demo_timevalue.mp4`, `results/bs_collapse.mp4`). One slide on why the grid is parallel (the independence argument in §0). |
+| Optimisation | 25% | Optimisations and their performance. Techniques that failed or were considered and rejected. How the problem was structured and parallelised (M2). Trade-offs. | The M2 ladder (F1), one technique per rung, each measured. The tried-and-rejected panel on F1 and the experiments in §6. The decomposition diagram (F10). Trade-offs written into CHANGELOG (FMA rounding, full grid per MPI rank, float32 accuracy). |
+| Benchmarking | 25% | Setup that avoids misleading results. Amdahl's and Gustafson's laws (M2). Hotspots and bottlenecks. Scaling with problem size. A UQ cluster. | Protocol in §7 (exclusive node, pinned page regime, thread binding, median of 5, provenance header). Strong scaling with Amdahl fit (F2). Weak scaling with Gustafson (F3). Size scaling with cache bands (F4). Roofline v2 (F5). Time breakdown hotspot chart (F6). All on rangpur r730 nodes. |
+| Presentation | 20% | Topic choice and time per topic, delivery, slide design, data visualisation. | §11 time budget, M1-style figures with provenance footers, code shots per rung. Fix list from M1 in §11. |
+| Reflection and Conclusion | 10% | Main conclusions, what surprised us, what we would do differently, how to extend. | §11 reflection beat. Candidate surprises are listed in §6 as hypotheses so we can say which ones the data overturned. |
+| Identity verification | pass/fail | Face visible throughout the video. | Webcam in every take (unchanged from M1). |
+| Code submission | pass/fail | Well-commented source, Makefile, slurm scripts, enough to compile and check. | §3 comment style, `make` and `make test` from a fresh clone, every slurm script in the zip. |
+| Submission format | pass/fail | H.264, under 100 MB, `Milestone2_48008361.mp4`, code and video in one `Milestone2_48008361.zip`. | `make package` updated from `Milestone1_` to `Milestone2_`, same secret checks. |
+| In-person interview (M2) | pass/fail | About 7 minutes, identity-verified, second week of exams. Must pass to pass the course. | STUDY_GUIDE M2 parts, CHANGELOG, COMMANDS.md demo runbook, rehearsal in P10. |
 
-**Negative controls (`--opt-level 7` and `8`, labelled `opt-ctl-order` and
-`opt-ctl-branch` — never `opt-L7/L8`).** Levels 3 and 4 are null *because the
-baseline was written correctly from the start*: it already loops outer-variance
-/ inner-stock, and already peels the v=0 row into its own loop. A rung cannot
-recover a loss that never happened. The honest way to show what those
-techniques are worth is not to sabotage an earlier rung but to build the wrong
-version and time it:
+Path choice. The spec accepts one technique analysed very thoroughly, a
+comparison of technologies, or a combination such as OpenMP+MPI. It also says
+using every technique is not required. We take the combination path (AVX2,
+then OpenMP, then hybrid MPI+OpenMP) and analyse each rung with the same
+rigour as the M1 ladder. CUDA is a bonus only after every other phase is done.
 
-| Control | Built from | Changes exactly one thing | Gives meaning to |
+The spec PDF is password protected. This table was built from the course
+rubric as already extracted for M1 (`presentation/PRESENTATION.md` §1) and the
+knowledge graph of the PDF. Before scripting the video, open the PDF once and
+check two things it may state that this table does not, the M2 due date and
+any M2-only wording in the FAQ section.
+
+---
+
+## 2. The M2 ladder (locked)
+
+The M1 lesson was that markers liked a ladder where each rung adds one thing
+and is measured. M2 keeps that shape but starts from a short ladder of the
+techniques that actually mattered. The video retells M1 in two rungs, then
+spends its time on the parallel rungs.
+
+| Rung | `--solver` | Adds exactly this | File |
 |---|---|---|---|
-| `ctl-order` | level 5 | loops swapped → `ns`-element stride | level 3 |
-| `ctl-branch` | level 5 | v=0 row fused back in behind a per-cell `if` | level 4 |
+| 0 | `baseline` | The naive reference. Weights recomputed per cell, divisions in the hot loop. Every other rung must match its answer. | `src/solver_baseline.cpp` (kept, restyled) |
+| 1 | `serial` | The M1 optimisations that moved the number. Per-row constants and S, S² tables hoisted out of the time loop, reciprocals instead of divisions, row pointers. | `src/solver_serial.cpp` |
+| 2 | `simd` | AVX2. One `__m256d` holds 4 neighbouring cells, the stencil blend uses FMA, a scalar loop finishes the remainder. | `src/solver_simd.cpp` |
+| 3 | `omp` | OpenMP. `#pragma omp parallel for schedule(static)` over variance rows. Each thread owns a band of rows. | `src/solver_omp.cpp` |
+| 4 | `mpi` | Hybrid MPI+OpenMP. Rows split into one slab per rank, one halo row exchanged with each neighbour per step, OpenMP threads inside each rank. | `src/solver_mpi.cpp` |
 
-Both are arithmetically identical to levels 2–6, so `test_opt_matches` holds
-them to the same tolerance — a control that got a *different* answer would be
-measuring a bug, not a technique. `ctl-order` is also the ground truth behind
-the cache animation (`scripts/memory_anim.py --style cache`).
+Why rung 1 drops M1 levels 3 to 6. In M1 only hoisting and strength reduction
+(levels 1 and 2) changed the throughput (53 to 131 Mcell-updates/s, +149%).
+Levels 3 to 6 were inside run-to-run spread, and unrolling by four made the
+kernel 180 lines longer. The video can say this in one sentence while the M1
+ladder figure is on screen, which also covers the failed-techniques criterion
+for the serial half.
 
-**Floating-point contract across the ladder.** Two claims, two checks:
-- **Levels 0–1 are BIT-IDENTICAL to the baseline** — asserted as
-  `max_abs_diff == 0.0` exactly, which is stronger than any epsilon. Level 1
-  may give a subexpression a *name* but never change the order it was
-  multiplied in (`0.5*v*S*S` groups as `((0.5*v)*S)*S`, so the hoisted form is
-  `(half_v*S)*S`), and every true division stays a division.
-- **Levels 2–8 agree to a MEASURED relative tolerance.** Level 2 replaces
-  divisions with reciprocal multiplies, which genuinely changes the last bits.
-  One absolute tolerance cannot cover price ≈ 196, delta ≈ 0.57, gamma ≈ 7.9e-4
-  and vega ≈ 2190, so each is checked against its own magnitude. Measured worst
-  case over 5200 steps: **3.3e-15** (call leg; exactly 0.0 on the put leg),
-  tolerance set at 1e-11. Levels 2–8 also agree with *each other* bit-for-bit,
-  which is what proves they change addressing and structure but not arithmetic.
+### 2a. How the code stays short
 
-Design rules:
-- **Dispatch once, outside the time loop**: OptSolver picks a per-level
-  `step_levelN()` kernel function up front. NEVER per-cell `if (level >= k)`
-  checks — that would poison the very timings the ladder exists to measure.
-- Kernels live in their own file (`solver_opt_kernels.cpp`) since each is a
-  short (~40-line) variant; duplication is accepted — the ladder IS the
-  ablation instrument, and diffing adjacent kernels shows exactly one
-  technique.
-- `test_opt_matches` loops over ALL levels 0–6 AND both controls, each vs
-  baseline, under the two-tolerance contract above.
-- Benchmark output: 7-bar ladder figure (cell-updates/sec per level)
-  replaces the plain before/after bar. Baseline-vs-level-6 remains the
-  headline number.
-- **Honest null results**: if a rung shows no gain (compiler already did
-  it — likely for levels 5/6 at -O2), report it as-is; the task sheet
-  explicitly credits "techniques you tried that didn't work" under
-  Optimisation (25%), and L03 says null results show methodology.
+One shared file holds the maths, so each rung's file is only its time loop.
 
-Profile with **gprof** (the course-taught tool: `-pg`, flat + call-graph
-profile) plus manual `<chrono>` instrumentation; report where time goes
-before and after. Evidence = cell-updates/sec ladder table on rangpur,
-identical answers proven by `test_opt_matches` at every level.
+- `include/stencil.h`, `src/stencil.cpp`
+  - `struct StencilConstants` holds the reciprocals, the per-row factors and
+    the S and S² tables. Built once before the time loop. This also removes
+    the M1 per-timestep allocation of the tables.
+  - `update_row_scalar(k, cur, next, var_j)` updates one variance row (rung 1 maths).
+  - `update_row_avx(k, cur, next, var_j)` updates one row, 4 cells per
+    instruction, then the remainder (rung 2 maths).
+  - `update_zero_row`, `apply_stock_edges(row_begin, row_end, tau)`,
+    `copy_top_row` for the boundaries.
+- Each solver's `solve()` is the time loop plus a row loop that calls one of
+  those. The step from `simd` to `omp` is visibly one pragma line. The step
+  from `omp` to `mpi` is a row range plus the halo exchange. Those two diffs
+  are the code shots for the video.
+- A shared protected `Solver::report_stability()` replaces the copy of the
+  stability and Feller printout in every solver.
 
-## 5. Phases, order, acceptance criteria
+### 2b. Rung details and the decisions behind them
 
-Dependency chain: P1 → P2 → P3 → (P4, P5, P6 in any order) → P7 → P8.
+Each decision below becomes one `### Decision N.` entry in CHANGELOG.md and
+one interview answer in STUDY_GUIDE.md.
 
-**P1 — Plumbing.** `params` parser, `grid`, CLI skeleton, `io` result line.
-✓ `./heston --config config/smoke.cfg` runs end-to-end printing zeros.
+**Rung 2, SIMD.**
+- Intrinsics from `<immintrin.h>`, not compiler auto-vectorisation and not
+  assembly (L04 says auto-vectorisation gives subpar results and assembly is
+  not worth it).
+- Unaligned loads `_mm256_loadu_pd`. The nine-point stencil reads i-1, i and
+  i+1, so at most one of those three loads can ever be 32-byte aligned. L04
+  also says the unaligned penalty is gone on modern CPUs. Aligned buffers are
+  kept as a measured experiment (E2).
+- FMA via `_mm256_fmadd_pd`. FMA rounds once instead of twice, so results move
+  in the last bits. The tolerance against baseline is re-measured and recorded.
+- Build with `-mavx2 -mfma`, not `-march=native`, so the binary needs only
+  Haswell features. `objdump -d heston | grep zmm` must be empty, because L04
+  warns that some AVX-512 intrinsics also start with `_mm256_`.
+- On the arm64 Mac the AVX row falls back to the scalar row behind one
+  `#ifdef __AVX2__`, with a stderr warning. Local AVX correctness is checked
+  with an x86_64 build under Rosetta (verified working on this Mac), and every
+  rangpur job runs the full test suite with the real AVX path.
 
-**P2 — Baseline solver.** Payoff init, interior stencil, all four boundaries,
-time loop, price + Greeks readout.
-✓ Price for `config/reference.cfg` is positive, finite and between intrinsic
-  (0 for this call, since spot 5200 < strike 5250) and spot. **This criterion
-  was recorded as passed at P2 but was actually FAILING**: reference.cfg then
-  specified `nt = 2000`, which is 527× over the explicit stability bound, and
-  the run printed `nan,nan,nan,nan`. Fixed in P7 by `nt = 980000` and
-  `v_max = 0.64`; the config header carries the arithmetic and the measured
-  justification for both. The lesson is in the criterion itself — "positive,
-  finite" is only a real gate if somebody actually runs the config.
-  **Measured 2026-08-09: 196.1683699**, delta 0.56717178, in 2295 s serial —
-  against the semi-analytic Fourier price of 196.1692 that is a relative error
-  of **4.2e-6**, and Monte Carlo over 400 000 real random paths brackets both
-  at 196.1345 ± 0.5524. That is the strongest absolute-accuracy number the
-  project has, and it exists only because the config was fixed.
-✓ Weather-map dump of smoke run looks smooth (first visual debug).
+**Rung 3, OpenMP.**
+- `parallel for` on the outer variance loop (L05, parallelise outermost loops
+  first). `schedule(static)` because every row costs the same (T04).
+- `default(none)` with an explicit `shared(...)` list (L05 recommendation).
+  GCC 8.5 on rangpur and newer compilers disagree on whether `const` variables
+  may appear in `shared()`, so the shared variables are kept non-const and the
+  code is compiled on both before it counts.
+- No synchronisation inside a step. Threads read the shared old sheet and
+  write disjoint rows of the new one. The only barrier is the implicit one at
+  the end of the `parallel for`. Never `critical` in the hot loop (L05 demo
+  measured a 40x slowdown).
+- The boundaries are O(ns + nv) work and stay serial at first. That serial
+  part is the Amdahl term we measure in F6 and fit in F2.
+- Thread count comes from `OMP_NUM_THREADS`. The CSV records the count the
+  program actually got from `omp_get_max_threads()`, because L05 warns you may
+  not get what you asked for.
 
-**P3 — Validation gate.** `test_bs_collapse` (tolerance: rel err < 1e-3 on
-reference-sized grid; record actual), `test_parity` (abs err < 1e-3·K·1e-3? —
-measure, then fix tolerance and justify in video).
-✓ Both tests green. **Nothing downstream starts until this passes.**
+**Rung 4, hybrid MPI+OpenMP.**
+- `MPI_Init`, `MPI_Comm_rank`, `MPI_Comm_size`. Rows split evenly with the
+  remainder given to the first ranks (T05).
+- Each step, before the update, each rank swaps its edge rows with its
+  neighbours using `MPI_Irecv`, `MPI_Isend`, `MPI_Waitall` (L06 non-blocking
+  pattern). Rank 0 also owns the v=0 row and the last rank owns the top
+  Neumann row.
+- Every rank keeps the full 2 x 8 MiB grid but only updates its own rows. This
+  keeps indexing identical to the other rungs and lets one `MPI_Gatherv` at the
+  end hand rank 0 a complete sheet for the existing `extract_result`. The
+  trade-off is memory, which is tiny here. A large-grid version would allocate
+  only the local slab plus two halo rows (T05 convention). Recorded as a
+  trade-off, not hidden.
+- One binary. `heston` is built with `mpicxx` and always calls `MPI_Init` and
+  `MPI_Finalize`, so the non-MPI rungs run as one rank. Only rank 0 prints.
+- Launch with `mpiexec`, one rank per socket or per node, threads inside
+  (L06 hybrid slide). On rangpur Open MPI 4.1.1 is
+  `mpiexec -n R --map-by ppr:1:socket:PE=12 --bind-to core`, plus the
+  `OMPI_MCA_mtl` and `OMPI_MCA_btl` exclusions that the matrixass MPI script
+  needed.
+- Communication time is accumulated separately so F6 can show compute vs
+  halo exchange per rank count.
 
-**P4 — Convergence study.** Script sweeps (Ns,Nv,nt) doublings via CLI
-overrides; `convergence_plot.py` produces the deliverable figure.
-✓ Price differences shrink at expected first-order-in-dt rate; plot saved.
+### 2c. What changes in the shared code
 
-**P5 — Instability demo.** `unstable.cfg` + snapshot dumps + weather map of
-the checkerboard blow-up; log measured stable/unstable dt boundary vs the
-solver's printed estimate.
-✓ 30-second horror-show clip material exists.
+- `src/main.cpp` gains `MPI_Init`/`MPI_Finalize`, rank 0 printing, and drops
+  `--opt-level`.
+- CSV line gains two trailing columns, `threads` and `ranks`.
+- `make_solver` learns `serial`, `simd`, `omp`, `mpi`. `opt` is removed.
+- Removed after the tag. `src/solver_opt.cpp`, `src/solver_opt_kernels.cpp`,
+  `include/solver_opt_kernels.h`, `tests/test_opt_matches.cpp`, and the
+  M1-only slurm sweeps (ladder, scaling, controls, novec, novec_o3, pages,
+  flags, diag_alloc, diag_denormal). `docs/RUNNING.md` is folded into
+  `COMMANDS.md`.
+- Makefile. `CXX = mpicxx`. OpenMP flags picked by compiler (Apple clang needs
+  `-Xpreprocessor -fopenmp -lomp` with Homebrew libomp, GCC needs `-fopenmp`).
+  `-mavx2 -mfma` only when the machine is x86_64. New object files and header
+  dependencies listed by hand as before. `make test-mpi` runs the ladder test
+  under `mpiexec -n 2` and `-n 3`. `make avx-check` builds the AVX row test
+  for x86_64 under Rosetta.
 
-**P6 — Weather map (deliverable quality).** `--dump-every` + `weather_map.py`
-→ H.264 mp4 of value surface flowing backwards.
-✓ Animation renders from C++ engine output (replaces Python prototype).
+---
 
-**P7 — Serial optimisation + rangpur benchmarking.** Implement §4 steps as
-the §4b opt-level ladder, `test_opt_matches` green after each level lands,
-then the `slurm/bench_*.sh` sweeps run solver=baseline plus opt levels 0–6
-on a compute node across grid sizes. (An earlier single `bench_serial.sh`
-was deleted: it could never have run inside the 15-minute QOS limit. The
-five sweeps that replaced it are listed in §6 and RUNNING.md §3.)
-✓ Ladder cell-updates/sec table + 7-bar figure from rangpur numbers
-  (baseline vs level 6 = headline before/after).
-✓ Flags, hostname, grid sizes, opt level all recorded in the CSV.
+## 3. Code style for M2 (replaces M1 §1b)
 
-**P8 — Video assembly.** Script: problem (weather map) → method (spreadsheet
-metaphor) → validation (tests) → convergence → optimisation story →
-instability finale → reflection. 10 minutes, H.264.
+The user will walk an interviewer through this code, so it has to read like a
+script. The model is `../matrixass/matrixMultiply.cpp`.
 
-## 6. Benchmark protocol (rubric: Benchmarking 25%)
+- A `//` comment on its own line directly above the line it describes, same
+  indent. 3 to 12 words. Fragments get no full stop.
+- A block opens with one summary sentence that ends in a full stop, then the
+  per-line comments.
+- Every function, class and struct has a two-line plain English overview
+  directly above it saying what it is for.
+- Beginner layout. One statement per line, long lines are fine, `if`/`else`
+  rather than `?:`, fields set in the constructor body rather than an
+  initialiser list, the PDE split into named terms.
+- Pragmas get their comment above the pragma. Else branches get theirs inside
+  the branch.
+- No lecture citations, plan references, phase names or essays in code. Those
+  live in STUDY_GUIDE.md and CHANGELOG.md.
+- No semicolons inside comments, no em dashes.
+- Descriptive names (`row_above`, `halo_rows`, `rows_per_rank`), never cryptic
+  abbreviations.
+- Each file opens with the same three-line AI declaration as matrixass.
+- The kept M1 files on the demo path are restyled to match (`main.cpp`,
+  `grid.*`, `params.*`, `solver.*`, `solver_baseline.cpp`, `black_scholes.*`,
+  `io.*`, tests, slurm scripts). Behaviour must not change, and the tests prove
+  it.
+- The C++ shape from M1 stays (classes with private fields, `Solver` abstract
+  base with `override`, plain structs for records, RAII, `unique_ptr` factory).
 
-- Only compute-node numbers count (`sbatch`, partition `cosc3500`).
-- ≥5 reps per configuration; report median + min/max; `--bench R` handles it.
-- **The node is pinned.** `--exclusive` (no co-tenant stealing memory
-  bandwidth) and `--nodelist=r730-2`, because the partition mixes 24-core
-  Xeon E5-2670 v3 physical machines with 8-core VMs, and sweeps measured on
-  different hardware cannot be compared with each other.
-- **The QOS caps wall time at 00:15:00** (`sacctmgr show qos` → cosc3500
-  MaxWall). One job covering everything sits in the queue forever with reason
-  `QOSMaxWallDurationPerJobLimit`, so the suite is **five sweeps** — A ladder,
-  B scaling, C no-vectorise, D controls, E ladder-on-huge-pages — plus two
-  one-off diagnostic jobs (`bench_peak.sh`, `diag_alloc.sh`, `diag_denormal.sh`),
-  each writing its own CSV. `make remote-bench` submits the five; `make
-  remote-diag` submits the diagnostics. **RUNNING.md is the single home for
-  the operational detail**; this section states the protocol and why.
-- Sweep grid sizes: 512×128, 1024×256, 2048×512 (reference), 4096×1024.
-  **nt is scaled per grid so that both (a) dt ≤ 0.7·dt_stable, and (b) every
-  grid does ~4e8 cell updates**, making the four points equal-work. The
-  maturity moves with nt (`--maturity`), because dt = maturity/nt and the
-  stability bound depends on the GRID, not on the contract:
+CLAUDE.md's code style paragraph and its Milestone 1 scope section are updated
+to say this in P0.
 
-  | grid | dt_stable (v_max 0.64) | nt | maturity | dt/dt_stable | cell updates |
-  |---|---|---|---|---|---|
-  | 512×128 | 5.875e-6 | 6000 | 0.0246 | 0.698 | 3.93e8 |
-  | 1024×256 | 1.466e-6 | 1500 | 0.00153 | 0.696 | 3.93e8 |
-  | 2048×512 | 3.661e-7 | 400 | 0.0001 | 0.683 | 4.19e8 |
-  | 4096×1024 | 9.147e-8 | 100 | 0.0000064 | 0.700 | 4.19e8 |
+---
 
-  This is legitimate because cell-updates/sec is a RATE: a 400-step run
-  measures the same throughput as a 400 000-step one. Verified rather than
-  assumed — `slurm/diag_denormal.sh` showed throughput is unchanged when the
-  grid is full of denormals, full of NaNs, or full of values around 1e33.
-- Opt-level ladder (§4b): full 0–6 sweep plus `ctl-branch` at the reference
-  grid size; other grid sizes need only baseline + level 6 (scaling story);
-  `ctl-order` runs in the controls job at a shorter time loop because it is
-  ~30× slower than the ladder top.
-- Record: hostname, CPU model, compiler version, flags, date, job id and
-  `lscpu` cache sizes → CSV header comments, reproduced on every figure.
-- Course benchmarking rules (L03, follow verbatim):
-  - **Consume the results** (print the price) — otherwise the compiler can
-    delete the benchmarked loop entirely (lecturer demoed runtime → 0).
-  - **Problem must not fit in cache** — reference grid is 2×8 MB buffers,
-    comfortably exceeding L2/L3 per-core; state this in the video.
-  - **Verify correctness while benchmarking** — `make test` runs before
-    every bench job, wired into `build_and_validate()` in
-    `slurm/bench_common.sh`, which exits rather than benchmark a build that
-    has not just re-proved itself against the reference solver.
-  - Timer resolution: solve takes seconds; `<chrono>` steady_clock is ample.
-  - Don't be surprised by null results — compiler may have already done the
-    optimisation; report honest null results, they show methodology.
-- Amdahl/Gustafson framing saved for M2; M1 story = redundant-work elimination
-  (strength reduction) plus two measured memory effects that are *latency*,
-  not bandwidth: page size and traversal order.
+## 4. Correctness contract (the iron rule carries over)
 
-**Two measurement traps found on this node, both now encoded in the scripts:**
+No rung is benchmarked until it matches the baseline. Every benchmark job
+builds, runs the tests, and refuses to time anything if a test fails.
 
-1. **Page size, worth 1.66×.** `Grid` allocates two 8 MiB buffers per solve
-   and frees them per rep. Rep 1 is served by `mmap` and, with
-   `transparent_hugepage=[always]`, backed by 2 MiB pages — 16 MiB then needs
-   ~8 TLB entries. glibc afterwards raises its dynamic `mmap` threshold past
-   8 MiB, so reps 2–5 come from the reused heap on 4 KiB pages: 4096 entries,
-   far past the core's L2 TLB, and every stencil access risks a page walk.
-   Result: rep 1 at 1.35e8 cell-updates/s, reps 2–5 at 8.1e7, reproducible to
-   three digits. Proved by pinning `MALLOC_MMAP_THRESHOLD_` in
-   `slurm/diag_alloc.sh` — forcing `mmap` makes all five reps fast.
-   **Consequence for reporting:** a single production solve is a fresh process
-   and gets the fast regime, so sweep A's median understates real performance.
-   Sweep E (`slurm/bench_pages.sh`) re-measures the whole ladder with the
-   threshold pinned, and both are reported.
-2. **The clock is NOT the explanation** — `slurm/bench_peak.sh` samples
-   `/proc/cpuinfo` during an actual solve and finds 3100 MHz pinned
-   throughout, so the rep-1 advantage is not turbo. That job also measures the
-   machine's scalar double peak (5.117 GFLOP/s) so the roofline uses a
-   measured ceiling rather than a datasheet figure.
+| Gate | Checks | Tolerance |
+|---|---|---|
+| `test_bs_collapse` | baseline vs closed-form Black-Scholes at xi=0 | 2.5e-3 relative (unchanged) |
+| `test_parity` | put-call parity on baseline | 1e-4 absolute (unchanged) |
+| `test_ladder_matches` (new, replaces `test_opt_matches`) | serial, simd, omp, mpi vs baseline, call and put, price, delta, gamma, vega | relative, measured first then set with headroom. M1 measured 3.3e-15 for reciprocals. FMA and thread-split are re-measured. |
+| `make test-mpi` | the same test under `mpiexec -n 2` and `-n 3` (3 forces an uneven row split) | same as above |
+| OpenMP split check | tests at `OMP_NUM_THREADS=1, 2, 7` (7 does not divide the row count) | same as above |
+| `make check-heston` | Fourier reference price on the full parameter set, local only | 2e-3 (unchanged) |
+| `make avx-check` | AVX row vs scalar row on random data, x86_64 build | measured, about 1e-15 relative |
 
-## 6b. Milestone 2 technique alignment (locked now so M1 sets it up)
+Note on reproducibility. With `schedule(static)` and a fixed thread count each
+cell is computed by exactly one thread in the same order, so the OpenMP rung
+should be bit-identical to the SIMD rung. MPI likewise. If they are not, that
+is a bug, not floating-point reordering, because no reduction happens inside a
+step. This is a stronger claim than L05's warning about non-associativity and
+is worth saying in the interview.
 
-From the lectures, the exact M2 toolkit (nothing fancier):
+---
 
-- **SIMD = AVX intrinsics, `<immintrin.h>`** — NOT compiler auto-vectorisation
-  (L04: "typically gives pretty subpar results") and NOT assembly (L04:
-  discouraged). `__m256d` (4 doubles) on our data; optional float32 variant
-  doubles the width to 8 (ties to L03 precision technique). Use
-  `aligned_alloc` to 64-byte (cache-line) boundaries — exactly why the grid
-  is a flat contiguous array with S contiguous. FMA (`_mm256_fmadd_pd`) for
-  the stencil blend. Remainder loop for ns not divisible by width.
-  Realistic expectation: L04 quotes ~4x rather than the full vector width,
-  on the grounds that such kernels are usually memory-bound. **That reasoning
-  does not apply here and the measurement says so** — see §6 and RESULTS.md,
-  where level 6 reaches 82% of this node's measured scalar peak while asking
-  for ~3 GB/s on a four-channel machine. This kernel is compute-bound, so
-  widening the arithmetic is exactly the right next move and the ceiling is
-  the vector width rather than the bus. Expect closer to the width than L04's
-  rule of thumb, and measure it rather than assume either way.
-- **OpenMP** — `#pragma omp parallel for` on the OUTER j loop (L05:
-  "parallelise outermost loops first"), `default(none)` with explicit
-  shared/private lists (L05 recommendation), thread counts via
-  OMP_NUM_THREADS. Our design needs ZERO synchronisation inside a step
-  (threads read shared immutable cur, write disjoint rows of next) — one
-  implicit barrier per step at the end of the parallel for. Never
-  `critical` in the hot loop (L05 demo: 40x SLOWDOWN). Expect speedup ≈
-  physical cores, not hyper-threads; accept tiny FP differences from
-  reordering (L05: non-associativity), bounded by test tolerance.
-- **MPI/CUDA** — optional extensions only, first to cut (unchanged).
+## 5. Measured hypotheses going in
 
-## 7. Risks & cut order
+Stated now so the video can say which ones the data confirmed and which it
+overturned (the Reflection criterion rewards surprises).
+
+1. SIMD gives 2 to 3.5x over rung 1. M1 showed the kernel is compute-bound
+   (82 to 95% of scalar peak at 1.29 flop per byte), so the vector width should
+   mostly carry through. L04's rule of thumb is about 4x.
+2. At 2048x512 the two buffers (16 MiB) fit inside one socket's 30 MiB L3, so
+   OpenMP should scale close to linearly up to 12 threads and keep scaling
+   across the second socket.
+3. At 4096x1024 (64 MiB) the working set spills to DRAM, and the 24-thread
+   AVX kernel becomes memory-bound. The size sweep (F4) should show a
+   throughput cliff at the L3 capacity line, and the roofline (F5) should show
+   the operating point move from the compute roof to the memory roof.
+4. The serial boundary work is about 0.5% of a step, so Amdahl's ceiling is far
+   above 24 cores. The measured efficiency loss will instead come from
+   fork-join overhead per step, NUMA traffic across sockets, and memory
+   bandwidth. F6 separates these.
+5. Two ranks per node (one per socket) beat one rank with 24 threads, because
+   each rank's memory stays on its own socket.
+6. Across two nodes the halo is 2 rows of 2048 doubles (32 KiB) per step, small
+   next to about 1 ms of compute per step, so 2-node strong scaling should be
+   above 80% efficient at 2048x512 and better at larger grids.
+
+---
+
+## 6. Experiments (tried, measured, kept or rejected)
+
+Each one gets a CHANGELOG entry, kept or rejected, with the number. Rejected
+ones go on the F1 side panel, which plays the role the negative controls
+played in M1.
+
+| Id | Experiment | Rung | What we measure | Why it is interesting |
+|---|---|---|---|---|
+| E1 | `-O3` and `-ffast-math` vs `-O2` on the serial rung | 1 | throughput, answer drift | Answers whether the compiler could have done the SIMD for us. M1 showed `-O3` auto-vectorised the baseline but not level 6. |
+| E2 | aligned buffers (`_mm256_load_pd` on a 32-byte aligned grid) vs unaligned | 2 | throughput | Tests the L04 claim that the alignment penalty is gone. |
+| E3 | float32 with `__m256` (8 lanes) | 2 | throughput and error vs double | Doubles the lane count. Trade-off of speed for accuracy. If time allows. |
+| E4 | one `parallel for` per step vs one persistent `parallel` region with `omp for` and `omp single` | 3 | throughput at 24 threads, small and large grids | Fork-join cost per step. L05's boundary-exchange pattern. |
+| E5 | `schedule(static)` vs `schedule(dynamic, chunk)` | 3 | throughput | T04 says static suits equal work. Confirms it. |
+| E6 | `OMP_PROC_BIND` none / close / spread with `OMP_PLACES=cores` | 3 | throughput at 6, 12, 24 threads | Two sockets. Placement decides which L3 and which memory a thread uses. |
+| E7 | first-touch initialisation (each thread touches the rows it will update) | 3 | throughput at 4096x1024, 24 threads | NUMA page placement. Matters only when the grid spills L3. |
+| E8 | parallel boundaries vs serial boundaries | 3 | throughput, serial fraction | Shrinks the Amdahl serial term. Probably too small to see, which is itself a result. |
+| E9 | overlapping the halo exchange with interior rows (post Irecv/Isend, update interior, wait, update edge rows) | 4 | throughput on 2 nodes | L06 overlap pattern. |
+| E10 | ranks per node 1 vs 2 (per socket) | 4 | throughput on 1 and 2 nodes | Hypothesis 5. |
+| E11 | `MALLOC_MMAP_THRESHOLD_` page regime re-checked at 24 threads | all | throughput | M1 found page size worth 1.66x serially. Checks whether it still matters when threaded. |
+
+---
+
+## 7. Benchmark protocol (Benchmarking 25%)
+
+Carried over from M1 and extended for threads and ranks.
+
+- Every number comes from a rangpur compute node through `sbatch`. Never the
+  login node. The plotting scripts refuse any CSV whose `host=` header is not a
+  `*.compute.eait.uq.edu.au` name (kept from M1).
+- Single-node runs pin `--nodelist=r730-2 --exclusive`, the same machine as M1
+  (dual-socket Xeon E5-2670 v3, 2 x 12 cores, 30 MiB L3 per socket, AVX2+FMA,
+  GCC 8.5). Two-node runs use `r730-2,r730-3` exclusive. As of 2026-10-11
+  `sinfo` shows r730-0 mixed, r730-1 down, r730-2 and r730-3 usable.
+- `--cpus-per-task` set to the thread count, `--ntasks` and
+  `--ntasks-per-node` to the rank layout. QOS caps wall time at 15 minutes, so
+  each sweep is its own job sized under 14 minutes.
+- Page regime pinned with `MALLOC_MMAP_THRESHOLD_` exactly as the M1 headline,
+  passed to every rank with `mpiexec -x`. Recorded in the header.
+- Thread binding recorded in the header (`OMP_PROC_BIND`, `OMP_PLACES`), and
+  `--report-bindings` output kept in the `.err` file for MPI runs.
+- Median of 5 repetitions, min to max range reported, as in M1.
+- Each repetition runs for at least 1 second. Fast rungs get more timesteps,
+  and the maturity is scaled with nt so dt stays at the same fraction of the
+  stability bound. The rate (Mcell-updates/s) is unaffected.
+- Header records host, CPU, caches, compiler, flags, threads, ranks, binding,
+  page regime, job id, date.
+- Weak scaling grows `nv` with the thread count and scales `v_max` with it so
+  the spacing dv, and therefore dt, stays the same. Every step costs the same
+  per cell.
+- Peak and bandwidth ceilings are measured on the same node, not taken from a
+  datasheet (scalar FMA peak from M1, new AVX2 FMA peak per core and for 24
+  cores, triad bandwidth for 1 and 24 threads).
+
+### 7a. Sweeps (one slurm script each)
+
+| Script | What it runs | Feeds |
+|---|---|---|
+| `slurm/debug.sh` | build and `make test` on a compute node, 5 minutes, not exclusive | gate before any sweep |
+| `slurm/bench_m2_ladder.sh` | baseline, serial, simd, omp(24), mpi(1 node, 2 ranks x 12) at 2048x512 | F1 |
+| `slurm/bench_m2_strong.sh` | omp at 1, 2, 4, 6, 8, 10, 12, 16, 20, 24 threads, fixed 2048x512 | F2 |
+| `slurm/bench_m2_weak.sh` | omp at the same thread counts, rows per thread fixed | F3 |
+| `slurm/bench_m2_size.sh` | serial, simd, omp(24) at 512x128 up to 4096x1024 and one grid past both L3s | F4 |
+| `slurm/bench_peak.sh` (extended) | scalar FMA peak, AVX2 FMA peak (1 core and 24), triad bandwidth (1 and 24 threads) | F5 |
+| `slurm/bench_m2_experiments.sh` | E1, E2, E4, E5, E6, E7, E8, E11 | F1 side panel, F7 |
+| `slurm/bench_m2_mpi.sh` | 1 node x {1, 2} ranks, 2 nodes x {1, 2} ranks per node, threads inside, E9 | F8, F6 |
+| `slurm/bench_m2_float.sh` | E3 | F1 side panel, F9 |
+
+---
+
+## 8. Figures (Benchmarking and Presentation, 45% together)
+
+Every figure follows the M1 house style from `scripts/figstyle.py`. Light
+background, one highlight colour for real gains, grey for nulls, red for the
+rejected or control panel, value and speedup printed on each bar, and a
+provenance footer (host, CPU, compiler, flags, threads or ranks, date) along
+the bottom. Each figure exists to highlight one HPC change and its impact.
+
+| Id | Figure | Built from | The HPC change it highlights | The sentence it lets us say |
+|---|---|---|---|---|
+| F1 | **The M2 ladder.** Bars for baseline, serial, simd, omp(24), mpi, labelled with Mcell-updates/s and cumulative speedup, per-rung gain printed inside the bar. Side panel of tried-and-rejected variants (E2, E3, E4, E5, the losing binding), styled like the M1 negative-controls panel. Log y-axis if the range demands it, with the speedup labels carrying the story. | ladder, experiments | every rung at once | Each technique on top of the last, and what it was worth. |
+| F2 | **Strong scaling.** Left, speedup vs threads with the ideal line and the fitted Amdahl curve, serial fraction f printed. Right, parallel efficiency vs threads. A vertical line at 12 threads marks the socket boundary. Both simd-based omp and a scalar-based omp line so SIMD and threads are shown to compound. | strong | OpenMP | Speedup flattens where the fit says, and here is the serial fraction behind it. |
+| F3 | **Weak scaling.** Time per step vs threads with work per thread fixed, and scaled speedup against the Gustafson line. | weak | OpenMP | With more cores we can solve a proportionally bigger grid in the same time. |
+| F4 | **Throughput against grid size.** serial, simd and omp(24) lines across grid sizes, with shaded bands for "fits in L2", "fits in one L3", "fits in both L3s", "DRAM", the same way M1 shaded the page regime. Right panel, speedup of omp(24) over serial per size. | size | memory hierarchy vs parallelism | Small grids lose to overhead, large grids hit memory bandwidth. |
+| F5 | **Roofline v2.** M1 roofline extended with the AVX2 per-core peak, the 24-core AVX2 peak, and measured 1-thread and 24-thread bandwidth roofs. Points for baseline, serial, simd, omp(24), mpi, coloured by rung. | peak, ladder, size | SIMD lifts the compute roof, threads move the kernel toward the memory roof | Shows whether hypothesis 3 held, the kernel changed from compute-bound to memory-bound. |
+| F6 | **Where the time goes.** Stacked bars of time per step split into stencil update, boundaries (the serial part), halo exchange, and idle wait, for omp at 1, 12, 24 threads and mpi at 1, 2, 4 ranks. | strong, mpi | hotspot and bottleneck identification | The serial part is X%, the halo exchange is Y%, here is what limits scaling. |
+| F7 | **Thread placement and NUMA.** Grouped bars for binding none, close, spread, and first-touch on and off, at 12 and 24 threads, at 2048x512 and 4096x1024. | experiments | OpenMP on a two-socket node | Where threads and pages live matters as much as how many threads there are. |
+| F8 | **Hybrid layouts.** Bars for 1 node x 1 rank x 24 threads, 1 node x 2 ranks x 12, 2 nodes x 1 x 24, 2 nodes x 2 x 12, with the communication fraction printed. Second panel, 2-node strong-scaling efficiency at two grid sizes. | mpi | MPI, then hybrid | Splitting by socket, then by node, and what the network costs. |
+| F9 | **Every rung gives the same answer.** Max relative difference vs baseline per rung on a log axis with the test tolerance as a line. float32 shown if E3 runs, far above the line. | test output | correctness of each parallel change | Faster and still right, and the one variant that was faster but not right enough. |
+| F11 | **What the compiler gives.** baseline and serial built at -O0, -O1, -O2, -O3, one thread. Added from the M1 feedback. | optlevels | the compiler before our changes | -O3's own vectoriser gives 1.5x on serial, the hand AVX2 rung 2.4x. |
+| F12 | **Where the time goes.** gprof flat profile of baseline, serial and simd on one thread. Added from the M1 feedback. | profile | hotspot identification | 99% of the time is the interior update, the boundaries under half a percent. |
+| F10 | **Who updates what.** Static diagram of the grid with rows coloured by thread (OpenMP), then slabs by rank with halo rows highlighted (MPI), and four cells in one AVX register. Optional animation in the `memory_anim.py` style. | none (diagram) | how the problem was structured and parallelised | Optimisation criterion asks for the structure explicitly. |
+
+Kept from M1 for the Introduction: weather map, BS collapse, payoff diagram.
+The M1 ladder figure (`results/bench_ladder_hugepage.png`) appears for one
+slide as the serial backstory.
+
+Code shots (`scripts/code_shots.py`, as in M1). One per rung: the scalar row
+update, the four FMA lines of the AVX row, the one-line pragma, and the halo
+exchange. Plus the CSV provenance header.
+
+Scripts. `scripts/bench_plot.py` is extended for F1 to F4 and F6 to F9 and
+keeps the compute-node refusal. `scripts/roofline.py` gains the extra roofs
+for F5. `scripts/memory_anim.py` gains a decomposition style for F10.
+
+---
+
+## 9. Documents
+
+| File | What it holds |
+|---|---|
+| `PLAN.md` | This plan. The phase checklist in §10 is ticked as work lands. |
+| `CHANGELOG.md` (new) | Matrixass format. `## Phase N. Title`, then `### Decision N.`, `### Change N.` or `### Tried and rejected N.`, then `### Validation` with job ids and numbers, then `### Where this leaves the project`. Every code change appears here. |
+| `COMMANDS.md` (new, replaces `docs/RUNNING.md`) | Every command, local and rangpur, with what each argument and environment variable does. Build, test, run each rung, `OMP_NUM_THREADS`, `OMP_PROC_BIND`, `OMP_PLACES`, `mpiexec` flags, sync, sbatch, squeue, fetch, plots. Ends with a five-minute live demo runbook for the interview. |
+| `STUDY_GUIDE.md` | The maths and ideas. Updated with every code change, not only in P8 (see §10). M1 parts kept. New parts for SIMD vs MIMD, AVX2 and FMA, OpenMP, MPI, hybrid, NUMA, Amdahl and Gustafson, strong vs weak scaling, roofline. Interview practice questions with answers. Glossary. Links to the Intel Intrinsics Guide, the OpenMP 4.5 specification (what GCC 8.5 implements) and the Open MPI 4.1 `mpirun` manual. |
+| `CODE_GUIDE.md` | The code, file by file in run order, each snippet copied from the real file with the comments stripped and two plain sentences under it, what it does and why (matrixass format). Each new rung file gets its own section. Practice questions on the code. |
+| `docs/RESULTS.md` | New M2 section, every number with its job id, same discipline as M1. |
+| `HPC_JUSTIFICATIONS.md` | Why each HPC technique was used, as interview answers in full sentences, each with the number that backs it. Covers the problem structure, memory layout, every rung, the measurement method, the scaling models and the rejected experiments. Updated when a decision changes. |
+| `CLAUDE.md` | Milestone 2 scope and the new comment style. |
+
+---
+
+## 10. Phases
+
+Each phase lists what it needs, the work, when it is done, and what validates
+it (matrixass MASTERDOC format).
+
+Every phase that changes code also updates the two guides in the same
+session, alongside its CHANGELOG entry. New or changed code gets a block in
+CODE_GUIDE.md, copied from the real file, followed by one sentence on what
+the block does and one on why we do it. New ideas behind the code (SIMD,
+OpenMP, MPI, scaling) go in STUDY_GUIDE.md. A diagram is added or updated
+wherever a picture explains it faster than text (data layout, which worker
+owns which rows, halo exchange, timing breakdowns). Snippets that no longer
+match the code are fixed or removed, never left stale.
+
+**P0. Setup** (done this session unless marked)
+- [x] Tag `milestone1` on the M1 commit.
+- [x] Open MPI 5.0 installed locally with Homebrew. Rangpur has Open MPI 4.1.1 (`module load mpi/openmpi-x86_64`, `mpicxx` wraps g++ 8.5).
+- [x] Checked an x86_64 AVX2+FMA build runs on this Mac under Rosetta.
+- [x] Checked r730 availability with `sinfo`.
+- [x] Create CHANGELOG.md and COMMANDS.md, update CLAUDE.md and memory with the comment style.
+- Done when the docs skeletons exist and `make` still builds the M1 tree.
+
+**P1. Shared stencil, `serial` rung, restyle** (done 2026-10-11, see CHANGELOG Phase 1)
+- Needs P0.
+- `stencil.h/.cpp`, `SerialSolver`, `report_stability`, factory entry, `test_ladder_matches`, Makefile with `mpicxx` and OpenMP flags, restyle the kept files, remove the M1 opt ladder.
+- Done when `make test` passes locally and serial matches baseline.
+- Validated by `test_ladder_matches` and `make check-heston`.
+
+**P2. `simd` rung** (done 2026-10-11, see CHANGELOG Phase 2)
+- `update_row_avx`, `SimdSolver`, `make avx-check`.
+- Done when the Rosetta AVX check and a rangpur `debug.sh` job both pass and `objdump` shows no zmm registers.
+
+**P3. `omp` rung** (rung done 2026-10-11, see CHANGELOG Phase 3. E4 to E8 run with the P5 sweeps)
+- `OmpSolver`. Then E4 to E8 and keep the winner.
+- Done when tests pass at 1, 2 and 7 threads locally and on rangpur.
+
+**P4. `mpi` rung** (rung done 2026-10-11, see CHANGELOG Phase 4. E9 runs with the P5 sweeps)
+- `MpiSolver`, halo exchange, Gatherv, comm timer, `make test-mpi`. Then E9.
+- Done when tests pass at `-n 1, 2, 3` locally and on rangpur across two nodes.
+
+**P5. Benchmarks on rangpur** (done 2026-10-11, see CHANGELOG Phase 5. Every sweep re-run with denormals flushed, jobs 651294 to 651303, 651474. E2 and E9 not run)
+- Rewrite `bench_common.sh`, write the §7a sweeps, extend `bench_peak.sh`.
+- Done when every sweep CSV is fetched with a compute-node header.
+
+**P6. Figures** (done 2026-10-12. F1 to F10 drawn by `scripts/m2_figures.py` and `scripts/decomposition_diagram.py` into `results/m2/`, code shots by `scripts/code_shots.py` into `results/m2/code_shots/`, see CHANGELOG Phase 6)
+- F1 to F10 and the code shots.
+- Done when every figure renders from fetched CSVs and its numbers match RESULTS.md.
+
+**P7. float32 (E3), only if P1 to P6 are done** (done 2026-10-12, job 652647, see CHANGELOG Phase 7. Rejected for accuracy, 1.75x to 4.46x faster)
+
+**P8. Documents** (done 2026-10-12, see CHANGELOG Phase 8. COMMANDS.md tested, demo runbook in §5, three missing STUDY_GUIDE answers added)
+- STUDY_GUIDE M2 parts, CHANGELOG complete, COMMANDS.md tested command by command, RESULTS.md M2 section.
+- Done when every CHANGELOG decision has a matching STUDY_GUIDE answer.
+
+**P9. Presentation** (plan, script and deck done 2026-10-12, see CHANGELOG Phase 9 and 9b, `presentation/M2_SCRIPT.md` and `presentation/deck_m2.pdf`. Recording not done)
+- New `presentation/` plan for M2 using §11. Video recorded in a later session.
+
+**P10. Interview rehearsal**
+- Final pass of STUDY_GUIDE.md and CODE_GUIDE.md before the interview. Check every snippet against the current code, check every snippet has its what and why sentences, check every diagram matches the final ladder, bring the older Milestone 1 sections in line with the writing style (no em dashes, no big adjectives), and trim history that does not help answer a question.
+- Run the COMMANDS.md demo on rangpur end to end. Answer every STUDY_GUIDE practice question out loud.
+- Done when each guide can be read start to finish in one sitting and every practice question has an answer in it.
+
+**P11. CUDA bonus, only if everything above is done**
+
+---
+
+## 11. Presentation plan (Presentation 20%, and fixing M1)
+
+### 11a. Milestone 1 feedback (82.6/100, one marker)
+
+| Criterion | Mark | Comment | Change for M2 |
+|---|---|---|---|
+| Introduction | 15.9 | Excellent domain framing, maths and background. Two-buffer grid design but no data structures. Nearly half the video passed before any HPC content. Add the `index()` mapping, row-major stride, bytes per grid and the loop nest. | Finance and maths cut to one minute. A data structure beat at 1:20 shows `index()`, the row stride, 8 MiB per sheet at 2048 x 512 and the loop nest (code shot `shot_data_layout.png`). HPC content starts by 1:20. |
+| Optimisation | 22.9 | Great methodology, nice strength-reduction insight. Most changes turned out null but handled well, push insights more. | Every rung beat states its insight as one sentence with its number, for example why SIMD gives 2.4x and not 4x, why `close` alternates sockets, why float is 4.5x faster on a big grid and still rejected. |
+| Benchmarking | 18.9 | Full hardware and compiler details. Add a gprof or perf flat profile of the baseline and a four-bar -O0/-O1/-O2/-O3 chart for baseline. | `slurm/profile_m2.sh` (gprof flat profiles of baseline, serial and simd) and `slurm/bench_m2_optlevels.sh` (baseline and serial at -O0 to -O3), drawn as F11 and F12, shown in a where the time goes beat before the first rung. |
+| Presentation | 15.9 | Professional slides with graphics and clean code diffs. A streaming overlay partly hid slide headers. Delivery fast and occasionally slurred on named theorems, use a cursor. | No overlay over the slide, webcam only in a reserved bottom-right box that no slide content uses. Script budgeted at 140 words per minute instead of 150. A pronunciation list for named results. A visible cursor or pointer on every figure, pointing at the number being said. |
+| Conclusion | 9.0 | Excellent structured reflection, main insight and the page-size effect. Show speedup figures and the SIMD ceiling to quantify the target. | The conclusion slide shows the ladder numbers and the measured ceilings (AVX2 peak, DRAM bandwidth, the roofline position of each rung), then the hypotheses that held and the two that did not. |
+
+### 11b. Rules carried over
+
+- Target 9 minutes 20, ceiling 10. Word count per take checked at 140 words
+  per minute.
+- Self-contained introduction that never says "as in Milestone 1".
+- One idea per slide. The figure is the slide, and the spoken line says the
+  one sentence from the §8 table.
+- Fewer, larger numbers on screen. The full tables live in RESULTS.md.
+
+### 11c. Beats
+
+| Beat | Time | Rubric criterion | Assets |
+|---|---|---|---|
+| Cold open, the final speedup | 0:20 | Presentation | F1 final bar |
+| The problem, option, Heston PDE, grid | 1:00 | Introduction | payoff diagram, weather map |
+| The data structure, `index()`, stride, bytes, loop nest | 0:40 | Introduction | `shot_data_layout.png`, F10 |
+| Where the time goes, profile and -O levels | 0:40 | Benchmarking | F11, F12 |
+| Serial rung, strength reduction | 0:30 | Optimisation | `shot_serial_row.png` |
+| SIMD, and why not 4x | 1:00 | Optimisation | `shot_simd_fma.png`, F5 |
+| OpenMP, Amdahl and placement | 1:15 | Optimisation, Benchmarking | `shot_omp_pragma.png`, F2, F7 |
+| Hybrid MPI | 0:50 | Optimisation | `shot_mpi_halo.png`, F8 |
+| Same answer on every rung | 0:25 | Benchmarking | F9 |
+| Weak scaling and grid size | 0:45 | Benchmarking | F3, F4 |
+| Bottlenecks | 0:35 | Benchmarking | F6, F5 |
+| Tried and rejected | 0:30 | Optimisation | F1 side panel |
+| Conclusion, numbers and ceilings | 0:40 | Conclusion | conclusion slide |
+| Close | 0:10 | | |
+
+## 12. Interview preparation
+
+The interview is about 7 minutes and pass/fail. The user should be able to
+open any file, explain any line, and run the code live.
+
+- STUDY_GUIDE practice questions cover at least these. Why rows and not
+  columns for threads. Why no locks are needed. What `default(none)` does and
+  why. What happens if `OMP_NUM_THREADS` exceeds the cores. Why unaligned
+  loads. What FMA changes. Why the halo is one row. Why `Irecv` before
+  `Isend`. Why every rank holds the full grid and what you would change for a
+  huge grid. What Amdahl's fit says about this code. Strong vs weak scaling.
+  Why the kernel became memory-bound. What the roofline shows.
+- `HPC_JUSTIFICATIONS.md` holds the why answers for every HPC choice, ready to say out loud.
+- COMMANDS.md demo runbook. Sync, submit `debug.sh`, watch `squeue`, show the
+  CSV, run one rung interactively on a small grid with `salloc` if allowed, or
+  show a saved job output.
+
+---
+
+## 13. Risks and cut order
 
 | Risk | Mitigation |
 |---|---|
-| v=0 boundary subtly wrong | BS-collapse test catches it (xi=0 exercises v-drift); compare against textbook Heston prices if doubt remains |
-| ~~Explicit dt too small ⇒ reference nt=2000 unstable~~ **RESOLVED P7** | It did fire — reference.cfg printed `nan,nan,nan,nan`. Fixed by `v_max` 1.0→0.64 and `nt` 2000→980000; the solver's printed stability estimate is what diagnosed it. The instability became P5 content rather than a failure. |
-| Rangpur queue congestion near deadline | Benchmarks are P7 but slurm scripts tested (debug_serial.sh) in P1 week |
-| Scope creep | Cut order fixed by spec: historical study first, then extras; never solver/validation/benchmarks |
+| r730-3 busy or down, so no 2-node runs | 1-node 2-rank MPI still demonstrates decomposition and halo exchange. Two-node runs submitted early and retried. |
+| GCC 8.5 rejects the `default(none)` shared list | Non-const shared variables, compile on rangpur in P3 before benchmarking. |
+| AVX path only testable on rangpur | Rosetta x86_64 build locally, `debug.sh` on rangpur for every AVX change. |
+| Queue congestion near the deadline | Sweeps written in P5 but `debug.sh` submitted from P2 onwards. |
+| Scope creep | Cut order is CUDA first, then float32, then the F10 animation (keep the static diagram), then E9 overlap. Never cut correctness tests, F1, F2, F3 or F6. |
 
-## 8. Definition of done (Milestone 1)
+---
 
-- [x] `make test` green locally and on rangpur (9 of 9 ladder levels + controls)
-- [x] Convergence figure committed
-- [x] Instability clip + measured boundary
-- [x] Weather-map animation from C++ output
-- [x] Reference config actually runs: 196.1684 vs semi-analytic 196.1692 (4.2e-6)
-- [x] Rangpur opt-level ladder benchmark table + figure (headline baseline→L6
-      = **2.56× huge pages / 1.81× default allocator**; both reported, and the
-      1.66× page-size effect that separates them is its own result)
-- [x] Negative controls measured, so the two null rungs have a number attached
-- [x] Roofline + cache-traffic figures TESTING the "memory-bound" claim
-      (it failed: level 6 reaches ~81% of measured scalar peak — compute-bound)
-- [ ] 10-min H.264 video, submission format per rubric
-- [ ] Repo clean: `make clean && make` works from fresh clone on rangpur
+## 14. Definition of done (Milestone 2)
+
+- [ ] `make clean && make && make test` passes locally and on a rangpur compute node, and `make test-mpi` passes at 1, 2 and 3 ranks.
+- [ ] Every rung matches baseline within the measured tolerance (F9).
+- [ ] All §7a sweeps run on r730 compute nodes with provenance headers.
+- [x] F1 to F9 rendered, F10 diagram drawn, code shots made.
+- [ ] Amdahl serial fraction fitted and Gustafson weak-scaling shown.
+- [ ] Every experiment in §6 that ran has a kept-or-rejected CHANGELOG entry.
+- [ ] STUDY_GUIDE M2 parts, COMMANDS.md and RESULTS.md complete.
+- [ ] STUDY_GUIDE and CODE_GUIDE final pass done (P10), every snippet matches the code.
+- [ ] 10-minute H.264 video under 100 MB, `Milestone2_48008361.zip` built by `make package`.
+- [ ] Demo runbook rehearsed on rangpur.

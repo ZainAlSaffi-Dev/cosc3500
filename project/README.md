@@ -18,33 +18,36 @@ make test     # the validation gates; prints ALL TESTS PASS
 | document | what it is for |
 |---|---|
 | **[WALKTHROUGH.md](docs/WALKTHROUGH.md)** | **Start here.** The whole program explained in plain English, from the problem down to the individual loops. No finance or C++ background assumed. |
-| [RUNNING.md](docs/RUNNING.md) | How to build, test, benchmark on rangpur, and reproduce every number. The single home for the slurm and cluster mechanics. |
+| [COMMANDS.md](COMMANDS.md) | Every command to build, test, run and benchmark on rangpur. The single home for the slurm and cluster mechanics. |
+| [CHANGELOG.md](CHANGELOG.md) | Every Milestone 2 change in order, with the reason for each decision. |
 | [RESULTS.md](docs/RESULTS.md) | The measured findings, with the provenance behind each number. Tracked, unlike `results/`. |
 | [PRESENTATION.md](presentation/PRESENTATION.md) | The Milestone 1 video plan: rubric, time budget, beat sheet, submission checklist. |
 | [presentation/](presentation/) | The recording side of that plan. A timestamped shot table, notes on how each asset is shot, and the slide deck the video is recorded over. What to say stays in PRESENTATION.md. |
 | [PLAN.md](PLAN.md) | The design contract: numerical scheme, code style rules, optimisation ladder design, benchmark protocol. |
-| [STUDY_GUIDE.md](STUDY_GUIDE.md) | The long-form explainer, Parts I to V, from the finance through to the parallel future. Interview preparation. |
+| [STUDY_GUIDE.md](STUDY_GUIDE.md) | The maths and ideas, from the finance and the PDE through finite differences, validation, memory and benchmarking to the parallel plan. Interview preparation. |
+| [HPC_JUSTIFICATIONS.md](HPC_JUSTIFICATIONS.md) | Why each HPC technique was used, one question and answer per choice, with the number behind it. Interview preparation. |
+| [CODE_GUIDE.md](CODE_GUIDE.md) | The code, file by file and snippet by snippet, with what each block does and why. Interview preparation. |
 | [InitialSpecDesign.md](docs/InitialSpecDesign.md) | The original submitted brief. Frozen deliverable, deliberately not updated to match later decisions. |
 | [HANDOFF.md](docs/HANDOFF.md) | Session pickup notes and the outstanding learning backlog. |
 
 To avoid the same fact drifting apart in several places, each topic has one
-owner: the scheme and style live in PLAN.md, cluster operations in RUNNING.md,
-measured numbers in RESULTS.md, explanation in WALKTHROUGH.md and
-STUDY_GUIDE.md. Everything else links rather than restates.
+owner: the scheme and style live in PLAN.md, cluster operations in COMMANDS.md,
+measured numbers in RESULTS.md, explanation in WALKTHROUGH.md,
+STUDY_GUIDE.md and CODE_GUIDE.md. Everything else links rather than restates.
 
 ---
 
 ## Layout
 
 ```
-include/   headers: params, grid, solver interface, kernels, io, black_scholes
-src/       the solver: baseline, optimised ladder, grid, io, main
-docs/      the written record: walkthrough, running, results, spec, handoff
+include/   headers: params, grid, solver interface, stencil, io, black_scholes
+src/       the solvers (baseline, serial), shared stencil, grid, io, main
+docs/      the written record: walkthrough, results, spec, handoff
 presentation/  the video: plan, shot list, timeline, slide deck
 tests/     three validation binaries, run by `make test`
 config/    reference.cfg (the real contract), bench.cfg (timing only),
            demo.cfg (animations), smoke.cfg, unstable.cfg
-slurm/     the sbatch jobs; five benchmark sweeps and two diagnostics
+slurm/     the sbatch jobs, debug.sh and bench_peak.sh so far
 scripts/   figures and animations (Python, local only, never on rangpur)
 results/   gitignored: CSVs, figures, snapshots, animations
 ```

@@ -1,4 +1,50 @@
-# HANDOFF — next session pickup (updated 2026-08-09)
+# HANDOFF — next session pickup (updated 2026-10-12, Milestone 2)
+
+## Milestone 2 state
+
+P0 to P8 of `PLAN.md` §10 are done, and the P9 plan and script. All five rungs (baseline, serial, simd,
+omp, mpi) exist, match the baseline, and the parallel ones match simd bit for
+bit. Every sweep has run on r730-2 (and r730-3 for two nodes) with denormals
+flushed, `make m2-figures` draws F1 to F10, and `make code-shots` draws the
+M2 code shots into `results/m2/code_shots/`. The float32 experiment (E3,
+`--solver omp_float`, job 652647) is 1.75x to 4.46x faster and rejected for
+accuracy. The numbers are in `docs/RESULTS.md` under Milestone 2, the
+decisions in `CHANGELOG.md` Phases 1 to 8, the concepts in `STUDY_GUIDE.md`
+§15 to §18 and the code in `CODE_GUIDE.md` §8.10, §9a to §9e.
+`COMMANDS.md` §5 is the interview demo runbook.
+
+Left, in PLAN order.
+
+- E2 aligned loads and E9 halo overlap never ran (CHANGELOG Phase 5
+  Decision 3). Both are optional.
+- P9 recording. The plan (PLAN §11), the script (`presentation/M2_SCRIPT.md`)
+  and the deck (`presentation/deck_m2.pdf`, `make slides-m2`, 22 frames in
+  script order, bottom-right corner left for the webcam) are done. Only the
+  recording is left.
+- `HPC_JUSTIFICATIONS.md` holds the why answers for every HPC choice. Keep
+  it in step with any decision that changes.
+- P10 interview rehearsal and the final pass of both guides, including the
+  older M1 sections that still have em dashes.
+- P11 CUDA bonus, only after everything else.
+- Nothing from Milestone 2 is committed yet. The whole M2 tree is in the
+  working copy only. Commit it (author only, no co-author trailer).
+
+Rules learned this session.
+
+- Never run `make sync` while a job is running unless the job builds in its
+  own work copy. Every slurm script now does (`~/cosc3500/work/job_<id>`),
+  and `sync` excludes `slurm-*.out` and the test binaries.
+- Every benchmark loads `slurm/flush_denormals.c` with `LD_PRELOAD`. Without
+  it rates move by up to 38% with `nt` and grid size.
+- On r730 nodes `OMP_PROC_BIND=close` alternates sockets (even CPUs are
+  socket 0).
+- `perf stat` does not count properly inside a slurm job on rangpur.
+- The project venv needed rebuilding (`.venv/bin/python` was missing).
+
+---
+
+# Milestone 1 handoff (kept for history)
+
 
 **P1–P7 are done.** What remains for Milestone 1 is **P8 (the video)** and the
 **learning debt** at the bottom of this file. Everything P7 produced is listed
@@ -6,8 +52,8 @@ below with the numbers, so the video script can be written straight from here.
 
 ## Kickoff prompt (paste this to start the next session)
 
-> Read `project/docs/HANDOFF.md` end to end, then `STUDY_GUIDE.md` §14b, §15 and
-> §16 and `PLAN.md` §4b/§6. P1–P7 are done; what is left is P8 (the 10-minute
+> Read `project/docs/HANDOFF.md` end to end, then `STUDY_GUIDE.md` §12b, §13 and
+> §14 and `PLAN.md` §4b/§6. P1–P7 are done; what is left is P8 (the 10-minute
 > video) and the quiz backlog.
 >
 > Start by confirming `make test` is green and that
