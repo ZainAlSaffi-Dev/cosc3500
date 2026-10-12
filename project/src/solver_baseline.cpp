@@ -1,158 +1,140 @@
-// BaselineSolver is the simple version, written to be correct rather than
-// fast. It recomputes every stencil weight per cell and hoists nothing. This
-// is the "before" number for the optimisation section and the answer every
-// other solver has to match, so nothing in here should be optimised.
+// AI declaration
+// I used Claude, an AI assistant made by Anthropic, while working on this file.
+// It helped me debug the code, draft pseudocode and implement it.
 
 #include <chrono>
 #include <cmath>
-#include <cstdio>
 #include <vector>
 
 #include "io.h"
 #include "solver.h"
 
+// Prices the option the simple way, with all the maths written out in one place.
+// Nothing is precomputed, so this is the slow reference every other solver must match.
 SolveResult BaselineSolver::solve(const Config& cfg) {
     SolveResult result;
 
-    Grid g(cfg.grid, cfg.option);
-    g.init_payoff(cfg.option);
+    // Fill the first sheet with the payoff at expiry
+    Grid grid(cfg.grid, cfg.option);
+    grid.init_payoff(cfg.option);
 
-    // Copying the parameters into short locals lets the arithmetic below look
-    // like the PDE as it is written on paper.
-    const double strike = cfg.option.strike;
-    const double rate = cfg.market.rate;
-    const double div_yield = cfg.market.div_yield;
-    const double kappa = cfg.heston.kappa;
-    const double theta = cfg.heston.theta;
-    const double xi = cfg.heston.xi;
-    const int num_timesteps = cfg.grid.num_timesteps;
-    const double rho = cfg.heston.rho;
+    // Short local names so the maths reads like the PDE
+    double strike = cfg.option.strike;
+    double rate = cfg.market.rate;
+    double div_yield = cfg.market.div_yield;
+    double kappa = cfg.heston.kappa;
+    double theta = cfg.heston.theta;
+    double xi = cfg.heston.xi;
+    double rho = cfg.heston.rho;
+    int num_timesteps = cfg.grid.num_timesteps;
 
-    const double dt = cfg.option.maturity_years / num_timesteps;
+    double dt = cfg.option.maturity_years / num_timesteps;
+    report_stability(grid, cfg, dt, result);
 
-    // An explicit scheme is only stable below a certain timestep. The worst
-    // cell is the far corner where the stock price and the variance are both
-    // at their largest, because that is where the diffusion coefficients are
-    // biggest, so the estimate comes from there. PLAN §1 works this through.
-    const double s_max = g.stock_price(g.num_stock_nodes() - 1);
-    const double v_max = g.variance(g.num_variance_nodes() - 1);
-    result.dt_stable_estimate = 1.0 /
-        (v_max * s_max * s_max / (g.stock_spacing() * g.stock_spacing()) +
-         xi * xi * v_max / (g.variance_spacing() * g.variance_spacing()) +
-         rate);
+    // Largest stock price, needed by the call's top edge
+    double max_stock_price = grid.stock_price(grid.num_stock_nodes() - 1);
 
-    // The Feller condition says that when 2*kappa*theta is at least xi
-    // squared, the variance can never reach zero. It is reported here for the
-    // write-up and does not change anything the solver does.
-    const bool feller_ok = 2.0 * kappa * theta >= xi * xi;
-    std::fprintf(stderr,
-                 "[baseline] feller %s (2*kappa*theta=%.4f, xi^2=%.4f)  "
-                 "dt=%.3e  dt_stable~%.3e\n",
-                 feller_ok ? "OK" : "VIOLATED", 2.0 * kappa * theta, xi * xi,
-                 dt, result.dt_stable_estimate);
+    // current is always the sheet we read, next is always the sheet we write.
+    // These stay correct after swap_buffers because the swap moves the contents
+    const std::vector<double>& current = grid.current();
+    std::vector<double>& next = grid.next();
 
-    // These two references stay valid across swap_buffers(), because the swap
-    // exchanges the contents of the vectors rather than the references
-    // themselves. So cur is always the sheet being read and next is always the
-    // sheet being written.
-    const std::vector<double>& cur = g.current();
-    std::vector<double>& next = g.next();
+    for (int step = 1; step <= num_timesteps; ++step) {
+        // auto lets the compiler work out the long clock type for us
+        auto step_start = std::chrono::steady_clock::now();
 
-    // n counts steps taken backwards from expiry towards today.
-    for (int n = 1; n <= num_timesteps; ++n) {
-        const std::chrono::steady_clock::time_point step_start =
-            std::chrono::steady_clock::now();
+        // Every interior cell gets the full PDE
+        for (int var_j = 1; var_j < grid.num_variance_nodes() - 1; ++var_j) {
+            for (int stock_i = 1; stock_i < grid.num_stock_nodes() - 1; ++stock_i) {
+                // Stock price and variance at this cell
+                double stock_price = grid.stock_price(stock_i);
+                double variance = grid.variance(var_j);
 
-        for (int var_j = 1; var_j < g.num_variance_nodes() - 1; ++var_j) {
-            for (int stock_i = 1; stock_i < g.num_stock_nodes() - 1;
-                 ++stock_i) {
-                    double S = g.stock_price(stock_i);
-                    double V = cur[g.index(stock_i, var_j)];
-                    double v = g.variance(var_j);
-                    double east = cur[g.index(stock_i + 1, var_j)];
-                    double west = cur[g.index(stock_i - 1, var_j)];
-                    double north = cur[g.index(stock_i, var_j + 1)];
-                    double south = cur[g.index(stock_i, var_j - 1)];
-                    double ne = cur[g.index(stock_i + 1, var_j + 1)];
-                    double nw = cur[g.index(stock_i - 1, var_j + 1)];
-                    double se = cur[g.index(stock_i + 1, var_j - 1)];
-                    double sw = cur[g.index(stock_i - 1, var_j - 1)];
-                    // finite differences declarations (what we use to calc the pde)
-                    double V_S = (east - west) / (2.0 * g.stock_spacing());
-                    double V_SS = (east - 2.0 * V + west) / (g.stock_spacing() * g.stock_spacing());
-                    double V_v = (north - south) / (2.0 * g.variance_spacing());
-                    double V_vv = (north - 2.0 * V + south) / (g.variance_spacing() * g.variance_spacing());
-                    double V_Sv = (ne - nw - se + sw) / (4.0 * g.stock_spacing() * g.variance_spacing());
-                    // heston pde update, its the model the simulation is based on
-                    double pde = V + dt * (0.5 * v * S * S * V_SS + rho * xi * v * S * V_Sv + 0.5 * xi * xi * v * V_vv
-                        + (rate - div_yield) * S * V_S + kappa * (theta - v) * V_v - rate * V);
-                    next[g.index(stock_i, var_j)] = pde;
+                // This cell and its eight neighbours.
+                // East and west are one stock node away, north and south one variance row away
+                double centre = current[grid.index(stock_i, var_j)];
+                double east = current[grid.index(stock_i + 1, var_j)];
+                double west = current[grid.index(stock_i - 1, var_j)];
+                double north = current[grid.index(stock_i, var_j + 1)];
+                double south = current[grid.index(stock_i, var_j - 1)];
+                double north_east = current[grid.index(stock_i + 1, var_j + 1)];
+                double north_west = current[grid.index(stock_i - 1, var_j + 1)];
+                double south_east = current[grid.index(stock_i + 1, var_j - 1)];
+                double south_west = current[grid.index(stock_i - 1, var_j - 1)];
+
+                // Central differences give each derivative of the option value V
+                double dV_dS = (east - west) / (2.0 * grid.stock_spacing());
+                double d2V_dS2 = (east - 2.0 * centre + west) / (grid.stock_spacing() * grid.stock_spacing());
+                double dV_dv = (north - south) / (2.0 * grid.variance_spacing());
+                double d2V_dv2 = (north - 2.0 * centre + south) / (grid.variance_spacing() * grid.variance_spacing());
+                double d2V_dS_dv = (north_east - north_west - south_east + south_west) / (4.0 * grid.stock_spacing() * grid.variance_spacing());
+
+                // One explicit Euler step of the Heston PDE, one term per line
+                double updated = centre + dt * (0.5 * variance * stock_price * stock_price * d2V_dS2
+                                                + rho * xi * variance * stock_price * d2V_dS_dv
+                                                + 0.5 * xi * xi * variance * d2V_dv2
+                                                + (rate - div_yield) * stock_price * dV_dS
+                                                + kappa * (theta - variance) * dV_dv
+                                                - rate * centre);
+                next[grid.index(stock_i, var_j)] = updated;
             }
         }
 
-        // Every diffusion term carries a factor of v, so along the v=0 row
-        // they all vanish and a transport equation is left behind. Solving
-        // that is better than imposing a value by hand. The derivative in v
-        // has to be a forward one-sided difference rather than a central one,
-        // because the drift kappa*theta is positive and therefore points into
-        // the grid, and a central difference would need a row at negative
-        // variance that does not exist. PLAN §1c covers this.
-        for (int stock_i = 1; stock_i < g.num_stock_nodes() - 1; ++stock_i) {
-            double S = g.stock_price(stock_i);
-            double V = cur[g.index(stock_i, 0)];
-            double V_S = (cur[g.index(stock_i + 1, 0)] - cur[g.index(stock_i - 1, 0)]) / (2.0 * g.stock_spacing());
-            double V_v = (cur[g.index(stock_i, 1)] - cur[g.index(stock_i, 0)]) / g.variance_spacing();
-            double pde = V + dt * ((rate - div_yield) * S * V_S + kappa * theta * V_v - rate * V);
-            next[g.index(stock_i, 0)] = pde;
+        // The bottom row, where the variance is zero.
+        // Every diffusion term has a factor of v, so only the drift terms are left
+        for (int stock_i = 1; stock_i < grid.num_stock_nodes() - 1; ++stock_i) {
+            double stock_price = grid.stock_price(stock_i);
+            double centre = current[grid.index(stock_i, 0)];
+            double dV_dS = (current[grid.index(stock_i + 1, 0)] - current[grid.index(stock_i - 1, 0)]) / (2.0 * grid.stock_spacing());
+            // Looks one row up because there is no row below zero
+            double dV_dv = (current[grid.index(stock_i, 1)] - centre) / grid.variance_spacing();
+            double updated = centre + dt * ((rate - div_yield) * stock_price * dV_dS + kappa * theta * dV_dv - rate * centre);
+            next[grid.index(stock_i, 0)] = updated;
         }
 
-        // How far back from expiry this step has reached, which is what the
-        // boundary values below are discounted over.
-        const double tau = n * dt;
+        // Time left until expiry, used to discount the edge values
+        double time_to_expiry = step * dt;
 
-        // A stock that reaches zero stays there, so at S=0 the call is
-        // worthless and the put is certain to pay the strike. At the top of
-        // the stock axis the option is so deep in the money that the call
-        // behaves like a forward and the put is worth nothing. Both edges are
-        // therefore known values rather than something to solve for.
-        const double s_zero_value =
-            cfg.option.is_call ? 0.0 : strike * std::exp(-rate * tau);
-        const double s_max_value =
-            cfg.option.is_call
-                ? s_max * std::exp(-div_yield * tau) -
-                      strike * std::exp(-rate * tau)
-                : 0.0;
-        for (int var_j = 0; var_j < g.num_variance_nodes(); ++var_j) {
-            next[g.index(0, var_j)] = s_zero_value;
-            next[g.index(g.num_stock_nodes() - 1, var_j)] = s_max_value;
+        // The first and last stock column have known values
+        double zero_stock_value = 0.0;
+        double max_stock_value = 0.0;
+        if (cfg.option.is_call) {
+            // A call is worthless at S = 0 and acts like a forward at the top
+            zero_stock_value = 0.0;
+            max_stock_value = max_stock_price * std::exp(-div_yield * time_to_expiry) - strike * std::exp(-rate * time_to_expiry);
+        } else {
+            // A put pays the discounted strike at S = 0 and is worthless at the top
+            zero_stock_value = strike * std::exp(-rate * time_to_expiry);
+            max_stock_value = 0.0;
+        }
+        for (int var_j = 0; var_j < grid.num_variance_nodes(); ++var_j) {
+            next[grid.index(0, var_j)] = zero_stock_value;
+            next[grid.index(grid.num_stock_nodes() - 1, var_j)] = max_stock_value;
         }
 
-        // Vega has flattened out by the top of the variance axis, so that row
-        // is given zero slope in v by copying the row underneath it. This runs
-        // last because the row underneath has to be finished first.
-        const int top_row = g.num_variance_nodes() - 1;
-        for (int stock_i = 0; stock_i < g.num_stock_nodes(); ++stock_i) {
-            next[g.index(stock_i, top_row)] =
-                next[g.index(stock_i, top_row - 1)];
+        // The top row copies the row below it.
+        // This runs last, after the row below has been updated
+        int top_row = grid.num_variance_nodes() - 1;
+        for (int stock_i = 0; stock_i < grid.num_stock_nodes(); ++stock_i) {
+            next[grid.index(stock_i, top_row)] = next[grid.index(stock_i, top_row - 1)];
         }
 
-        g.swap_buffers();
-        result.seconds += std::chrono::duration<double>(
-                              std::chrono::steady_clock::now() - step_start)
-                              .count();
+        // The sheet we just wrote becomes the one we read next step
+        grid.swap_buffers();
 
-        // Snapshots are written after the timer stops, so that file I/O never
-        // lands inside the measured time.
-        if (cfg.dump_every > 0 && n % cfg.dump_every == 0) {
-            dump_snapshot(cfg.dump_dir, n, g);
+        auto step_end = std::chrono::steady_clock::now();
+        result.seconds += std::chrono::duration<double>(step_end - step_start).count();
+
+        // Snapshots are written after the timer stops so file writing is not timed
+        if (cfg.dump_every > 0 && step % cfg.dump_every == 0) {
+            dump_snapshot(cfg.dump_dir, step, grid);
         }
     }
 
-    extract_result(g, cfg, result);
-    // Throughput rather than raw seconds, so that runs on different grid sizes
-    // can be compared against each other.
-    result.cell_updates_per_sec = static_cast<double>(g.num_stock_nodes()) *
-                                  g.num_variance_nodes() * num_timesteps /
-                                  result.seconds;
+    extract_result(grid, cfg, result);
+
+    // Cells updated per second, so different grid sizes compare fairly
+    double total_cell_updates = (double)grid.num_stock_nodes() * grid.num_variance_nodes() * num_timesteps;
+    result.cell_updates_per_sec = total_cell_updates / result.seconds;
     return result;
 }

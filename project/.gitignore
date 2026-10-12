@@ -4,7 +4,9 @@ presentation/stills/
 heston
 tests/test_bs_collapse
 tests/test_parity
-tests/test_opt_matches
+tests/test_ladder_matches
+tests/test_avx_row
+tests/*.o
 *.o
 slurm-*.out
 __pycache__/

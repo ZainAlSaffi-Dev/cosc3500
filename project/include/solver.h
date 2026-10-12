@@ -1,3 +1,7 @@
+// AI declaration
+// I used Claude, an AI assistant made by Anthropic, while working on this file.
+// It helped me debug the code, draft pseudocode and implement it.
+
 #ifndef HESTON_SOLVER_H
 #define HESTON_SOLVER_H
 
@@ -7,56 +11,90 @@
 #include "grid.h"
 #include "params.h"
 
-// Result of one full backward solve.
-// similar to python dataclass
-struct SolveResult {  
+// What a solver hands back after pricing the option.
+// The price, the three Greeks, and how long the solve took.
+struct SolveResult {
+    // Option price today
     double price = 0.0;
+    // How much the price moves when the stock moves
     double delta = 0.0;
+    // How much delta moves when the stock moves
     double gamma = 0.0;
-    //vega is the sensitivity of the option price to changes in the volatility of the underlying asset
+    // How much the price moves when the variance moves
     double vega = 0.0;
-    //seconds is the time taken to solve the option
+    // Time spent inside the time loop
     double seconds = 0.0;
-    //cell_updates_per_sec is the number of cells updated per second
+    // Cells updated per second, so different grid sizes compare fairly
     double cell_updates_per_sec = 0.0;
-    //dt_stable_estimate is the estimated stability of the time step
+    // Largest timestep the scheme can take without blowing up
     double dt_stable_estimate = 0.0;
+    // OpenMP threads per process that did the work
+    int threads = 1;
+    // MPI processes that did the work
+    int ranks = 1;
+    // Time the first process spent swapping halo rows, part of seconds
+    double halo_seconds = 0.0;
+    // Time spent on the serial boundary work, part of seconds
+    double boundary_seconds = 0.0;
 };
 
-// Solver is an abstract class with an abstract method solve()
+// The common shape every solver follows, like a Python abstract base class.
+// Each solver must provide solve() and name(), and shares the helpers below.
 class Solver {
 public:
-// virtual destructor is needed for polymorphism
+    // Virtual so the right cleanup runs when deleting through a Solver pointer
     virtual ~Solver() = default;
-    // solve is an abstract method that must be implemented by all solvers
+    // The = 0 means every subclass has to write its own version
     virtual SolveResult solve(const Config& cfg) = 0;
     virtual std::string name() const = 0;
 
 protected:
-    // Shared by all implementations
-    // read price + Greeks off the finished sheet by finite differences.
-    void extract_result(const Grid& g, const Config& cfg, SolveResult& out) const;
+    // Helpers every solver can call, written once in solver.cpp
+    void extract_result(const Grid& grid, const Config& cfg, SolveResult& out) const;
+    void report_stability(const Grid& grid, const Config& cfg, double dt, SolveResult& out) const;
 };
 
-// Correct-first reference implementation. Weights recomputed per cell.
+// The simple reference solver that every other solver must match.
+// Recomputes everything per cell, written to be correct rather than fast.
 class BaselineSolver : public Solver {
 public:
     SolveResult solve(const Config& cfg) override;
     std::string name() const override { return "baseline"; }
 };
 
-// Optimised serial. Same answers as BaselineSolver.
-// tests/test_opt_matches.cpp before any benchmarking.
-class OptSolver : public Solver {
+// The single core solver with constants worked out once up front.
+// Same answers as the baseline, about twice as fast.
+class SerialSolver : public Solver {
 public:
     SolveResult solve(const Config& cfg) override;
-    std::string name() const override { return "opt"; }
+    std::string name() const override { return "serial"; }
 };
 
-// Factory
-// unique_ptr = explicit sole owner; C++
-// makes the owner a named variable, and scope exit deletes the solver.
-// throws std::runtime_error on unknown name.
+// The single core solver that updates four cells per instruction with AVX2.
+// Same time loop as SerialSolver, only the row update is different.
+class SimdSolver : public Solver {
+public:
+    SolveResult solve(const Config& cfg) override;
+    std::string name() const override { return "simd"; }
+};
+
+// The solver that splits the rows between all the cores of one machine with OpenMP.
+// Same time loop as SimdSolver, with one pragma above the row loop.
+class OmpSolver : public Solver {
+public:
+    SolveResult solve(const Config& cfg) override;
+    std::string name() const override { return "omp"; }
+};
+
+// The solver that splits the rows between several processes with MPI, threads inside each.
+// Each process owns one slab of rows and swaps one edge row with each neighbour per step.
+class MpiSolver : public Solver {
+public:
+    SolveResult solve(const Config& cfg) override;
+    std::string name() const override { return "mpi"; }
+};
+
+// Creates the solver whose name matches, for example "serial".
 std::unique_ptr<Solver> make_solver(const std::string& name);
 
 #endif  // HESTON_SOLVER_H

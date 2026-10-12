@@ -1,0 +1,7 @@
+-xc++
+-std=c++17
+-Iinclude
+-Wall
+-Wextra
+-I/opt/homebrew/include
+-I/opt/homebrew/opt/libomp/include
