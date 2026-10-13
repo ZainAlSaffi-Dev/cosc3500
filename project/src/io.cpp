@@ -43,6 +43,17 @@ void dump_snapshot(const std::string& dump_dir, int step, const Grid& grid) {
 // Prints the price, Greeks, grid size, solver, timing, threads, processes, row exchange and boundary time as one CSV line.
 // The scripts read the columns by position, so new columns go on the end.
 void print_result_csv(const SolveResult& result, const Config& cfg) {
+    // --digits D prints the four answers to D significant digits, the rest of the line as usual.
+    // %.*g takes the number of digits as an extra argument before the value.
+    if (cfg.print_digits > 0) {
+        int digits = cfg.print_digits;
+        std::printf("%.*g,%.*g,%.*g,%.*g,%d,%d,%d,%s,%.6f,%.6g,%d,%d,%.6f,%.6f\n",
+                    digits, result.price, digits, result.delta, digits, result.gamma, digits, result.vega,
+                    cfg.grid.num_stock_nodes, cfg.grid.num_variance_nodes, cfg.grid.num_timesteps,
+                    cfg.solver.c_str(), result.seconds, result.cell_updates_per_sec,
+                    result.threads, result.ranks, result.exchange_seconds, result.boundary_seconds);
+        return;
+    }
     std::printf("%.10g,%.8g,%.8g,%.8g,%d,%d,%d,%s,%.6f,%.6g,%d,%d,%.6f,%.6f\n",
                 result.price, result.delta, result.gamma, result.vega,
                 cfg.grid.num_stock_nodes, cfg.grid.num_variance_nodes, cfg.grid.num_timesteps,

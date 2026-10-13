@@ -125,5 +125,18 @@ std::unique_ptr<Solver> make_solver(const std::string& name) {
     if (name == "omp_float") {
         return std::make_unique<OmpFloatSolver>();
     }
+    if (name == "omp_align_loadu") {
+        return std::make_unique<OmpAlignSolver>(AlignKernel::loadu);
+    }
+    if (name == "omp_align_load") {
+        return std::make_unique<OmpAlignSolver>(AlignKernel::load);
+    }
+    if (name == "omp_align_shuffle") {
+        return std::make_unique<OmpAlignSolver>(AlignKernel::shuffle);
+    }
+    // The mpi solver with the edge row messages overlapped with the update.
+    if (name == "mpi_overlap") {
+        return std::make_unique<MpiOverlapSolver>();
+    }
     throw std::runtime_error("unknown solver: " + name);
 }

@@ -71,6 +71,11 @@ struct Config {
     int bench_reps = 0;
     // Which solver runs, for example baseline, serial, simd, omp or mpi.
     std::string solver = "baseline";
+    // Experiment E2 only. Column 1 of every row starts this many doubles past a 64 byte boundary, 0 to 7.
+    int align_shift = 0;
+    // Significant digits printed for the price and the Greeks. 0 keeps the usual 10 and 8.
+    // Experiment E1 prints 17, enough to tell apart any two doubles.
+    int print_digits = 0;
 };
 
 // Reads a config file of key = value lines and builds a Config from it.

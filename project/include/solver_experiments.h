@@ -49,4 +49,31 @@ public:
     std::string name() const override { return "omp_float"; }
 };
 
+// Experiment E2. The omp solver on buffers placed at a chosen alignment.
+// --align-shift K puts column 1 of every row K doubles past a 64 byte boundary.
+// The kernel says which row function runs.
+//   loadu    the shipped row, unaligned loads, any K. Only the address moves.
+//   load     aligned loads and stores where the address allows, K = 0 or 4.
+//   shuffle  one aligned load per row, east and west built in registers, K = 0 or 4.
+enum class AlignKernel { loadu, load, shuffle };
+
+class OmpAlignSolver : public Solver {
+public:
+    // explicit stops a plain AlignKernel turning into a solver by accident.
+    explicit OmpAlignSolver(AlignKernel kernel) : kernel_(kernel) {}
+    SolveResult solve(const Config& cfg) override;
+    std::string name() const override;
+
+private:
+    AlignKernel kernel_;
+};
+
+// Experiment E9. The mpi solver with the edge row messages overlapped with the interior update.
+// The edge rows are updated first and sent, the other rows are updated while the messages travel.
+class MpiOverlapSolver : public Solver {
+public:
+    SolveResult solve(const Config& cfg) override;
+    std::string name() const override { return "mpi_overlap"; }
+};
+
 #endif  // HESTON_SOLVER_EXPERIMENTS_H

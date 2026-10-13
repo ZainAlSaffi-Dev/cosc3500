@@ -1482,3 +1482,136 @@ In the mpi rerun only the 2 node, 1 rank x 24 layout on 2048 x 512 moved,
 and its reps do not overlap with the first run. The 2 x 12 layouts and
 the two node gains are within 1.4%, so F6 and F8 keep job 651303 and
 RESULTS M2.9 quotes the rerun.
+
+## Phase 10. Experiment E2, alignment
+
+### What changed
+
+E2 is now built. The new solver `OmpAlignSolver` (`src/solver_align.cpp`) is
+the omp solver running on its own two sheets. Each sheet starts part way into
+an oversized `std::vector`, so the experiment picks where column 1 of every row
+sits in its 64 byte cache line. `--align-shift K` puts it K doubles past the
+boundary. The S and S² tables move with it. It needs `ns` to be a multiple of
+8, so every row lands at the same place in its cache line. The vectors are
+still big `std::vector`s from mmap, so the page regime matches the Grid's.
+
+- `omp_align_loadu` is the shipped AVX2 row, unchanged. Only the address moves.
+- `omp_align_load` is `update_row_avx_load`. It uses `_mm256_load_pd` for
+  centre, north, south and the tables, and `_mm256_store_pd` for the store,
+  so `--align-shift` must be 0 or 4.
+- `omp_align_shuffle` is `update_row_avx_shuffle`. It does one aligned load
+  per row per 4 cells and builds east and west from neighbouring blocks with
+  `vpermpd` and `vblendpd`. The blocks before and after can read up to 3
+  cells past the grid, so the solver keeps padding there.
+
+To share code with the shipped rungs, `update_cells_scalar`, `update_row_avx`,
+`update_zero_row`, `apply_stock_edges` and `copy_top_row` now have pointer
+versions. The vector versions are one-line calls into them. No arithmetic
+moved.
+
+### Decision 1. The shipped rungs are untouched
+
+The Grid keeps its plain `std::vector`. Every rung's maths and every existing
+measurement stand. E2 only has to say whether alignment is worth adopting.
+
+### Decision 2. Sweep the shift instead of comparing aligned against unaligned
+
+The windows at stock_i - 1, stock_i and stock_i + 1 are 8 bytes apart. At
+most one of them can be 32 byte aligned, so there are four cases, not two.
+Shifts 0 and 4 align centre, north, south and the store. Shifts 1 and 5 align
+west, shifts 3 and 7 align east, and shifts 2 and 6 align nothing. Every 32
+byte load that is not aligned crosses a cache line on every other pass.
+Shifts 4 to 7 repeat 0 to 3, so they show the noise.
+
+### Validation
+
+`test_ladder_matches` runs `omp_align_loadu` at every shift, and `load` and
+`shuffle` at shifts 0 and 4. All of them on the call and the put must match
+simd to the bit. Local run on WSL with g++ 13: all OK at 7 threads, and
+`test_avx_row` passes. `make` itself was not run locally (no mpicxx here).
+The build used g++ with the solver_mpi object stubbed out.
+
+The local timing on a Ryzen 7 5700X at 1 thread, 2048 x 512, best of 3, is a
+smoke test and not a result. Shifts 0 and 4 gave about 1220 Mcell/s. 1, 3, 5
+and 7 gave about 1115. 2 and 6 gave about 1040. `load` was the same as
+`loadu` at shift 0, and shuffle was about 760. The shipped Grid sat at byte
+24 (shift 3) with the mmap threshold pinned, because glibc returns mmap
+chunks 16 bytes past a page. simd matched shift 3.
+
+g++ folds many of the loads into the arithmetic instruction (for example
+`vaddpd -0x8(%rdx,%rax,1)`). VEX memory operands never check alignment, so
+`_mm256_load_pd` only becomes `vmovapd` where it is not folded. The rangpur
+job saves the g++ 8.5 disassembly as `results/e2_disasm_<job>.txt`.
+
+### The rangpur run (jobs 657421 one thread, 657422 24 threads, r730-2)
+
+The cosc3500 QOS caps a job at 15 minutes, so the script takes `one` or
+`many`. All tests passed in both jobs, and every row prices the same. On
+rangpur the shipped Grid has column 1 at byte 24 (shift 3).
+
+One thread, 2048 x 512, median Mcell/s:
+
+| Variant | Mcell/s |
+|---|---|
+| simd (start, end) | 387.3, 388.2 |
+| loadu shift 0, 4 (centre aligned) | 367.4, 368.7 |
+| loadu shift 1, 5 (west aligned) | 372.1, 370.6 |
+| loadu shift 2, 6 (none aligned) | 382.6, 382.8 |
+| loadu shift 3, 7 (east aligned, shipped) | 383.0, 382.0 |
+| load shift 0, 4 | 425.1, 427.2 |
+| shuffle shift 0, 4 | 461.4, 461.2 |
+
+At 24 threads on 2048 x 512, omp gave 5744, loadu 5508 to 5734, load 6062
+and shuffle 6161. On 4096 x 1024 the spread between reps is 2557 to 4369,
+which is wider than any gap between variants.
+
+### Decision 3. The cause is g++ 8.5 splitting unaligned loads, not alignment
+
+The rangpur result is the reverse of the local one, so I read the
+disassembly (`results/e2_disasm_657421.txt`). With `-mavx2` and no
+`-mtune`, g++ 8.5 tunes for a generic x86. That turns every
+`_mm256_loadu_pd` into `vmovupd xmm` plus `vinsertf128`, and the store
+into `vmovupd xmm` plus `vextractf128`. The shipped row has 11 split loads.
+`load` has 6, only the east and west windows. Shuffle has none. An aligned
+load is never split. So load and shuffle win because they avoid the split,
+and loadu at the aligned shifts gains nothing. g++ 13 (local) does not split,
+which is why the local run showed the plain cache line effect instead.
+The CPU is a Xeon E5-2670 v3 (Haswell).
+
+E2b reruns the sweep with
+`-mno-avx256-split-unaligned-load -mno-avx256-split-unaligned-store` on the
+AVX2 file only, through a new opt-in Makefile variable `AVXEXTRA`. The
+default build is unchanged. It answers whether the shipped row recovers with
+no alignment work at all.
+
+### E2b result (jobs 657498 one thread, 657499 24 threads, r730-2)
+
+All tests passed. The disassembly (`results/e2b_disasm_657498.txt`) has no
+`vinsertf128` or `vextractf128` left in any of the three rows.
+
+| One thread, 2048 x 512 | E2 (split on) | E2b (split off) |
+|---|---|---|
+| simd | 387 | 460 |
+| loadu centre aligned (0, 4) | 368 | 477 |
+| loadu west or east aligned (1, 3, 5, 7) | 371 to 383 | 438 to 440 |
+| loadu nothing aligned (2, 6) | 383 | 412 |
+| load (0, 4) | 425 to 427 | 477 |
+| shuffle (0, 4) | 461 | 460 to 462 |
+
+24 threads on 2048 x 512: omp 6431 (E2 5744), loadu centre aligned 6579,
+load 6489, shuffle 6428, nothing aligned 6025. 4096 x 1024: omp 3892,
+loadu centre aligned 4026, shuffle 2916, with reps spread from 2683 to 4517.
+
+With the split off the cache line effect is the one the local g++ 13 run
+showed. `load` equals `loadu` at the same address. simd (460) runs faster than
+loadu at its own shift 3 (440). That is probably because the shipped S and S²
+tables are small heap vectors with their own alignment, while the experiment
+moves them with the rows. This has not been checked.
+
+### Decision 4. The shipped build is not changed yet
+
+Adding the flag (or `-mtune=haswell`) to the shipped AVX2 build would make
+simd about 1.19x and omp about 1.12x faster. Every M2 number, figure and the
+deck were measured with the split on, though, so adopting it means rerunning
+the sweeps. That is the user's call. RESULTS M2.6 reports E2 and E2b as
+experiments and says the rungs stand as measured.

@@ -23,8 +23,11 @@ endif
 # AVX2 and FMA only on x86_64 machines such as rangpur.
 # Only the SIMD row file gets them, so the other rungs compile exactly as before
 ifeq ($(shell uname -m),x86_64)
-  AVXFLAGS = -mavx2 -mfma
+  AVXFLAGS = -mavx2 -mfma $(AVXEXTRA)
 endif
+# Extra flags for the AVX2 file only, empty unless a job sets it.
+# Experiment E2b sets -mno-avx256-split-unaligned-load and -store
+AVXEXTRA ?=
 
 # GCC 8 keeps std::filesystem in a separate library, newer compilers reject it
 FSLIB := $(shell echo 'int main(){}' | $(CXX) -x c++ -std=c++17 - -lstdc++fs \
@@ -34,7 +37,7 @@ FSLIB := $(shell echo 'int main(){}' | $(CXX) -x c++ -std=c++17 - -lstdc++fs \
 CORE_OBJS = src/params.o src/grid.o src/stencil.o src/stencil_avx.o \
             src/solver.o src/solver_baseline.o src/solver_serial.o \
             src/solver_simd.o src/solver_omp.o src/solver_mpi.o \
-            src/solver_experiments.o src/solver_float.o \
+            src/solver_experiments.o src/solver_float.o src/solver_align.o \
             src/black_scholes.o src/io.o
 
 TESTS = tests/test_bs_collapse tests/test_parity tests/test_ladder_matches
@@ -60,11 +63,12 @@ src/main.o: include/params.h include/solver.h include/io.h
 src/params.o: include/params.h
 src/grid.o: include/grid.h include/params.h
 src/stencil.o src/stencil_avx.o: include/stencil.h include/grid.h include/params.h
-SOLVER_OBJS = src/solver.o src/solver_baseline.o src/solver_serial.o src/solver_simd.o src/solver_omp.o src/solver_mpi.o src/solver_experiments.o src/solver_float.o
+SOLVER_OBJS = src/solver.o src/solver_baseline.o src/solver_serial.o src/solver_simd.o src/solver_omp.o src/solver_mpi.o src/solver_experiments.o src/solver_float.o src/solver_align.o
 $(SOLVER_OBJS): include/solver.h include/grid.h include/params.h
 src/solver_baseline.o src/solver_serial.o src/solver_simd.o src/solver_omp.o src/solver_mpi.o: include/io.h
-src/solver_serial.o src/solver_simd.o src/solver_omp.o src/solver_mpi.o src/solver_experiments.o src/solver_float.o: include/stencil.h include/io.h
-src/solver.o src/solver_experiments.o src/solver_float.o: include/solver_experiments.h
+src/solver_mpi.o: include/solver_experiments.h
+src/solver_serial.o src/solver_simd.o src/solver_omp.o src/solver_mpi.o src/solver_experiments.o src/solver_float.o src/solver_align.o: include/stencil.h include/io.h
+src/solver.o src/solver_experiments.o src/solver_float.o src/solver_align.o: include/solver_experiments.h
 src/black_scholes.o: include/black_scholes.h
 src/io.o: include/io.h include/grid.h include/params.h include/solver.h
 

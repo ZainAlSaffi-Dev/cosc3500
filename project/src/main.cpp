@@ -20,6 +20,8 @@ static void usage() {
     std::fprintf(stderr, "usage: heston --config <path> [--solver baseline|serial|simd|omp|mpi]\n");
     std::fprintf(stderr, "              [--type call|put] [--dump-every N] [--dump-dir DIR]\n");
     std::fprintf(stderr, "              [--bench R] [--ns X] [--nv X] [--nt X] [--maturity Y] [--vmax V]\n");
+    std::fprintf(stderr, "              [--align-shift K]  (experiment E2, the omp_align solvers only)\n");
+    std::fprintf(stderr, "              [--digits D]  (significant digits of the price and Greeks)\n");
 }
 
 // Reads the settings, runs the chosen solver and prints one CSV line for each solve.
@@ -69,6 +71,12 @@ static int run(int argc, char** argv, int rank) {
             } else if (flag == "--maturity") {
                 // A shorter maturity keeps a big grid stable in the benchmarks.
                 cfg.option.maturity_years = std::stod(value);
+            } else if (flag == "--align-shift") {
+                // Where column 1 sits in its cache line, for the alignment experiment.
+                cfg.align_shift = std::stoi(value);
+            } else if (flag == "--digits") {
+                // Prints the price and the Greeks to this many significant digits.
+                cfg.print_digits = std::stoi(value);
             } else {
                 // Anything else is a typo.
                 usage();
@@ -103,7 +111,10 @@ static int run(int argc, char** argv, int rank) {
 // MPI_Finalize must run even when the program fails, so the work is in run().
 int main(int argc, char** argv) {
     // Every solver runs inside MPI. The non MPI solvers run as one process.
-    MPI_Init(&argc, &argv);
+    // FUNNELED promises MPI that only the main thread calls it, even while OpenMP threads run.
+    // The mpi_overlap solver needs that, because its master thread posts messages inside a parallel region.
+    int thread_level = 0;
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &thread_level);
     int rank = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     int exit_code = run(argc, argv, rank);

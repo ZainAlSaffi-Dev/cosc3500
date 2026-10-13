@@ -15,8 +15,17 @@ decisions in `CHANGELOG.md` Phases 1 to 8, the concepts in `STUDY_GUIDE.md`
 
 Left, in PLAN order.
 
-- E2 aligned loads and E9 halo overlap never ran (CHANGELOG Phase 5
-  Decision 3). Both are optional.
+- E2 and E2b have run and are in RESULTS M2.6 and CHANGELOG Phase 10.
+  g++ 8.5 splits unaligned 256 bit loads under generic tuning. Turning that
+  off makes simd 1.19x and omp 1.12x faster. Still open: whether to adopt the
+  flag in the shipped build, which would mean rerunning every M2 sweep.
+  E1 (compiler flags, `slurm/bench_m2_exp_compiler.sh vector|fastmath`, jobs
+  657626 and 657627) and E9 (halo overlap, `mpi_overlap` solver,
+  `slurm/bench_m2_exp_overlap.sh`, job 657628) were submitted on 2026-10-13
+  and are not written up yet. Fetch the results, check each job's tests
+  passed, then add them to RESULTS M2.6 and a CHANGELOG Phase 11 entry.
+- The interviewer reads only README.md and the results tables. Every other MD
+  is context for Claude. The interview is verbal.
 - P9 recording. The plan (PLAN §11), the script (`presentation/M2_SCRIPT.md`)
   and the deck (`presentation/deck_m2.pdf`, `make slides-m2`, 22 frames in
   script order, bottom-right corner left for the webcam) are done. Only the

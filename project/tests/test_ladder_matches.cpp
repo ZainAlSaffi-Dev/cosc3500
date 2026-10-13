@@ -14,11 +14,11 @@
 #include "solver.h"
 
 // Solvers that must give the same answers as the baseline.
-static const std::vector<std::string> solver_names = {"serial", "simd", "omp", "mpi", "omp_scalar", "omp_persistent", "omp_runtime", "omp_edges"};
+static const std::vector<std::string> solver_names = {"serial", "simd", "omp", "mpi", "omp_scalar", "omp_persistent", "omp_runtime", "omp_edges", "mpi_overlap"};
 
 // Solvers that must match simd bit for bit.
 // They split the same row updates between workers and never sum across workers.
-static const std::vector<std::string> same_bits_as_simd = {"omp", "mpi", "omp_persistent", "omp_runtime", "omp_edges"};
+static const std::vector<std::string> same_bits_as_simd = {"omp", "mpi", "omp_persistent", "omp_runtime", "omp_edges", "mpi_overlap"};
 
 // The worst relative difference allowed.
 // Measured at most 3.3e-15 on serial with clang and g++ 8.5.
@@ -63,7 +63,10 @@ static double max_relative_diff(const SolveResult& a, const SolveResult& b) {
 // Fails if any solver's answer drifts from the baseline by more than the tolerance.
 int main(int argc, char** argv) {
     // The mpi solver needs MPI running, even on one process.
-    MPI_Init(&argc, &argv);
+    // FUNNELED promises MPI that only the main thread calls it, even while OpenMP threads run.
+    // The mpi_overlap solver needs that, because its master thread posts messages inside a parallel region.
+    int thread_level = 0;
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &thread_level);
     int rank = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -131,6 +134,32 @@ int main(int argc, char** argv) {
             }
             std::printf("%-8s %-4s: diff from simd %.3e  (must be exactly 0, %d threads, %d processes)  %s\n",
                         solver_name.c_str(), leg_name, simd_diff, candidate.threads, candidate.ranks, verdict);
+        }
+
+        // Experiment E2. Moving the buffers or swapping the loads must not change a single bit.
+        // loadu runs at every shift, the aligned rows only where column 1 is on a 32 byte boundary.
+        for (int align_shift = 0; align_shift < 8; ++align_shift) {
+            std::vector<std::string> align_solvers = {"omp_align_loadu"};
+            if (align_shift % 4 == 0) {
+                align_solvers.push_back("omp_align_load");
+                align_solvers.push_back("omp_align_shuffle");
+            }
+            for (const std::string& solver_name : align_solvers) {
+                Config shifted = cfg;
+                shifted.align_shift = align_shift;
+                SolveResult candidate = make_solver(solver_name)->solve(shifted);
+                if (rank != 0) {
+                    continue;
+                }
+                double simd_diff = max_relative_diff(simd_reference, candidate);
+                const char* verdict = "OK";
+                if (simd_diff != 0.0) {
+                    verdict = "MISMATCH";
+                    all_ok = false;
+                }
+                std::printf("%-17s shift %d %-4s: diff from simd %.3e  (must be exactly 0)  %s\n",
+                            solver_name.c_str(), align_shift, leg_name, simd_diff, verdict);
+            }
         }
     }
 

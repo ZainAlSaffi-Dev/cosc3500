@@ -61,7 +61,8 @@ StencilConstants::StencilConstants(const Grid& grid, const Config& cfg, double t
 
 // Updates the cells first_stock to end_stock - 1 in one variance row of the next buffer.
 // Each new value comes from the cell and its eight neighbours in the current buffer.
-void update_cells_scalar(const StencilConstants& constants, const std::vector<double>& current, std::vector<double>& next, int var_j, int first_stock, int end_stock) {
+// current and next point at cell 0 of each buffer.
+void update_cells_scalar(const StencilConstants& constants, const double* current, double* next, int var_j, int first_stock, int end_stock) {
     // Copy the constants into local variables first.
     // Otherwise the compiler may reload them from memory after every write.
     double dt = constants.dt;
@@ -84,10 +85,10 @@ void update_cells_scalar(const StencilConstants& constants, const std::vector<do
     // The vectors still own the memory.
     const double* stock_price = constants.stock_price.data();
     const double* stock_price_sq = constants.stock_price_sq.data();
-    const double* row_centre = current.data() + var_j * num_stock_nodes;
+    const double* row_centre = current + var_j * num_stock_nodes;
     const double* row_above = row_centre + num_stock_nodes;
     const double* row_below = row_centre - num_stock_nodes;
-    double* out_row = next.data() + var_j * num_stock_nodes;
+    double* out_row = next + var_j * num_stock_nodes;
 
     for (int stock_i = first_stock; stock_i < end_stock; ++stock_i) {
         // Read the cell and its eight neighbours.
@@ -122,6 +123,12 @@ void update_cells_scalar(const StencilConstants& constants, const std::vector<do
     }
 }
 
+// The same with the two buffers passed as vectors.
+// .data() is the address of cell 0.
+void update_cells_scalar(const StencilConstants& constants, const std::vector<double>& current, std::vector<double>& next, int var_j, int first_stock, int end_stock) {
+    update_cells_scalar(constants, current.data(), next.data(), var_j, first_stock, end_stock);
+}
+
 // Updates every interior cell in one variance row of the next buffer.
 // The first and last columns are the stock edges and are skipped.
 void update_row_scalar(const StencilConstants& constants, const std::vector<double>& current, std::vector<double>& next, int var_j) {
@@ -130,10 +137,10 @@ void update_row_scalar(const StencilConstants& constants, const std::vector<doub
 
 // Updates the bottom row, where the variance is zero.
 // Every diffusion term has a factor of v, so only the drift terms are left.
-void update_zero_row(const StencilConstants& constants, const std::vector<double>& current, std::vector<double>& next) {
-    const double* row_zero = current.data();
-    const double* row_one = current.data() + constants.num_stock_nodes;
-    double* out_row = next.data();
+void update_zero_row(const StencilConstants& constants, const double* current, double* next) {
+    const double* row_zero = current;
+    const double* row_one = current + constants.num_stock_nodes;
+    double* out_row = next;
 
     // At v = 0 the variance drift is kappa times theta.
     double variance_drift = constants.variance_drift[0];
@@ -153,7 +160,7 @@ void update_zero_row(const StencilConstants& constants, const std::vector<double
 
 // Writes the known option values in the first and last stock columns.
 // Only rows row_begin to row_end - 1 are written.
-void apply_stock_edges(const StencilConstants& constants, std::vector<double>& next, int row_begin, int row_end, double time_to_expiry) {
+void apply_stock_edges(const StencilConstants& constants, double* next, int row_begin, int row_end, double time_to_expiry) {
     // The strike paid at expiry, discounted back to this time.
     double strike_today = constants.strike * std::exp(-constants.rate * time_to_expiry);
 
@@ -178,13 +185,26 @@ void apply_stock_edges(const StencilConstants& constants, std::vector<double>& n
 
 // Sets the top variance row equal to the row just below it.
 // The value stops changing with variance at the top of the grid.
-void copy_top_row(const StencilConstants& constants, std::vector<double>& next) {
+void copy_top_row(const StencilConstants& constants, double* next) {
     // Must run after the row below has been updated.
     int num_stock_nodes = constants.num_stock_nodes;
     int top_row = constants.num_variance_nodes - 1;
     for (int stock_i = 0; stock_i < num_stock_nodes; ++stock_i) {
         next[top_row * num_stock_nodes + stock_i] = next[(top_row - 1) * num_stock_nodes + stock_i];
     }
+}
+
+// The three boundary functions above with the buffers passed as vectors.
+void update_zero_row(const StencilConstants& constants, const std::vector<double>& current, std::vector<double>& next) {
+    update_zero_row(constants, current.data(), next.data());
+}
+
+void apply_stock_edges(const StencilConstants& constants, std::vector<double>& next, int row_begin, int row_end, double time_to_expiry) {
+    apply_stock_edges(constants, next.data(), row_begin, row_end, time_to_expiry);
+}
+
+void copy_top_row(const StencilConstants& constants, std::vector<double>& next) {
+    copy_top_row(constants, next.data());
 }
 
 // Rounds every constant the update needs from double down to float.

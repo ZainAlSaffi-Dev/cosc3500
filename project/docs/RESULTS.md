@@ -699,6 +699,8 @@ is within 4% of the first run except the four rows marked rerun below.
 | E11 | glibc default allocator against huge pages pinned | omp 24: 3990 against 5883 (0.68x), serial 88 against 158 (0.56x). Only the first rep of each run gets huge pages |
 | E12 | denormals not flushed (job 651294) | see M2.7 |
 | E3 | float sheets, `omp_float` (job 652647) | 1 thread 735 against simd 383 (1.92x), 24 threads 10048 against 5732 at 2048 x 512 (1.75x), 12945 against 2902 at 4096 x 1024 (4.46x). Rejected for accuracy, see below |
+| E2 | alignment: column 1 moved 0 to 7 doubles along its cache line (`omp_align_loadu`), aligned load instructions (`omp_align_load`), east and west built by register shuffles (`omp_align_shuffle`) (jobs 657421, 657422) | 1 thread against simd 387: centre aligned 368, nothing aligned 383, aligned loads 425 (1.10x), shuffles 461 (1.19x). 24 threads against omp 5744: aligned loads 6062 (1.06x), shuffles 6161 (1.07x). The cause is the compiler, see below |
+| E2b | E2 rebuilt with `-mno-avx256-split-unaligned-load` and `-store` on the AVX2 file (jobs 657498, 657499) | simd 460 against 387 in E2 (1.19x), omp 6431 against 5744 (1.12x). 1 thread: centre aligned 477, west or east aligned 439, nothing aligned 412, aligned loads 477, shuffles 460. 24 threads: centre aligned 6579 (1.02x over omp) |
 
 E4 and E8 are small wins, between 4% and 16% across the two runs. The
 persistent region at 512 x 128 gave 1385 to 1514 Mcell/s in the first run and
@@ -707,6 +709,25 @@ The 24 thread rows on 4096 x 1024 in E6 range from 2699 to 5147 Mcell/s
 within one job, so the unbound ratio there is noise. E7 confirms the first-touch problem. Every page of
 the grid is written first by the main thread, so it all lives in socket 0's
 memory, and spreading the pages gives the big grid 28% more.
+
+E2 found a compiler problem instead of an alignment one. With only
+`-mavx2`, g++ 8.5 tunes for a generic x86 and compiles every unaligned
+256 bit load (`_mm256_loadu_pd`) as two 128 bit loads joined by
+`vinsertf128`, and every unaligned store as two 128 bit stores. Aligned loads
+are never split. The shipped row has 11 split loads per four cells. The
+aligned load row has 6 and the shuffle row none, which is the whole of their
+gain in E2 (disassembly in `results/e2_disasm_657421.txt`). E2b turns the
+split off. The shipped row then runs at 460 Mcell/s on one core instead of
+387, with no change to the source. The aligned instruction gives exactly the
+same speed as the unaligned one at the same address (477 and 477), as L04
+says. Where the data sits still matters. A row whose centre window is
+32 byte aligned runs at 477, one aligned on the west or east window at 439,
+and one with nothing aligned at 412, because every unaligned 32 byte load
+crosses a cache line on every other pass. The shuffle row (460) is no faster
+once the loads are whole. At 24 threads the gaps shrink to a few percent,
+and on 4096 x 1024 the reps spread more than the variants differ. The
+rungs above were all measured with the split on, so their numbers stand as
+measured.
 
 E3 is the one experiment that is much faster and was still not kept. On the
 reference grid (2048 x 512, 980000 steps, 24 threads, one run each) the
@@ -781,8 +802,8 @@ layouts and the 1.41 and 1.57 times gains did not move.
 | 5 | one rank per socket beats one rank of 24 threads | held, 1.09x and 2.16x |
 | 6 | two nodes above 80% efficient | overturned, 70% and 78% |
 
-Not run: E2 (aligned loads) and E9 (overlapping the halo with compute). E3
-(float32) ran in P7, see M2.6.
+Not run: E9 (overlapping the halo with compute). E2 (aligned loads) and E3
+(float32) ran later, see M2.6.
 
 ## M2.11 Profile and optimisation levels (jobs 652696 and 652697, figures F11 and F12)
 

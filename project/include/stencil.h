@@ -68,6 +68,11 @@ struct StencilConstants {
 // The & passes each vector without a copy. const means read only.
 void update_cells_scalar(const StencilConstants& constants, const std::vector<double>& current, std::vector<double>& next, int var_j, int first_stock, int end_stock);
 
+// The same with each buffer passed as a pointer to its cell 0.
+// The vector versions call these, so the maths lives in one place.
+// The alignment experiment needs them, because its buffers start part way into a vector.
+void update_cells_scalar(const StencilConstants& constants, const double* current, double* next, int var_j, int first_stock, int end_stock);
+
 // Updates one interior variance row of the next buffer, one cell at a time.
 void update_row_scalar(const StencilConstants& constants, const std::vector<double>& current, std::vector<double>& next, int var_j);
 
@@ -75,17 +80,35 @@ void update_row_scalar(const StencilConstants& constants, const std::vector<doub
 // Defined in stencil_avx.cpp, the only file built with the AVX2 and FMA flags.
 void update_row_avx(const StencilConstants& constants, const std::vector<double>& current, std::vector<double>& next, int var_j);
 
+// The same row with every buffer passed as a pointer.
+// stock_price and stock_price_sq point at column 0 of the S and S squared tables.
+// Every load and store is unaligned (loadu and storeu).
+void update_row_avx(const StencilConstants& constants, const double* current, double* next, int var_j, const double* stock_price, const double* stock_price_sq);
+
+// Experiment E2. The same row with aligned loads and stores where the address allows.
+// Column 1 of every row and of both tables must sit on a 32 byte boundary, or the program crashes.
+// Centre, north, south, S, S squared and the store are aligned. The six east and west windows cannot be.
+void update_row_avx_load(const StencilConstants& constants, const double* current, double* next, int var_j, const double* stock_price, const double* stock_price_sq);
+
+// Experiment E2. One aligned load per row per four cells.
+// The east and west windows are built in registers from neighbouring blocks with permutes and blends.
+// Needs the same 32 byte alignment as update_row_avx_load.
+void update_row_avx_shuffle(const StencilConstants& constants, const double* current, double* next, int var_j, const double* stock_price, const double* stock_price_sq);
+
 // True when update_row_avx was built with AVX2 and FMA.
 bool avx_row_is_vectorised();
 
 // Updates the bottom row, where the variance is zero.
 void update_zero_row(const StencilConstants& constants, const std::vector<double>& current, std::vector<double>& next);
+void update_zero_row(const StencilConstants& constants, const double* current, double* next);
 
 // Writes the known values at S = 0 and at the largest S.
 void apply_stock_edges(const StencilConstants& constants, std::vector<double>& next, int row_begin, int row_end, double time_to_expiry);
+void apply_stock_edges(const StencilConstants& constants, double* next, int row_begin, int row_end, double time_to_expiry);
 
 // Copies the second top row into the top row.
 void copy_top_row(const StencilConstants& constants, std::vector<double>& next);
+void copy_top_row(const StencilConstants& constants, double* next);
 
 // The constants the float experiment needs, rounded down from the double ones.
 // A float holds about 7 significant digits and a double about 16.
