@@ -1463,6 +1463,11 @@ after its CSV was complete. `exp_b` (656961) and `exp_c` (656962) finished.
 | exp_float | 652647 | 656963 | 2.7% |
 | optlevels | 652696 | 656964 | 1.4% |
 | mpi | 651303 | 656965 | 2 nodes, 1 rank x 24, 2048 x 512, 5617 to 6358 (+13.2%) |
+| denormal | 651294 | 656966 | omp 24 with flushing, +3.7% |
+| peak | 651302 | 656967 | 24 thread AVX2 peak 951 to 937 GFLOP/s (-1.5%), triad within 1.9% |
+| profile | 652697 | 656968 | same top function for every rung, serial update_cells_scalar 99.4% to 99.7% |
+
+All 14 rerun jobs have now finished.
 
 The E6 rows on 4096 x 1024 at 24 threads range from 2699 to 5147 within one
 job, so that change is noise. The E4 and E5 reps do not overlap between the
