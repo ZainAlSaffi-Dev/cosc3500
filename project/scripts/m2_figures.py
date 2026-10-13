@@ -27,7 +27,7 @@ from figstyle import BLUE, GREY, LIGHT_GREY, DARK_GREY, RED, AMBER, ORANGE, TEXT
 
 COMPUTE_NODE_SUFFIX = ".compute.eait.uq.edu.au"
 COLUMNS = ["sweep", "label", "price", "delta", "gamma", "vega", "ns", "nv", "nt",
-           "solver", "seconds", "cups", "threads", "ranks", "halo_seconds",
+           "solver", "seconds", "cups", "threads", "ranks", "exchange_seconds",
            "boundary_seconds"]
 # Cache sizes on the r730 nodes, from lscpu in the CSV headers
 L2_MIB = 0.25
@@ -52,7 +52,7 @@ def read_csvs(paths):
             row = dict(zip(COLUMNS, fields))
             for key in ("ns", "nv", "nt", "threads", "ranks"):
                 row[key] = int(row[key])
-            for key in ("seconds", "cups", "halo_seconds", "boundary_seconds"):
+            for key in ("seconds", "cups", "exchange_seconds", "boundary_seconds"):
                 row[key] = float(row[key])
             row["file"] = path
             rows.append(row)
@@ -104,7 +104,7 @@ def medians(rows, sweep):
             "rows": group,
             "step_ms": statistics.median([1000 * r["seconds"] / r["nt"] for r in group]),
             "boundary_ms": statistics.median([1000 * r["boundary_seconds"] / r["nt"] for r in group]),
-            "halo_ms": statistics.median([1000 * r["halo_seconds"] / r["nt"] for r in group]),
+            "halo_ms": statistics.median([1000 * r["exchange_seconds"] / r["nt"] for r in group]),
         }
     return out
 
@@ -280,11 +280,13 @@ def figure_size(size, provenance, paths, out_path):
         points.sort()
         lines[prefix] = points
         ax.plot([p[0] for p in points], [p[1] for p in points], "o-", color=colour, label=name)
-        # The one grid whose two sheets sit exactly 2^24 bytes apart, measured slow by slurm/diag_size_m2.sh
-        for mib, rate, grid in points:
-            if prefix == "simd" and grid == "2896x724":
-                ax.annotate("sheets exactly 16 MiB apart,\nsee RESULTS.md", (mib, rate), xytext=(mib * 0.08, rate * 1.25),
-                            fontsize=8, color=DARK_GREY, arrowprops=dict(arrowstyle="->", color=DARK_GREY, lw=0.8))
+    # The one grid whose two buffers sit exactly 2^24 bytes apart, measured slow by slurm/diag_size_m2.sh.
+    # Serial and simd both run slow there, and the note points at the lower of the two.
+    slow = [(rate, mib) for prefix in ("serial", "simd") for mib, rate, grid in lines[prefix] if grid == "2896x724"]
+    if slow:
+        rate, mib = min(slow)
+        ax.annotate("serial and simd slow here,\nbuffers exactly 16 MiB apart,\nsee RESULTS.md", (mib, rate), xytext=(mib * 0.08, rate * 1.25),
+                    fontsize=8, color=DARK_GREY, arrowprops=dict(arrowstyle="->", color=DARK_GREY, lw=0.8))
     bands = [(0, L2_MIB, "fits in one L2"), (L2_MIB, L3_MIB, "fits in one L3"),
              (L3_MIB, 2 * L3_MIB, "fits in both L3s"), (2 * L3_MIB, 1e4, "main memory")]
     shades = ["#F3F4F6", "#E5E7EB", "#F3F4F6", "#E5E7EB"]
@@ -302,9 +304,14 @@ def figure_size(size, provenance, paths, out_path):
     if lines.get("serial") and lines.get("omp24"):
         names = [p[2] for p in lines["serial"]]
         ratio = [o[1] / s[1] for s, o in zip(lines["serial"], lines["omp24"])]
-        sp.bar(range(len(names)), ratio, color=BLUE)
+        # At 2896 by 724 the serial rate is the slow point, so its ratio is not a real speedup.
+        colours = [GREY if name == "2896x724" else BLUE for name in names]
+        sp.bar(range(len(names)), ratio, color=colours)
         for index, value in enumerate(ratio):
-            sp.text(index, value * 1.02, f"{value:.0f}x", ha="center", fontsize=9)
+            if names[index] == "2896x724":
+                sp.text(index, value * 0.5, f"{value:.0f}x\nserial\nslow", ha="center", va="center", fontsize=9, color="white")
+            else:
+                sp.text(index, value * 1.02, f"{value:.0f}x", ha="center", fontsize=9)
         sp.set_xticks(range(len(names)))
         sp.set_xticklabels(names, rotation=30, fontsize=8.5)
         sp.set_ylabel("omp on 24 threads over serial")
@@ -315,7 +322,7 @@ def figure_size(size, provenance, paths, out_path):
 
 
 def figure_breakdown(strong, mpi, provenance, paths, out_path):
-    """F6, time per step split into the parallel update, the serial boundaries and the halo exchange."""
+    """F6, time per step split into the parallel update, the serial boundaries and the edge row exchange."""
     bars = []
     for threads in (1, 12, 24):
         key = f"omp_{threads}"
@@ -335,7 +342,7 @@ def figure_breakdown(strong, mpi, provenance, paths, out_path):
             ax.bar(index, update, color=BLUE, label="interior rows, parallel" if index == 0 else None)
             ax.bar(index, boundary, bottom=update, color=AMBER, label="boundaries, serial" if index == 0 else None)
             if halo > 0:
-                ax.bar(index, halo, bottom=update + boundary, color=RED, label="halo exchange" if index == 0 else None)
+                ax.bar(index, halo, bottom=update + boundary, color=RED, label="edge row exchange" if index == 0 else None)
             total = update + boundary + halo
             share = 100 * (boundary + halo) / total
             ax.text(index, total * 1.02, f"{total:.3f} ms\n{share:.1f}% not parallel", ha="center", fontsize=8.5)
@@ -379,7 +386,7 @@ def figure_placement(exp_b, provenance, paths, out_path):
 
 
 def figure_layouts(mpi, provenance, paths, out_path):
-    """F8, hybrid layouts on one and two nodes, with the halo share of each step."""
+    """F8, hybrid layouts on one and two nodes, with the edge row exchange share of each step."""
     layouts = [("1node_1x24", "1 node\n1 rank x 24"), ("1node_2x12", "1 node\n2 ranks x 12"),
                ("2node_1x24", "2 nodes\n1 rank x 24 each"), ("2node_2x12", "2 nodes\n2 ranks x 12 each")]
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
@@ -392,7 +399,7 @@ def figure_layouts(mpi, provenance, paths, out_path):
             colour = BLUE if key.startswith("1node") else ORANGE
             ax.bar(index, value, color=colour)
             halo_share = 100 * v["halo_ms"] / v["step_ms"]
-            ax.text(index, value * 1.02, f"{value:.2f}\nhalo {halo_share:.1f}%", ha="center", fontsize=8.5)
+            ax.text(index, value * 1.02, f"{value:.2f}\nexchange {halo_share:.1f}%", ha="center", fontsize=8.5)
         ax.set_xticks(range(len(layouts)))
         ax.set_xticklabels([name for _, name in layouts], fontsize=8.5)
         ax.set_ylabel("Gcell-updates/s")
@@ -648,7 +655,7 @@ def main():
     if mpi:
         figure_layouts(mpi, provenance, files["M"], out / "f8_layouts.png")
         for key, v in sorted(mpi.items()):
-            summary.append(f"mpi {key}: {v['median'] / 1e6:.1f} Mcell-updates/s, step {v['step_ms']:.4f} ms, halo {v['halo_ms']:.4f} ms, boundary {v['boundary_ms']:.4f} ms")
+            summary.append(f"mpi {key}: {v['median'] / 1e6:.1f} Mcell-updates/s, step {v['step_ms']:.4f} ms, exchange {v['halo_ms']:.4f} ms, boundary {v['boundary_ms']:.4f} ms")
     if args.peak and ladder:
         peaks = read_peaks(args.peak)
         figure_roofline(ladder, size, peaks, provenance, files["L"] + files["Z"], out / "f5_roofline.png")

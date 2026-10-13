@@ -187,11 +187,15 @@ The user will walk an interviewer through this code, so it has to read like a
 script. The model is `../matrixass/matrixMultiply.cpp`.
 
 - A `//` comment on its own line directly above the line it describes, same
-  indent. 3 to 12 words. Fragments get no full stop.
-- A block opens with one summary sentence that ends in a full stop, then the
+  indent. One or two straightforward sentences or noun phrases (CLAUDE.md, "How
+  the user writes"), each ending in a full stop. No first person, no "This
+  is the X that" openers, no "not X but Y" contrasts. No padding clauses tacked on the
+  end. A reason only when the reader needs that fact to follow the code. This replaced the earlier 3 to 12 word
+  fragments on 2026-10-13.
+- A block opens with one sentence saying what the whole block does, then the
   per-line comments.
 - Every function, class and struct has a two-line plain English overview
-  directly above it saying what it is for.
+  directly above it saying what it is for and why it exists.
 - Beginner layout. One statement per line, long lines are fine, `if`/`else`
   rather than `?:`, fields set in the constructor body rather than an
   initialiser list, the PDE split into named terms.
@@ -200,8 +204,10 @@ script. The model is `../matrixass/matrixMultiply.cpp`.
 - No lecture citations, plan references, phase names or essays in code. Those
   live in STUDY_GUIDE.md and CHANGELOG.md.
 - No semicolons inside comments, no em dashes.
-- Descriptive names (`row_above`, `halo_rows`, `rows_per_rank`), never cryptic
-  abbreviations.
+- Descriptive names (`row_above`, `owned_rows`, `rows_per_rank`), never cryptic
+  abbreviations. A name says what the thing is, not a metaphor for it
+  (`buffer` over sheet, `owned_rows` over slab, `row_below` over halo). The
+  textbook term goes once in a comment.
 - Each file opens with the same three-line AI declaration as matrixass.
 - The kept M1 files on the demo path are restyled to match (`main.cpp`,
   `grid.*`, `params.*`, `solver.*`, `solver_baseline.cpp`, `black_scholes.*`,
@@ -485,7 +491,7 @@ match the code are fixed or removed, never left stale.
 | Serial rung, strength reduction | 0:30 | Optimisation | `shot_serial_row.png` |
 | SIMD, and why not 4x | 1:00 | Optimisation | `shot_simd_fma.png`, F5 |
 | OpenMP, Amdahl and placement | 1:15 | Optimisation, Benchmarking | `shot_omp_pragma.png`, F2, F7 |
-| Hybrid MPI | 0:50 | Optimisation | `shot_mpi_halo.png`, F8 |
+| Hybrid MPI | 0:50 | Optimisation | `shot_mpi_exchange.png`, F8 |
 | Same answer on every rung | 0:25 | Benchmarking | F9 |
 | Weak scaling and grid size | 0:45 | Benchmarking | F3, F4 |
 | Bottlenecks | 0:35 | Benchmarking | F6, F5 |

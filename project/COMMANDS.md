@@ -83,13 +83,13 @@ The `threads` and `ranks` columns say how many OpenMP threads and MPI
 processes did the work. The full header is
 
 ```
-price,delta,gamma,vega,ns,nv,nt,solver,seconds,cell_updates_per_sec,threads,ranks,halo_seconds,boundary_seconds
+price,delta,gamma,vega,ns,nv,nt,solver,seconds,cell_updates_per_sec,threads,ranks,exchange_seconds,boundary_seconds
 ```
 
 `boundary_seconds` is the part of `seconds` the omp and mpi rungs spent on
 the serial boundary work.
 
-`halo_seconds` is the part of `seconds` the `mpi` rung spent swapping halo
+`exchange_seconds` is the part of `seconds` the `mpi` rung spent swapping halo
 rows on rank 0. It is 0 for every other rung.
 
 The stability and Feller line and any off-node warning go to stderr, so
@@ -283,7 +283,7 @@ arch -arm64 .venv/bin/python -m pip install -r scripts/requirements.txt
 | `make mc-check` | a Monte Carlo third opinion on the price |
 | `make convergence` | `results/convergence.png`, the grid refinement study |
 | `make payoff` | `results/payoff.png` |
-| `make m2-figures` | F1 to F10 and `summary.txt` in `results/m2/`, drawn from the final sweep CSVs the Makefile names by job id |
+| `make m2-figures` | F1 to F14 and `summary.txt` in `results/m2/`, drawn from the final sweep CSVs the Makefile names by job id, and the grid and Black-Scholes figures from `results/collapse_work/dump` |
 | `make code-shots` | the Milestone 2 code screenshots in `results/m2/code_shots/`, the data layout, one per rung, the test gate, the CSV header and the test output |
 
 ## 5. Interview demo runbook
@@ -342,4 +342,4 @@ the ladder job, with the build, every test and the AVX2 check on r730-2.
 Things to have open in the editor, in this order. `src/stencil.cpp`
 (`update_cells_scalar`), `src/stencil_avx.cpp` (the FMA lines),
 `src/solver_omp.cpp` (the pragma), `src/solver_mpi.cpp`
-(`exchange_halo_rows`), and `results/m2/f1_ladder.png`.
+(`exchange_edge_rows`), and `results/m2/f1_ladder.png`.

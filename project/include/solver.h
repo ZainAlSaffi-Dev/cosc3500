@@ -12,58 +12,61 @@
 #include "params.h"
 
 // What a solver hands back after pricing the option.
-// The price, the three Greeks, and how long the solve took.
+// Holds the price, the three Greeks and the timing.
 struct SolveResult {
-    // Option price today
+    // Option price today.
     double price = 0.0;
-    // How much the price moves when the stock moves
+    // How much the price moves when the stock moves.
     double delta = 0.0;
-    // How much delta moves when the stock moves
+    // How much delta moves when the stock moves.
     double gamma = 0.0;
-    // How much the price moves when the variance moves
+    // How much the price moves when the variance moves.
     double vega = 0.0;
-    // Time spent inside the time loop
+    // Seconds spent inside the time loop.
     double seconds = 0.0;
-    // Cells updated per second, so different grid sizes compare fairly
+    // Cells updated per second.
     double cell_updates_per_sec = 0.0;
-    // Largest timestep the scheme can take without blowing up
+    // Largest stable timestep.
     double dt_stable_estimate = 0.0;
-    // OpenMP threads per process that did the work
+    // OpenMP threads per process.
     int threads = 1;
-    // MPI processes that did the work
+    // MPI processes.
     int ranks = 1;
-    // Time the first process spent swapping halo rows, part of seconds
-    double halo_seconds = 0.0;
-    // Time spent on the serial boundary work, part of seconds
+    // Seconds the first process spent exchanging edge rows with its neighbours. Included in seconds.
+    double exchange_seconds = 0.0;
+    // Seconds spent on the serial boundary work. Included in seconds.
     double boundary_seconds = 0.0;
 };
 
-// The common shape every solver follows, like a Python abstract base class.
-// Each solver must provide solve() and name(), and shares the helpers below.
+// The common shape every solver follows, like an abstract base class in Python.
+// Each solver writes its own solve() and name() and shares the helpers below.
 class Solver {
 public:
-    // Virtual so the right cleanup runs when deleting through a Solver pointer
+    // Lets a subclass clean up when deleted through a Solver pointer.
     virtual ~Solver() = default;
-    // The = 0 means every subclass has to write its own version
+    // virtual means the subclass's version runs.
+    // The = 0 means every subclass must write its own version.
     virtual SolveResult solve(const Config& cfg) = 0;
     virtual std::string name() const = 0;
 
 protected:
-    // Helpers every solver can call, written once in solver.cpp
+    // Helpers shared by every subclass, written in solver.cpp.
     void extract_result(const Grid& grid, const Config& cfg, SolveResult& out) const;
     void report_stability(const Grid& grid, const Config& cfg, double dt, SolveResult& out) const;
 };
 
-// The simple reference solver that every other solver must match.
-// Recomputes everything per cell, written to be correct rather than fast.
+// The first solver, with the whole PDE written out inside the loop.
+// Every other solver is checked against its answers.
+// The : public Solver part makes it a subclass of Solver.
 class BaselineSolver : public Solver {
 public:
     SolveResult solve(const Config& cfg) override;
+    // override marks this as replacing the Solver version.
     std::string name() const override { return "baseline"; }
 };
 
-// The single core solver with constants worked out once up front.
-// Same answers as the baseline, about twice as fast.
+// The single core solver with the constants worked out before the time loop.
+// Gives the same answers as the baseline with less work per cell.
 class SerialSolver : public Solver {
 public:
     SolveResult solve(const Config& cfg) override;
@@ -71,23 +74,23 @@ public:
 };
 
 // The single core solver that updates four cells per instruction with AVX2.
-// Same time loop as SerialSolver, only the row update is different.
+// Same time loop as SerialSolver with a different row update.
 class SimdSolver : public Solver {
 public:
     SolveResult solve(const Config& cfg) override;
     std::string name() const override { return "simd"; }
 };
 
-// The solver that splits the rows between all the cores of one machine with OpenMP.
-// Same time loop as SimdSolver, with one pragma above the row loop.
+// The solver that splits the rows between the cores of one machine with OpenMP.
+// Same time loop as SimdSolver with one pragma above the row loop.
 class OmpSolver : public Solver {
 public:
     SolveResult solve(const Config& cfg) override;
     std::string name() const override { return "omp"; }
 };
 
-// The solver that splits the rows between several processes with MPI, threads inside each.
-// Each process owns one slab of rows and swaps one edge row with each neighbour per step.
+// The solver that splits the rows between MPI processes, with threads inside each.
+// Each process owns a block of rows and exchanges edge rows with its neighbours every step.
 class MpiSolver : public Solver {
 public:
     SolveResult solve(const Config& cfg) override;

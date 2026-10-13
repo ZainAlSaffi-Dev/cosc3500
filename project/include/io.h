@@ -11,10 +11,10 @@
 #include "params.h"
 #include "solver.h"
 
-// Saves the current sheet as a CSV file for the animation scripts.
+// Saves the current buffer as a CSV file for the animation scripts.
 void dump_snapshot(const std::string& dump_dir, int step, const Grid& grid);
 
-// Prints the one CSV line of results that the benchmark scripts read.
+// Prints one CSV line of results for the benchmark scripts.
 void print_result_csv(const SolveResult& result, const Config& cfg);
 
 #endif  // HESTON_IO_H

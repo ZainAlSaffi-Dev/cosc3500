@@ -1041,3 +1041,439 @@ node total of 155x is 8768 / 56.6 from jobs 651303 and 651295.
 
 P9 needs only the recording. P10 is the interview rehearsal and the final
 pass of both guides.
+
+## Phase 9c. The equation, the grid and the Black-Scholes check in the M2 video
+
+### What changed
+
+The M2 deck and script assumed the marker had seen the Milestone 1 video.
+The task sheet says each presentation must stand on its own. Three frames
+now follow the problem frame. The equation frame shows the Heston PDE with
+its terms grouped into randomness and drift, the central differences for
+V_S, V_SS and V_Sv in grid indices, and the explicit update. The grid frame
+shows F13 and the check frame shows F14. `scripts/method_figures.py` draws
+both and `make m2-figures` now runs it.
+
+The cold open frame (F1) was removed. Its line is now spoken over the title
+frame, and F1 still appears in the rejected and close takes.
+
+A frame on how the numbers were measured was added before the profile. The
+task sheet asks how the benchmarks avoid misleading results, and no M2 take
+said it. It gives the node, `--exclusive`, the median of 5, pinned threads,
+the tests that run first in each job, the printed price, and the first
+round of sweeps that was thrown away over denormals. The weak scaling take
+and its callout now name Gustafson's law, which predicts 22 at 24 threads
+with the measured 8.4 percent serial share, against 19.1 measured. The
+course does not teach Gustafson's law, so the slide gives the formula and
+cites the source, J. L. Gustafson, Reevaluating Amdahl's law,
+Communications of the ACM 31(5), 532 to 533, 1988.
+
+The same rule now covers every idea the slides use from outside the lecture
+material on disk (L01, L03 to L06, T04 to T06). A `\sigcite` macro puts a
+small grey source line under the callout, 74 percent wide so it stays clear
+of the webcam corner. The protocol slide cites Goldberg (1991) for denormals,
+both roofline slides cite Williams, Waterman and Patterson (2009), strong
+scaling cites lecture 3 for Amdahl and Karp and Flatt (1990) for fitting the
+serial fraction, and the placement and hybrid MPI slides cite Drepper (2007)
+for first touch. The strong scaling callout now gives the fitted formula. The
+figure slots on those slides shrank to make room. M2_SCRIPT.md lists the
+sources.
+
+F13 also labels how the cells are calculated. The expiry sheet says the value
+is known there, with the zero and S minus K payoff regions labelled. The
+arrow reads one step back. A key between the sheets shows which derivative
+each of the nine cells feeds, and the update formula sits under the next
+sheet. The grid callout and take now say why the solve starts at expiry.
+
+| Figure | File | What it shows |
+|---|---|---|
+| F13 | `f13_grid.png` | one step, the current sheet at T holding the payoff, the red block of nine giving one cell of the next sheet at T - dt, the next sheet filling row by row, and its edges |
+| F14 | `f14_bs_collapse.png` | the solver at xi = 0 and rho = 0 drawn over the closed-form Black-Scholes price today, with the gap underneath |
+
+### Decision 1. F13 shows one step, not the whole solve
+
+The first version showed a grid with a stencil and four small sheets from
+expiry to today. It was redrawn to show only the step from T to T - dt,
+with the same i and j outlined in both sheets, so the setup is clear and the
+speaker can say the step repeats back to t = 0.
+
+### Decision 2. F14 is redrawn from the saved collapse run
+
+The Milestone 1 still of this comparison is a frame of a dark video. F14
+reads the last snapshot in `results/collapse_work/dump`, the same 526 by 101
+run, and draws it in the light figure style. It reuses `bs_call` and
+`read_variance_row` from `scripts/bs_collapse_anim.py`. At S = 5200 the
+solver gives 202.7705 and the closed form 202.8080, a gap of 3.75 cents or
+1.85e-4 relative. The largest gap between 0.7 and 1.4 times the strike is
+0.0375 dollars. The convergence plot was left out, because its error
+flattens onto a floor and would take more time to explain than the slot has.
+
+### Decision 3. Other takes were cut to pay for the new ones
+
+The data structure take dropped the loop nest and swap sentences, which F13
+now shows. Where the time goes dropped the boundary sentence, which is still
+on its slide. SIMD dropped the O3 vectoriser sentence, which is on its
+slide. OpenMP, MPI, weak scaling and the same-answer take each lost a
+clause. The script is 1259 words, 9 minutes at 140 words a minute, and the
+slots end at 9:40.
+
+The M1 feedback asked for HPC content by 1:20. The grid take at 1:15 now
+carries the two sheets and why every cell in a step can be done at once,
+and the data structure take follows at 2:05.
+
+### Validation
+
+`make slides-m2` compiles with no overfull boxes. The equation, grid,
+check and protocol frames were rendered and read for overflow. Every claim
+on the protocol frame was checked against `slurm/bench_common.sh` and the
+ladder job script. `make test` in `bench_common.sh` runs
+`tests/test_bs_collapse` before any timing.
+
+## Phase 9d. Before and after snippets in the code guide
+
+### What changed
+
+`CODE_GUIDE.md` has a new §15. It takes each code change in this file in
+order and shows the code before it next to the code after it, with what
+changed and why. It covers the renames, the hoisted constants, the named
+PDE terms, the five-call time loop, the column range, the AVX2 row, the
+simd, omp and mpi loops, the four experiment solvers, the denormal flush,
+the triad arrays and the float row. The reading order note at the top of
+the guide points to it.
+
+§2.2 also explains `std::size_t`, what it is, which header it comes from
+and how it differs from `int`. §4.4 and §5.2 say why `find` is compared
+with `npos` and why the cell count is cast to `std::size_t`, and §14 has a
+question on it. The Heston Code Walkthrough page was rebuilt from the guide.
+
+### Change 1. The package secret check no longer matches itself
+
+The `make package` guard greps the payload for the word pass word in
+capitals, or in lower case followed by an equals sign. The Makefile is in the
+payload, and its own grep line held that word, so the guard refused every
+package. The pattern now wraps the first letter in square brackets, which
+matches the same words but not the line that holds it. A copy of the payload
+passed the new check, and a test file holding a fake setting was still
+caught.
+
+### Validation
+
+A script checked every line of every snippet in §15 against the source
+files and the `milestone1` baseline. Every line matched except the two
+before snippets marked as rebuilt from this file (§15.5 and §15.12), whose
+earlier versions were never committed on their own.
+
+## Phase 9e. The study guide page
+
+### What changed
+
+The Heston Code Walkthrough page became the Heston Pricer Study Guide, at
+the same link, so it can be studied from instead of STUDY_GUIDE.md. A new
+file, `docs/STUDY_CARDS.md`, holds 40 short cards in seven lessons. Six
+cover STUDY_GUIDE.md (finance, the PDE and grid, memory and serial speed,
+benchmarking, the parallel rungs, results). The seventh, The C++ in the
+code, lists every standard library call and C++ feature the code uses,
+each with its real line, what it does and why it is used there. The page
+puts these cards before the CODE_GUIDE.md lessons, and links like
+STUDY_GUIDE §7.4 in the code pieces now open the matching card.
+
+The drill has 94 questions, 55 on the ideas and the C++ with written
+answers and 39 on the code that open the piece answering them. A search box
+finds every piece that mentions a name, such as `std::clamp` or `npos`. In
+test-yourself mode a C++ card hides its why column, a concept card hides
+everything after its first paragraph, and a code piece hides its
+explanation.
+
+STUDY_GUIDE.md is unchanged and is still the long version. The cards are
+about 10700 words against its 27700.
+
+## Phase 9f. Simpler settings code
+
+### What changed
+
+The command line and config file code was rewritten with fewer C++ ideas,
+so it can be explained line by line. Nothing inside the time loop changed.
+
+`main.cpp` now requires `--config <file>` as the first two words, loads it,
+then reads every other flag as a pair with `i = i + 2`. The first pass that
+searched for `--config` anywhere and the `flag_value` helper with its `int&`
+parameter are gone. Every script, slurm job and Makefile target already put
+`--config` first.
+
+`params.cpp` now splits each line into three words with
+`std::istringstream`, like `line.split()` in Python, and converts values
+with plain `std::stod` and `std::stoi`. The `trim`, `parse_double` and
+`parse_int` helpers, and the `find`, `npos` and `substr` calls, are gone. One
+`try` and `catch` around `apply` turns a value that is not a number into a
+message with the file and line. Unknown keys and flags still stop the
+program.
+
+One check was given up. A value that starts with a number and has text
+after it, such as `12x`, is now read as 12 instead of being rejected. Every
+config line must have spaces around the `=`, which every config file and
+every config the Python scripts write already has.
+
+### Validation
+
+Four runs on `smoke.cfg` and `demo.cfg` across four solvers and every flag
+type gave the same price, delta, gamma and vega to every printed digit
+before and after. `make test` and `make test-mpi` pass. A missing value, an
+unknown flag, an unknown key, a missing `=`, a non-number and a missing file
+each stop the program with exit code 1 and a message.
+
+CODE_GUIDE.md §2.2, §3 and §4, docs/STUDY_CARDS.md §I7.2 and §I7.3,
+HPC_JUSTIFICATIONS.md §6 and DESIGN_DECISIONS.md decisions 2 to 4 were
+updated to match.
+
+## Phase 9g. Beginner pass over every source file
+
+### What changed
+
+Every file in `src/`, `include/` and `tests/` was read through for C++ that a
+reader who knows C and Python would have to look up, and for comments that
+restate the code or use filler words. Nothing the solvers compute changed.
+
+The step timer is now `omp_get_wtime()`, which returns seconds as a
+`double`, in place of `std::chrono::steady_clock` with `auto` and
+`duration<double>(...).count()`. Every file is already built with OpenMP, so
+the baseline, serial and simd solvers include `<omp.h>` for it. On Linux both
+timers read `CLOCK_MONOTONIC`, so the benchmark numbers taken with the old
+timer still describe this code.
+
+`locate` in `grid.cpp` keeps values in range with plain `if` statements
+instead of three `std::clamp` calls. `grid.cpp` counts cells in an `int`
+instead of casting to `std::size_t`, since `index()` already returns an `int`
+and the largest grid run has 8.4 million cells.
+
+The float constants and the float payoff sheet are filled with plain loops
+and `(float)` casts instead of iterator ranges (`.begin()`, `.end()`), and
+`explicit` was dropped from the `FloatStencilConstants` constructor.
+
+`dump_snapshot` writes with C's `fopen`, `fprintf("%.10g")` and `fclose`
+instead of `std::ofstream` with `<<` and `precision(10)`.
+
+Constants named in Google style (`kNodeSnapCells`, `kRungs`,
+`kRelativeTolerance` and the rest) now have plain names such as
+`node_snap_tolerance` and `solver_names`. The tests print OK or MISMATCH with
+`if`/`else` instead of `?:`, and still fail on NaN.
+
+Comments were reworded where they used filler (simply, clean, fresh,
+actually), plan words (rung), or a speed claim that was out of date (serial
+is 2.8 times the baseline, not twice). New one-line comments explain the C++
+that a C or Python reader meets for the first time, such as `Grid::`,
+`: public Solver`, `override`, `&` on a return type, `make_unique` and the
+range `for` loop.
+
+### Validation
+
+Every solver on `smoke.cfg`, call and put, the MPI solver on three
+processes, and six off-node and edge quotes that reach every branch of
+`locate` gave the same price, delta, gamma and vega to every printed digit
+before and after. All 400 snapshot files from an omp run with
+`--dump-every 50` are byte for byte the same, so `%.10g` writes what the
+stream did. `make test`, `make test-mpi` and `make avx-check` (under
+Rosetta) pass, and the build has no warnings.
+
+A dry run of `make package` found that the Phase 9 entry on the package
+guard quoted the words the guard searches for, so the guard would refuse the
+zip. That entry now describes the pattern without quoting it.
+
+CODE_GUIDE.md §2.2, §5.2, §5.6, §7.3, §7.10, §9b.3, §9c.6, §9e, §10.2 and §12,
+docs/STUDY_CARDS.md §I7, DESIGN_DECISIONS.md decisions 9, 20, 21 and 23 and
+the documentation table, HPC_JUSTIFICATIONS.md and docs/WALKTHROUGH.md line
+references, and the timer note in docs/RESULTS.md were updated to match.
+
+## Phase 9h. Comments in my own voice
+
+### What changed
+
+Every comment in `src/`, `include/` and `tests/` was rewritten to read the
+way I prefer to read it, as short plain statements that end in a full
+stop. Earlier drafts used first person and padded most lines with an added
+clause such as ", so the time loop only has to read them". Both were taken
+out, along with "This is the X that" openers, "not X but Y" contrasts and
+trailing "which is" asides. A reason stays only where the reader needs that
+fact, such as "so no locks are needed". The old rule of 3 to 12 word
+fragments is retired. The voice is written down in `../CLAUDE.md` under "How
+the user writes", and `PLAN.md` §3 points to it.
+
+Only comment lines changed. No comment was added or removed, so every line
+number stays where it was and the line references in `HPC_JUSTIFICATIONS.md`
+and `docs/WALKTHROUGH.md` still hold.
+
+### Validation
+
+With every comment line removed, each file is identical to the version
+before. After a forced rebuild, all 15 object files are byte for byte the
+same as before, so the program the benchmarks ran is the program in this
+tree. `make test` and `make test-mpi` pass. No comment has a semicolon or a
+dash, and every one ends in a full stop.
+
+The snippets in `HPC_JUSTIFICATIONS.md` and `DESIGN_DECISIONS.md` that quote
+comments were updated to the new text.
+
+## Phase 9i. Names that say what things are
+
+Names in the code that were metaphors were replaced by names that say what
+the thing is.
+
+| Before | After | Where |
+|---|---|---|
+| `RowSlab`, `slab_for_rank`, `slab` | `RowRange`, `rows_for_rank`, `owned_rows` | `solver_mpi.cpp` |
+| `exchange_halo_rows` | `exchange_edge_rows` | `solver_mpi.cpp` |
+| `halo_below`, `halo_above` | `row_below`, `row_above` | `solver_mpi.cpp` |
+| `halo_tag` | `message_tag` | `solver_mpi.cpp` |
+| `halo_start`, `halo_end`, `halo_seconds` | `exchange_start`, `exchange_end`, `exchange_seconds` | `solver_mpi.cpp`, `solver.h`, `io.cpp` |
+| `my_rows` (the Gatherv send pointer) | `my_values` | `solver_mpi.cpp` |
+| `sheet` parameter | `buffer` | `solver_mpi.cpp` |
+| `blend_cell` | `bilinear_interpolate` | `solver.cpp` |
+
+Comments that said sheet now say buffer, matching `swap_buffers`. Halo and
+ghost row are the standard HPC terms, so the comment above
+`exchange_edge_rows` names them once. The north, south, east and west
+neighbour names in the stencil stayed, because they are the usual textbook
+labels for a stencil's neighbours and a comment says which way each points.
+
+The CSV column `halo_seconds` is now `exchange_seconds` in the header that
+`slurm/bench_common.sh` writes and in `scripts/m2_figures.py`. The figure
+script names the columns itself, so older CSVs still read. The F6 and F8
+labels and the code shot `shot_mpi_halo.png` (now `shot_mpi_exchange.png`)
+follow the new names. The study guides keep sheet, slab and halo in their
+prose, with a note in `STUDY_GUIDE.md` §6.1, §17.2, §17.3, `CODE_GUIDE.md`
+§9c and `docs/STUDY_CARDS.md` §I5.6 giving the code name for each.
+
+### Validation
+
+No line was added or removed in any source file, so line references hold.
+After a forced rebuild the machine code (`otool -t`) of all 15 object files
+is identical to before the rename. `make test` and `make test-mpi` pass. The
+code snippets in `CODE_GUIDE.md`, `HPC_JUSTIFICATIONS.md` and
+`DESIGN_DECISIONS.md` match the new names.
+
+
+## Phase 9j. The code guide follows the logic line by line
+
+### What changed
+
+No code changed. `CODE_GUIDE.md` has a new §1.5 that traces one run from
+`main` to the printed CSV line. It has a call tree with the file and line
+of every function, then four numbered walks, from the command line to a
+solver, inside one solve, one timestep and one row. Each step links to the
+exact line in the editor and says why the step is there. A table lists,
+for each of the 10 solvers, where its `solve` starts, which row function it
+calls and the lines that differ from the serial solver. A list gives where
+each test's `main` starts.
+
+Blocks were added for code the guide skipped or hid behind `...`.
+
+| Section | New or filled in |
+|---|---|
+| §3.2, §3.2b | the `--type` check, `--vmax` and `--maturity`, `throw`, and `usage` |
+| §4.1b | `MarketSpec`, `HestonParams` and `GridSpec`, and why every field has a default |
+| §5.6, §5.7 | the four parts of `locate` with a worked example, and `stock_position` and `variance_position` |
+| §6.5, §6.6 | the far corner locals, the Feller text, the off-node warning and the four neighbours read for the Greeks |
+| §7.1 | the baseline's local names, `dt` and `max_stock_price` |
+| §8.1b, §8.3 | the scalar part of the `StencilConstants` constructor, `resize` and the bracketed coefficients |
+| §8.8 | the full `apply_stock_edges`, with the value at each end of the stock axis |
+| §9a.4, §9a.5 | the row pointers and every derivative line of the AVX2 row |
+| §9c.3 | the whole grid on every rank and the stability line on rank 0 |
+| §9d.1, §9d.3 | `omp_scalar` and `omp_runtime`, with the E5 numbers |
+| §9d.2 | why `omp_persistent` times the whole loop once |
+| §9e.4, §10.2 | `update_zero_row_float`, and the `NULL` check and `snprintf` in `dump_snapshot` |
+| §12.0, §12.3, §12.4 | how each test is built, why the test grids are 421 by 51, `max_relative_diff` and the random fill |
+
+§9d was renumbered, so `omp_persistent` is now §9d.2 and `omp_edges` §9d.4.
+The §1.1 map lists `OmpSolver`, `MpiSolver` and `solver_experiments.h`.
+The §15.9 After snippet still had the MPI names from before Phase 9i and
+now uses `RowRange`, `rows_for_rank`, `owned_rows` and
+`exchange_edge_rows`. §14 has nine new questions. `STUDY_GUIDE.md` points
+to §1.5.
+
+### Validation
+
+A script checked every snippet line in `CODE_GUIDE.md` against the source.
+The only lines not found are the deliberate Before snippets in §15 and
+lines that stand for code left out. A second script opened every line link
+and every call tree line and printed the line it lands on, and each one is
+the line named. The off-node claim was checked with a run on
+`config/bench.cfg`, which does print the warning, and the guide says so.
+`tests/test_ladder_matches` was timed at about 7 seconds on the Mac.
+
+The Heston Pricer Study Guide page is built from `CODE_GUIDE.md` and has
+not been rebuilt for this phase.
+
+## Phase 9k. The rerun on the current code, and one point that moved
+
+### What changed
+
+The M2 sweeps were submitted again on the current code as jobs 656955 to
+656968. When this entry was written, five had finished (ladder 656955,
+strong 656956 and 656957, weak 656958, size 656959), `exp_a` (656960) was
+running and the other eight were queued. Every finished job passed all its
+tests before timing, and every price matches the first runs to every
+printed digit.
+
+| Sweep | First run | Rerun | Largest change |
+|---|---|---|---|
+| ladder | 651295 | 656955 | mpi 2 x 12, 6019 to 6272 (+4.2%) |
+| strong omp | 651296 | 656956 | 24 threads, 5733 to 5973 (+4.2%) |
+| strong omp_scalar | 651297 | 656957 | 8 threads, +3.6% |
+| weak | 651298 | 656958 | 10 threads, +3.1% |
+| size | 651299 | 656959 | serial at 2896 x 724, 167 to 58 (-65%) |
+
+Everything except the size sweep moved by 4.2% or less, which is ordinary
+run-to-run noise, so F1, F2, F3 and the numbers in the deck still stand and
+were not redrawn.
+
+Serial at 2896 x 724 is now hit by the same address effect as simd
+(Phase 5, Finding 1), with all five reps between 58.3 and 58.5. Phase 9g
+said the old numbers still describe the current code, and for this one
+point they do not. The cause of the change was not found. F4 and F5 are now
+drawn from job 656959 (`M2_CSVS` in the Makefile). F4's note points at the
+serial point and names both rungs, and the 2896 bar in the speedup panel is
+grey and labelled serial slow, because 111x there is the slow serial run
+and not a real speedup. `docs/RESULTS.md` M2.4, M2.5 and M2.8 and
+`HPC_JUSTIFICATIONS.md` (177 and 97 GFLOP/s on the roofline) were updated.
+The deck was rebuilt for the new F4 and F5, and no slide text changed.
+
+### The code shots and the deck were out of date
+
+`presentation/deck_m2.pdf` had last been built on 12 October, before
+Phases 9f to 9i, so its code shots showed the code before the comment
+rewrite and the renames. `deck_m2.tex` already pointed at
+`shot_mpi_exchange.png`, which had never been drawn, and the deck no longer
+compiled. `scripts/code_shots.py` looked for the old comment
+"Every interior row, four cells at a time", and now looks for "Update every
+interior row, four cells at a time.". `make code-shots` drew all eight
+shots from the current source, and `shot_mpi_halo.png` was deleted.
+`make slides-m2` now builds the 25 frames with no errors or overfull boxes.
+The Grid size and Hybrid MPI frames were rendered and checked.
+
+### The experiment reruns
+
+`exp_a` (656960) hit its 14 minute limit at the same point as the first
+run, after the same 85 rows. `exp_float` (656963) also ended on the limit,
+after its CSV was complete. `exp_b` (656961) and `exp_c` (656962) finished.
+
+| Sweep | First run | Rerun | Largest change |
+|---|---|---|---|
+| exp_a | 651300 | 656960 | E5 `guided`, 4831 to 4388 (-9.2%), E4 persistent at 512 x 128, 1424 to 1293 (-9.2%) |
+| exp_b | 651301 | 656961 | E6 24 threads on 4096 x 1024, up to -19.9% |
+| exp_c | 651474 | 656962 | 0.7% |
+| exp_float | 652647 | 656963 | 2.7% |
+| optlevels | 652696 | 656964 | 1.4% |
+| mpi | 651303 | 656965 | 2 nodes, 1 rank x 24, 2048 x 512, 5617 to 6358 (+13.2%) |
+
+The E6 rows on 4096 x 1024 at 24 threads range from 2699 to 5147 within one
+job, so that change is noise. The E4 and E5 reps do not overlap between the
+two runs, so the size of those effects changes from run to run. Static still
+wins E5, and E4 and E8 are still small wins. The kernels did not change, so
+the figures keep the first runs, and `docs/RESULTS.md` M2.6,
+`HPC_JUSTIFICATIONS.md` and `CODE_GUIDE.md` §9d.3 now quote the rerun next
+to them. The RESULTS line saying E4 and E8 matter most on small grids was
+removed, because the rerun does not show it.
+
+In the mpi rerun only the 2 node, 1 rank x 24 layout on 2048 x 512 moved,
+and its reps do not overlap with the first run. The 2 x 12 layouts and
+the two node gains are within 1.4%, so F6 and F8 keep job 651303 and
+RESULTS M2.9 quotes the rerun.

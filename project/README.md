@@ -25,6 +25,7 @@ make test     # the validation gates; prints ALL TESTS PASS
 | [presentation/](presentation/) | The recording side of that plan. A timestamped shot table, notes on how each asset is shot, and the slide deck the video is recorded over. What to say stays in PRESENTATION.md. |
 | [PLAN.md](PLAN.md) | The design contract: numerical scheme, code style rules, optimisation ladder design, benchmark protocol. |
 | [STUDY_GUIDE.md](STUDY_GUIDE.md) | The maths and ideas, from the finance and the PDE through finite differences, validation, memory and benchmarking to the parallel plan. Interview preparation. |
+| [STUDY_CARDS.md](docs/STUDY_CARDS.md) | The study guide in short cards, plus what every C++ library call in the code does and why. The source of the Heston Pricer Study Guide page. |
 | [HPC_JUSTIFICATIONS.md](HPC_JUSTIFICATIONS.md) | Why each HPC technique was used, one question and answer per choice, with the number behind it. Interview preparation. |
 | [CODE_GUIDE.md](CODE_GUIDE.md) | The code, file by file and snippet by snippet, with what each block does and why. Interview preparation. |
 | [InitialSpecDesign.md](docs/InitialSpecDesign.md) | The original submitted brief. Frozen deliverable, deliberately not updated to match later decisions. |

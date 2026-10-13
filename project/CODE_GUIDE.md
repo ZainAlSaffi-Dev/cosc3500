@@ -7,20 +7,27 @@ work and why there are two buffers, is in [STUDY_GUIDE.md](STUDY_GUIDE.md).
 This guide points there whenever a block depends on an idea from it.
 
 **Interactive version.** The
-[Heston Code Walkthrough](https://claude.ai/artifact/5ggg9HfwJiXwvRRPwHHSWh)
-shows this guide one snippet at a time, with progress ticks, a mode that
-hides each explanation until you have tried it yourself, and the practice
-questions as flashcards. It is built from this file, so rebuild it when this
-file changes.
+[Heston Pricer Study Guide](https://claude.ai/artifact/5ggg9HfwJiXwvRRPwHHSWh)
+shows this guide one snippet at a time, after the short concept cards in
+[docs/STUDY_CARDS.md](docs/STUDY_CARDS.md). It has progress ticks, search, a
+mode that hides each answer until you have tried it yourself, and a drill. It
+is built from those two files, so rebuild it when either changes.
 
 **How the snippets work.** Every snippet is copied from the real file, mostly
 with its comments removed so it stays short. The file and function are named
 above it. Under each one, the first sentence says what the block does and the
 second says why we do it that way.
 
+**Following the code.** §1.5 traces one run from `main` to the printed
+line, with a link to the exact line of every step, and a table of the lines
+where each solver differs from the serial one. Start there when you want to
+follow the logic in the editor.
+
 **Reading order.** If you are short on time, read §1 for the map, then §7
 (the baseline, where the whole algorithm is in one function), then §8 and §9
 (the serial rung). Everything else is the setup and plumbing around them.
+§15 puts the code before and after each change in the changelog side by
+side, so it is the quickest way to see what each rung added.
 
 ---
 
@@ -38,8 +45,9 @@ main.cpp
  ├─ params.h   Config, load_config()                      body in params.cpp
  ├─ io.h       print_result_csv(), dump_snapshot()        body in io.cpp
  └─ solver.h   Solver, BaselineSolver, SerialSolver,
-               SimdSolver, make_solver()
-                 └─ grid.h   Grid (two sheets, index, swap)  body in grid.cpp
+               SimdSolver, OmpSolver, MpiSolver, make_solver()
+                 ├─ grid.h   Grid (two buffers, index, swap)  body in grid.cpp
+                 └─ solver_experiments.h   the five experiment solvers
 
 solver.cpp           Solver::extract_result, Solver::report_stability, make_solver
 solver_baseline.cpp  BaselineSolver::solve, the whole algorithm in one function
@@ -74,6 +82,9 @@ This is what happens when you run
    `swap_buffers`.
 4. `extract_result` reads the price and Greeks off the last sheet, and `main`
    prints them with `print_result_csv`.
+
+§1.5 follows the same run line by line, with a link to every function on
+the way.
 
 ### 1.3 One timestep at a glance
 
@@ -121,6 +132,193 @@ into `stencil.cpp` happens once per row, which is about 510 calls per step
 against about a million cell updates, and the inner loop compiles the same
 either way.
 
+### 1.5 Following the logic in the editor
+
+This section is the map for reading the code itself. Every link opens the
+file at that line, in VS Code and on GitHub. Keep the code open next to
+this guide and follow the links in order. The section number at the end of
+each step points to the block that explains those lines.
+
+**The whole run as a call tree**
+
+```text
+main                                        src/main.cpp:104
+└─ run                                      src/main.cpp:27
+   ├─ load_config                           src/params.cpp:59
+   │   └─ apply, once per line of the file  src/params.cpp:14
+   ├─ make_solver                           src/solver.cpp:95
+   ├─ solver->solve, for example SerialSolver::solve   src/solver_serial.cpp:16
+   │   ├─ Grid::Grid                        src/grid.cpp:14
+   │   ├─ Grid::init_payoff                 src/grid.cpp:37
+   │   ├─ report_stability                  src/solver.cpp:70
+   │   ├─ StencilConstants::StencilConstants   src/stencil.cpp:12
+   │   ├─ the time loop, once per step
+   │   │   ├─ update_row_scalar, once per interior row   src/stencil.cpp:127
+   │   │   │   └─ update_cells_scalar       src/stencil.cpp:64
+   │   │   ├─ update_zero_row               src/stencil.cpp:133
+   │   │   ├─ apply_stock_edges             src/stencil.cpp:156
+   │   │   ├─ copy_top_row                  src/stencil.cpp:181
+   │   │   ├─ Grid::swap_buffers            src/grid.cpp:31
+   │   │   └─ dump_snapshot, only with --dump-every   src/io.cpp:13
+   │   └─ extract_result                    src/solver.cpp:34
+   │       ├─ stock_position and variance_position   src/grid.cpp:110 and 116
+   │       │   └─ locate                    src/grid.cpp:57
+   │       └─ bilinear_interpolate, five calls   src/solver.cpp:18
+   └─ print_result_csv                      src/io.cpp:45
+```
+
+The tree reads top to bottom in the order things happen. A line indented
+under another is a call made from inside it. Only `solve` changes from
+solver to solver. Everything above it and everything it calls for setup
+and for the answer is shared.
+
+**Step 1. From the command line to a solver**
+
+1. [main.cpp:104](src/main.cpp#L104) `main` starts MPI, asks which process
+   this is, and hands everything to `run`. `MPI_Finalize` has to run on
+   every exit path, so all the work sits in `run` and `main` stays four
+   lines long. (§3.6)
+2. [main.cpp:31](src/main.cpp#L31) checks the command starts with
+   `--config <file>`. The file is loaded first so every flag after it can
+   overwrite a value from the file. (§3.1)
+3. [params.cpp:59](src/params.cpp#L59) `load_config` starts from the
+   defaults in [params.h:60](include/params.h#L60), reads the file one line
+   at a time and splits each line into three words at
+   [params.cpp:79](src/params.cpp#L79). (§4.3)
+4. [params.cpp:94](src/params.cpp#L94) passes each `key = value` to
+   [`apply`](src/params.cpp#L14), which stores the value in the matching
+   field. An unknown key stops the program, so a typo cannot quietly run
+   the wrong grid. (§4.2)
+5. [main.cpp:39](src/main.cpp#L39) reads the other flags two words at a
+   time and overwrites the matching fields. (§3.2)
+6. [main.cpp:80](src/main.cpp#L80) calls
+   [`make_solver`](src/solver.cpp#L95), which turns the `--solver` text into
+   a solver object and returns it in a `unique_ptr<Solver>`. (§6.4)
+7. [main.cpp:88](src/main.cpp#L88) calls `solver->solve(cfg)`. `solve` is
+   `virtual` ([solver.h:49](include/solver.h#L49)), so this line jumps into
+   the `solve` of whichever subclass `make_solver` built. Step 2 follows it
+   there. (§6.2)
+8. [main.cpp:91](src/main.cpp#L91) prints the result as one CSV line with
+   [`print_result_csv`](src/io.cpp#L45). Only rank 0 prints, so an MPI run
+   still gives one line per solve. (§10.1)
+9. [main.cpp:95](src/main.cpp#L95) catches any error thrown on the way,
+   prints it and returns 1, so a Slurm script sees the failure. (§3.5)
+
+**Step 2. Inside one solve** (the serial rung,
+[solver_serial.cpp:16](src/solver_serial.cpp#L16))
+
+Every solver's `solve` has the same three parts, set up, time loop, read
+off the answer.
+
+1. [solver_serial.cpp:20](src/solver_serial.cpp#L20) builds the `Grid`.
+   The constructor at [grid.cpp:14](src/grid.cpp#L14) works out the two
+   spacings and makes both buffers full of zeros. (§5.2)
+2. [solver_serial.cpp:21](src/solver_serial.cpp#L21) calls
+   [`init_payoff`](src/grid.cpp#L37), which writes the payoff at expiry
+   into the current buffer. The solve starts at expiry because that is the
+   one time the option's value is known exactly. (§5.5)
+3. [solver_serial.cpp:24](src/solver_serial.cpp#L24) works out `dt`, and
+   [solver_serial.cpp:25](src/solver_serial.cpp#L25) calls
+   [`report_stability`](src/solver.cpp#L70), which prints the largest
+   stable `dt` next to it before any maths runs. (§6.5)
+4. [solver_serial.cpp:28](src/solver_serial.cpp#L28) builds
+   `StencilConstants` once. The constructor at
+   [stencil.cpp:12](src/stencil.cpp#L12) does every division and every
+   per-row and per-column product before the loop starts. (§8.1 to §8.3)
+5. [solver_serial.cpp:34](src/solver_serial.cpp#L34) names the two
+   buffers `current` and `next`. (§7.2)
+6. [solver_serial.cpp:37](src/solver_serial.cpp#L37) is the time loop.
+   Each pass moves the whole grid one `dt` closer to today. Step 3 below
+   follows one pass.
+7. [solver_serial.cpp:63](src/solver_serial.cpp#L63) calls
+   [`extract_result`](src/solver.cpp#L34), which finds today's stock price
+   and variance on the grid with [`locate`](src/grid.cpp#L57) and reads the
+   price and the three Greeks there. (§5.6, §6.6, §6.7)
+8. [solver_serial.cpp:66](src/solver_serial.cpp#L66) works out cell
+   updates per second, so grids of different sizes compare on one chart.
+   (§7.11)
+
+**Step 3. One timestep** (inside the loop at
+[solver_serial.cpp:37](src/solver_serial.cpp#L37))
+
+1. [solver_serial.cpp:42](src/solver_serial.cpp#L42) updates every
+   interior row with [`update_row_scalar`](src/stencil.cpp#L127). The
+   order of the rows does not matter, because every row reads only
+   `current` and writes only its own row of `next`. This loop is the one
+   every later rung changes. (§8.10)
+2. [solver_serial.cpp:47](src/solver_serial.cpp#L47)
+   [`update_zero_row`](src/stencil.cpp#L133) updates the v = 0 row with
+   the drift terms only. (§8.7)
+3. [solver_serial.cpp:48](src/solver_serial.cpp#L48)
+   [`apply_stock_edges`](src/stencil.cpp#L156) writes the known values into
+   the first and last stock columns. (§8.8)
+4. [solver_serial.cpp:49](src/solver_serial.cpp#L49)
+   [`copy_top_row`](src/stencil.cpp#L181) copies row `nv - 2` into the top
+   row. It goes last because it reads values that step 1 has just written.
+   (§8.9)
+5. [solver_serial.cpp:52](src/solver_serial.cpp#L52)
+   [`swap_buffers`](src/grid.cpp#L31) makes `next` the new `current`, so
+   the next pass reads what this pass wrote. (§5.4)
+6. [solver_serial.cpp:54](src/solver_serial.cpp#L54) stops the step timer,
+   and [solver_serial.cpp:58](src/solver_serial.cpp#L58) writes a snapshot
+   only after the timer has stopped. (§7.10)
+
+**Step 4. Inside one row** (where the maths is)
+
+1. [stencil.cpp:127](src/stencil.cpp#L127) `update_row_scalar` asks
+   [`update_cells_scalar`](src/stencil.cpp#L64) for columns 1 to
+   `ns - 2`. The first and last columns are the stock edges from step 3.3.
+2. [stencil.cpp:67](src/stencil.cpp#L67) copies the constants into local
+   variables, so they stay in registers. (§8.4)
+3. [stencil.cpp:85](src/stencil.cpp#L85) points at the start of the three
+   rows it reads and the one it writes. (§8.5)
+4. [stencil.cpp:92](src/stencil.cpp#L92) is the loop along the row. For
+   each cell it reads the nine values
+   ([stencil.cpp:95](src/stencil.cpp#L95)), works out the five derivatives
+   ([stencil.cpp:106](src/stencil.cpp#L106)), the five PDE terms
+   ([stencil.cpp:113](src/stencil.cpp#L113)) and the new value
+   ([stencil.cpp:120](src/stencil.cpp#L120)). (§8.6)
+
+The SIMD row [`update_row_avx`](src/stencil_avx.cpp#L22) does the same four
+things for four cells at a time in the loop at
+[stencil_avx.cpp:56](src/stencil_avx.cpp#L56), then hands the last zero to
+three cells to `update_cells_scalar` at
+[stencil_avx.cpp:116](src/stencil_avx.cpp#L116). (§9a)
+
+**Where each solver differs**
+
+Each `solve` is a copy of the serial one with the lines below changed.
+Everything else in it, the set-up, the boundaries, the swap, the timer and
+`extract_result`, is the same code.
+
+| `--solver` | `solve` starts at | Row function | The lines that differ | Guide |
+|---|---|---|---|---|
+| `baseline` | [solver_baseline.cpp:16](src/solver_baseline.cpp#L16) | none, the maths is inline | the whole step is written out at [49 to 122](src/solver_baseline.cpp#L49) | §7 |
+| `serial` | [solver_serial.cpp:16](src/solver_serial.cpp#L16) | `update_row_scalar` | the reference for the rows below | §9 |
+| `simd` | [solver_simd.cpp:17](src/solver_simd.cpp#L17) | `update_row_avx` | the warning at [21](src/solver_simd.cpp#L21) and the row call at [49](src/solver_simd.cpp#L49) | §9a.7 |
+| `omp` | [solver_omp.cpp:15](src/solver_omp.cpp#L15) | `update_row_avx` | the thread count at [19](src/solver_omp.cpp#L19), the pragma at [45](src/solver_omp.cpp#L45), the boundary timer at [53](src/solver_omp.cpp#L53) | §9b |
+| `mpi` | [solver_mpi.cpp:85](src/solver_mpi.cpp#L85) | `update_row_avx` | the owned rows at [121](src/solver_mpi.cpp#L121), the loop over them at [136](src/solver_mpi.cpp#L136), the owner checks at [143](src/solver_mpi.cpp#L143), the exchange at [156](src/solver_mpi.cpp#L156), the gather at [177](src/solver_mpi.cpp#L177) | §9c |
+| `omp_scalar` | [solver_experiments.cpp:17](src/solver_experiments.cpp#L17) | `update_row_scalar` | the row call at [39](src/solver_experiments.cpp#L39) | §9d.1 |
+| `omp_persistent` | [solver_experiments.cpp:60](src/solver_experiments.cpp#L60) | `update_row_avx` | one parallel region at [80 to 98](src/solver_experiments.cpp#L80) | §9d.2 |
+| `omp_runtime` | [solver_experiments.cpp:111](src/solver_experiments.cpp#L111) | `update_row_avx` | `schedule(runtime)` at [131](src/solver_experiments.cpp#L131) | §9d.3 |
+| `omp_edges` | [solver_experiments.cpp:154](src/solver_experiments.cpp#L154) | `update_row_avx` | the boundaries inside the loop at [176 to 184](src/solver_experiments.cpp#L176) | §9d.4 |
+| `omp_float` | [solver_float.cpp:67](src/solver_float.cpp#L67) | `update_row_avx_float` | the float buffers at [90 to 95](src/solver_float.cpp#L90), the float row at [103](src/solver_float.cpp#L103), the copy back at [120 to 124](src/solver_float.cpp#L120) | §9e |
+
+**Where the tests start**
+
+Each test is its own small program with its own `main`.
+
+- [test_bs_collapse.cpp:24](tests/test_bs_collapse.cpp#L24) switches off
+  the random variance and compares the baseline with the Black-Scholes
+  formula at [black_scholes.cpp:17](src/black_scholes.cpp#L17). (§12.1)
+- [test_parity.cpp:23](tests/test_parity.cpp#L23) prices a call and a put
+  and checks put-call parity. (§12.2)
+- [test_ladder_matches.cpp:64](tests/test_ladder_matches.cpp#L64) runs
+  every solver and compares it with the baseline, then with `simd`.
+  (§12.3)
+- [test_avx_row.cpp:100](tests/test_avx_row.cpp#L100) compares the AVX2
+  rows with the scalar rows cell by cell. (§12.4)
+
 ---
 
 ## 2. The C++ you need
@@ -167,70 +365,114 @@ and only add "similar to X in Python" where it helps.
 | `std::unique_ptr<Solver>` | garbage-collected ownership, made explicit | the only owner, deleted automatically at the end of its scope |
 | `const` after a method | (nothing) | a promise that the method doesn't change the object |
 | `static` on a function in a `.cpp` | a leading underscore, `_helper` | only this file can call it, and the compiler enforces it |
+| `std::size_t` | the `int` that `len()` gives you | it can never be negative, so `0 - 1` wraps round to a huge number |
+| `omp_get_wtime()` | `time.perf_counter()` | wall clock time in seconds as a `double`, from OpenMP |
+
+**What `std::size_t` is.** `std::size_t` is a whole-number type for sizes
+and positions, such as how many cells a sheet holds or where a `#` sits in
+a line. It comes from the C++ standard library. It is defined in the header
+`<cstddef>`, and `<string>` and `<vector>` include it for you, which is why
+`grid.cpp` can use it without including `<cstddef>`
+themselves. The `std::` in front means it lives in the standard library's
+namespace, the same as `std::vector`.
+
+It differs from `int` in two ways. It is unsigned, so it holds only zero
+and positive numbers. It is also as wide as a memory address, which is 64
+bits on the Mac and on rangpur, so it can count up to about 1.8e19. A plain
+`int` is 32 bits and stops at about 2.1 billion. Every standard container
+uses it for sizes, so `value.size()` returns a `std::size_t`. Python never
+needs this type because a Python `int` grows as big as it has to.
+
+Our own code never declares a `std::size_t`. It only meets one when it asks
+a vector for its size, as in `(int)requests.size()` in the MPI halo
+exchange (§9c), where `(int)` turns it back into a plain `int`.
 
 ---
 
 ## 3. The entry point (`main.cpp`)
 
-**3.1 Reading a flag's value** (`flag_value`)
+**3.1 The config file comes first**
 
 ```cpp
-static std::string flag_value(int argc, char** argv, int& i) {
-    if (i + 1 >= argc) {
-        throw std::runtime_error(std::string(argv[i]) + " needs a value");
-    }
-    i = i + 1;
-    return argv[i];
-}
-```
-
-This block returns the word after a flag, such as `1024` in `--ns 1024`, and
-moves `i` past it. `i` is passed by reference (`int&`) so the caller's loop
-counter moves too, which stops the value from being read again as if it were
-a flag.
-
-**3.2 First pass, find the config file**
-
-```cpp
-std::string config_path;
-for (int i = 1; i < argc; ++i) {
-    if (std::string(argv[i]) == "--config") {
-        config_path = flag_value(argc, argv, i);
-    }
-}
-if (config_path.empty()) {
+if (argc < 3 || std::string(argv[1]) != "--config") {
     usage();
     return 1;
 }
-Config cfg = load_config(config_path);
+Config cfg = load_config(argv[2]);
 ```
 
-This block looks only for `--config` and loads that file. We read the config
-first so that every other flag can override it, whatever order the flags are
-typed in.
+This block checks the command starts with `--config <file>` and loads that
+file. `argv` is the list of words typed on the command line, like
+`sys.argv` in Python, and `argc` is how many there are. `argv[0]` is the
+program name, so the config path is `argv[2]`. Loading the file before any
+other flag means every flag after it can overwrite what the file set. Every
+script and Makefile target already puts `--config` first.
 
-**3.3 Second pass, apply the other flags**
+**3.2 The other flags, two words at a time**
 
 ```cpp
-for (int i = 1; i < argc; ++i) {
-    std::string arg = argv[i];
-    if (arg == "--config") {
-        flag_value(argc, argv, i);
-    } else if (arg == "--solver") {
-        cfg.solver = flag_value(argc, argv, i);
-    } else if (arg == "--ns") {
-        cfg.grid.num_stock_nodes = std::stoi(flag_value(argc, argv, i));
+for (int i = 3; i < argc; i = i + 2) {
+    std::string flag = argv[i];
+    if (i + 1 >= argc) {
+        throw std::runtime_error(flag + " needs a value");
+    }
+    std::string value = argv[i + 1];
+
+    if (flag == "--solver") {
+        cfg.solver = value;
+    } else if (flag == "--type") {
+        if (value != "call" && value != "put") {
+            throw std::runtime_error("--type must be call or put");
+        }
+        cfg.option.is_call = (value == "call");
+    } else if (flag == "--ns") {
+        cfg.grid.num_stock_nodes = std::stoi(value);
     ...
     } else {
         usage();
-        throw std::runtime_error("unknown flag: " + arg);
+        throw std::runtime_error("unknown flag: " + flag);
     }
 }
 ```
 
-This block writes each flag's value over the matching `Config` field. An
-unknown flag stops the program, because a typo such as `--nss` would
-otherwise be silently ignored and you would benchmark the wrong grid.
+This block reads the rest of the command line in pairs, such as `--ns`
+then `1024`. Every flag takes exactly one value, so the loop moves on two
+words at a time with `i = i + 2`. `std::stoi` turns the text `"1024"` into
+the int 1024, like `int("1024")` in Python, and `std::stod` does the same
+for decimals. A flag typed last with no value after it, or a flag the chain
+does not know, stops the program. A typo such as `--nss` would otherwise be
+ignored and you would benchmark the wrong grid.
+
+`--type` is the one flag whose value is checked by hand, because it is text
+and `std::stoi` cannot catch a wrong word. `(value == "call")` is a `bool`,
+true for a call and false for a put, so the one line stores the option
+type. `--vmax` and `--maturity` exist for the benchmarks. The weak scaling
+sweep grows the variance axis with `--vmax`, and a shorter `--maturity`
+keeps a big grid stable without a huge `--nt`.
+
+`throw std::runtime_error(...)` stops the function at that line and jumps
+to the `catch` at the bottom of `run` (§3.5), like `raise` in Python.
+
+**3.2b The usage message** (`usage`)
+
+```cpp
+static void usage() {
+    std::fprintf(stderr, "usage: heston --config <path> [--solver baseline|serial|simd|omp|mpi]\n");
+    std::fprintf(stderr, "              [--type call|put] [--dump-every N] [--dump-dir DIR]\n");
+    std::fprintf(stderr, "              [--bench R] [--ns X] [--nv X] [--nt X] [--maturity Y] [--vmax V]\n");
+}
+```
+
+This block prints how to run the program. It writes to `stderr`, the error
+stream, so `stdout` only ever holds result lines for the scripts to read.
+`static` means only `main.cpp` can call it.
+
+**3.3 Why not a fancier parser**
+
+Libraries such as `getopt` let flags come in any order and handle flags
+without values. Every flag here has a value and `--config` always comes
+first, so a plain loop and an `if` chain do the job and read top to bottom.
+`DESIGN_DECISIONS.md`, decisions 2 and 3.
 
 **3.4 Make the solver and run it**
 
@@ -321,36 +563,55 @@ struct per topic and `Config` holding them all. Structs work like Python
 dataclasses here. Grouping the settings means every function takes one
 `const Config&` instead of twenty separate arguments.
 
-**4.2 Parsing a number safely** (`parse_double`)
+**4.1b The market, the model and the grid** (`params.h`)
 
 ```cpp
-static double parse_double(const std::string& value, const std::string& where) {
-    std::size_t used = 0;
-    double parsed = 0.0;
-    try {
-        parsed = std::stod(value, &used);
-    } catch (const std::exception&) {
-        throw std::runtime_error(where + ": not a number: '" + value + "'");
-    }
-    if (used != value.size()) {
-        throw std::runtime_error(where + ": trailing text in '" + value + "'");
-    }
-    return parsed;
-}
+struct MarketSpec {
+    double spot = 5200.0;
+    double rate = 0.045;
+    double div_yield = 0.013;
+};
+
+struct HestonParams {
+    double v0 = 0.04;
+    double kappa = 1.5;
+    double theta = 0.04;
+    double xi = 0.35;
+    double rho = -0.70;
+};
+
+struct GridSpec {
+    int num_stock_nodes = 2048;
+    int num_variance_nodes = 512;
+    int num_timesteps = 2000;
+    double stock_max_multiplier = 4.0;
+    double variance_max = 1.0;
+};
 ```
 
-This block turns text like `0.045` into a double and rejects anything else.
-`std::stod` alone would read `1.5abc` as 1.5 and ignore the rest, so we check
-that it used every character. The error message includes the file name and
-line number so a bad config is easy to find.
+This block holds the other three groups of settings. `MarketSpec` is the
+market today, the stock price `spot`, the interest rate and the dividend
+yield. `HestonParams` is the five numbers of the Heston model, the variance
+today `v0`, how fast it pulls back (`kappa`) towards its long run level
+(`theta`), how much it jumps around (`xi`) and how it moves with the stock
+(`rho`). STUDY_GUIDE §4 explains each one. `GridSpec` is the grid size and
+how far each axis reaches. The stock axis runs from 0 to 4 times the
+strike, 21000 for a 5250 strike, and the variance axis from 0 to 1.0, which
+is 100 percent volatility.
 
-**4.3 Matching a key to a field** (`apply`)
+Every field has a default written next to it. `Config cfg;` therefore
+gives a complete, runnable set of settings, which is how the tests build
+their settings in code with no config file (§12). The grid defaults have
+the size of the 2048 by 512 by 2000 benchmark grid, and
+`config/bench.cfg` sets `v_max` to 0.64 on top of them.
+
+**4.2 Matching a key to a field** (`apply`)
 
 ```cpp
 if (key == "option.strike") {
-    cfg.option.strike = parse_double(value, where);
+    cfg.option.strike = std::stod(value);
 } else if (key == "grid.ns") {
-    cfg.grid.num_stock_nodes = parse_int(value, where);
+    cfg.grid.num_stock_nodes = std::stoi(value);
 ...
 } else {
     throw std::runtime_error(where + ": unknown key '" + key + "'");
@@ -359,34 +620,66 @@ if (key == "option.strike") {
 
 This block stores one `key = value` line in the matching field. It is a plain
 `if` / `else if` chain so it reads top to bottom, and an unknown key is an
-error for the same reason as an unknown flag in §3.3.
+error for the same reason as an unknown flag in §3.2. `static` in front of
+`apply` means only `params.cpp` can call it, the way a leading underscore
+marks a helper as private in Python.
 
-**4.4 Reading the file** (`load_config`)
+**4.3 Reading the file** (`load_config`)
 
 ```cpp
 std::ifstream file(path);
-...
+if (!file) {
+    throw std::runtime_error("cannot open config: " + path);
+}
+
+Config cfg;
+std::string line;
+int line_number = 0;
 while (std::getline(file, line)) {
     line_number = line_number + 1;
-    std::size_t hash_position = line.find('#');
-    if (hash_position != std::string::npos) {
-        line = line.substr(0, hash_position);
-    }
-    line = trim(line);
-    if (line.empty()) {
+
+    std::istringstream words(line);
+    std::string key;
+    std::string equals;
+    std::string value;
+    words >> key >> equals >> value;
+
+    if (key.empty() || key[0] == '#') {
         continue;
     }
-    std::size_t equals_position = line.find('=');
-    ...
-    std::string key = trim(line.substr(0, equals_position));
-    std::string value = trim(line.substr(equals_position + 1));
-    apply(cfg, key, value, where);
+
+    std::string where = path + ":" + std::to_string(line_number);
+    if (equals != "=" || value.empty()) {
+        throw std::runtime_error(where + ": expected key = value with spaces around the =");
+    }
+
+    try {
+        apply(cfg, key, value, where);
+    } catch (const std::invalid_argument&) {
+        throw std::runtime_error(where + ": not a number '" + value + "'");
+    }
 }
+return cfg;
 ```
 
-This block reads the config one line at a time, drops comments and blank
-lines, and splits each line at the `=`. The file closes itself when `file`
-goes out of scope at the end of the function, which is RAII doing the job of
+This block reads the config one line at a time and splits each line into
+words. `std::getline` reads one line, like `for line in file` in Python.
+`std::istringstream words(line)` treats the line as a small stream of words,
+and `words >> key >> equals >> value` takes the first three, like
+`key, equals, value = line.split()[:3]` in Python. A blank line leaves `key`
+empty, and a comment line has `#` as the first character of its first word,
+so both are skipped. Each config line is written `grid.ns = 2048`, so the
+middle word must be `=`.
+
+`std::stod` and `std::stoi` throw `std::invalid_argument` when the text is
+not a number at all, such as `abc`. The `try` and `catch` turn that into a
+message with the file name and line number. Text that starts with a number,
+such as `12x`, is read as 12 and the rest is ignored, which is the one check
+the simpler code gave up.
+
+`Config cfg;` starts from the defaults written in `params.h`, so a key left
+out of the file keeps its default. The file closes itself when `file` goes
+out of scope at the end of the function, which is RAII doing the job of
 Python's `with open(...)`.
 
 ---
@@ -433,14 +726,17 @@ num_variance_nodes_ = spec.num_variance_nodes;
 stock_spacing_ = spec.stock_max_multiplier * opt.strike / (num_stock_nodes_ - 1);
 variance_spacing_ = spec.variance_max / (num_variance_nodes_ - 1);
 
-std::size_t total_cells = (std::size_t)num_stock_nodes_ * num_variance_nodes_;
+int total_cells = num_stock_nodes_ * num_variance_nodes_;
 current_.assign(total_cells, 0.0);
 next_.assign(total_cells, 0.0);
 ```
 
 This block works out the spacing and makes both sheets, filled with zeros.
 The spacing divides by `N - 1` because N nodes have N − 1 gaps between them.
-Each sheet is one flat block of doubles rather than a list of rows, which
+`assign(n, 0.0)` makes the vector hold `n` zeros, like `np.zeros(n)`. An
+`int` stops at about 2.1 billion, and the largest grid we run, 8192 by 1024,
+has 8.4 million cells, so a plain `int` is enough. `index()` returns an
+`int` too, so the two agree. Each sheet is one flat block of doubles rather than a list of rows, which
 STUDY_GUIDE §12 explains.
 
 **5.3 The index formula**
@@ -499,24 +795,98 @@ same because the payoff does not depend on variance.
 **5.6 Finding today's market on the grid** (`locate`)
 
 ```cpp
-double position = std::clamp(coord / spacing, 0.0, (double)(num_nodes - 1));
+double position = coord / spacing;
+if (position < 0.0) {
+    position = 0.0;
+}
+if (position > num_nodes - 1) {
+    position = num_nodes - 1;
+}
+
+int lower_node = (int)std::floor(position);
 double nearest_node = std::round(position);
-bool on_node = std::fabs(position - nearest_node) < kNodeSnapCells;
-...
-int highest_cell = std::max(1, num_nodes - 3);
-out.cell = std::clamp((int)lower_node, 1, highest_cell);
-if (on_node && out.cell == (int)lower_node) {
+bool on_node = std::fabs(position - nearest_node) < node_snap_tolerance;
+if (on_node) {
+    lower_node = (int)nearest_node;
+}
+
+int highest_cell = num_nodes - 3;
+if (highest_cell < 1) {
+    highest_cell = 1;
+}
+AxisPosition out;
+out.cell = lower_node;
+if (out.cell < 1) {
+    out.cell = 1;
+}
+if (out.cell > highest_cell) {
+    out.cell = highest_cell;
+}
+
+if (on_node && out.cell == lower_node) {
     out.weight = 0.0;
 } else {
-    out.weight = std::clamp(position - out.cell, 0.0, 1.0);
+    out.weight = position - out.cell;
+    if (out.weight < 0.0) {
+        out.weight = 0.0;
+    }
+    if (out.weight > 1.0) {
+        out.weight = 1.0;
+    }
 }
+return out;
 ```
 
 This block finds the cell just below today's spot (or v0), and how far across
-that cell the point sits. The weight is snapped to exactly 0 when the point
+that cell the point sits. Each limit is a plain pair of `if` statements, the
+same as `max(lo, min(x, hi))` in Python. `std::floor` and `std::round` are
+the C `floor` and `round` from `<cmath>`. The weight is snapped to exactly 0 when the point
 is within 1e-9 of a node, so an aligned grid always returns the node's value
 unchanged. The cell is kept at least one node in from each edge, because the
 Greeks read one cell further out on each side (STUDY_GUIDE §10).
+
+The block runs in four parts, in this order.
+
+1. `coord / spacing` turns a price or a variance into a position counted in
+   cells. With a spacing of 50, a spot of 5200 is position 104.0, and 5225
+   would be 104.5. The two `if` statements keep it between 0 and the last
+   node.
+2. `lower_node` is the node at or below the position. `std::floor` of
+   103.9999999999 is 103, so a value that should be exactly on node 104 but
+   picked up rounding error would land one cell too low. The snap with
+   `nearest_node` fixes that.
+3. `out.cell` is moved in to between 1 and `num_nodes - 3`. The Greeks read
+   the cell to each side and the one above (§6.6), so cell 0 or a cell at
+   the top would read off the grid.
+4. `out.weight` is how far past `out.cell` the point sits, from 0 to 1. When
+   step 3 moved the cell, the point is no longer inside it, so the weight
+   is held between 0 and 1.
+
+```text
+  stock axis, spacing 50
+  node:      103        104        105
+             |----------|----------|
+  5200 sits exactly on node 104     cell 104, weight 0.0
+  5225 sits halfway to node 105     cell 104, weight 0.5
+```
+
+**5.7 The two public lookups** (`Grid::stock_position`, `Grid::variance_position`)
+
+```cpp
+AxisPosition Grid::stock_position(double spot) const {
+    return locate(spot, stock_spacing_, num_stock_nodes_);
+}
+
+AxisPosition Grid::variance_position(double v0) const {
+    return locate(v0, variance_spacing_, num_variance_nodes_);
+}
+```
+
+This block gives each axis its own call into `locate`, passing that axis's
+spacing and node count. `locate` is `static` in `grid.cpp`, so code outside
+the file cannot call it, and these two methods are the way in. The answer
+comes back as an `AxisPosition` ([grid.h:14](include/grid.h#L14)), a struct
+with two fields, `cell` and `weight`, like a Python named tuple.
 
 ---
 
@@ -535,7 +905,7 @@ struct SolveResult {
     double dt_stable_estimate = 0.0;
     int threads = 1;
     int ranks = 1;
-    double halo_seconds = 0.0;
+    double exchange_seconds = 0.0;
     double boundary_seconds = 0.0;
 };
 ```
@@ -543,7 +913,7 @@ struct SolveResult {
 This block is the record every solver hands back. Returning one struct keeps
 `main`, the CSV printer and the tests the same for every solver. `threads`
 and `ranks` say how many OpenMP threads and MPI processes did the work. They
-default to 1, so only the parallel rungs have to set them. `halo_seconds` is
+default to 1, so only the parallel rungs have to set them. `exchange_seconds` is
 the part of `seconds` that the MPI rung spent swapping halo rows, and
 `boundary_seconds` the part the OpenMP and MPI rungs spent on the serial
 boundary work. Together they let the benchmarks split a step into its
@@ -625,10 +995,17 @@ new rung adds one `if` here.
 **6.5 The stability report** (`Solver::report_stability`)
 
 ```cpp
+double max_stock_price = grid.stock_price(grid.num_stock_nodes() - 1);
+double max_variance = grid.variance(grid.num_variance_nodes() - 1);
+double stock_spacing = grid.stock_spacing();
+double variance_spacing = grid.variance_spacing();
 out.dt_stable_estimate = 1.0 / (max_variance * max_stock_price * max_stock_price / (stock_spacing * stock_spacing) + xi * xi * max_variance / (variance_spacing * variance_spacing) + rate);
 
 bool feller_ok = 2.0 * kappa * theta >= xi * xi;
-...
+const char* feller_text = "VIOLATED";
+if (feller_ok) {
+    feller_text = "OK";
+}
 std::fprintf(stderr, "[%s] feller %s (2*kappa*theta=%.4f, xi^2=%.4f)  dt=%.3e  dt_stable~%.3e\n",
              name().c_str(), feller_text, 2.0 * kappa * theta, xi * xi, dt, out.dt_stable_estimate);
 ```
@@ -639,17 +1016,36 @@ is the point where the centre weight of the update reaches zero at the far
 corner of the grid (STUDY_GUIDE §7.5). It prints to stderr so stdout stays
 one clean CSV line for the scripts.
 
+The far corner is the largest stock price and the largest variance, where
+the diffusion terms are biggest, so it is the first cell to go unstable.
+The estimate is stored in `out` as well as printed, because the tests read
+it to refuse an unstable run (§12.2). `const char*` is a C string, plain
+text that is never changed. It starts as `"VIOLATED"` and becomes `"OK"`
+when Feller holds. Feller is printed for the write-up only. The solver runs
+the same either way, because the v = 0 row (§8.7) handles a variance that
+reaches zero.
+
 **6.6 Reading the answer** (`Solver::extract_result`)
 
 ```cpp
+const std::vector<double>& values = grid.current();
+
 AxisPosition spot_position = grid.stock_position(cfg.market.spot);
 AxisPosition v0_position = grid.variance_position(cfg.heston.v0);
-...
-out.price = blend_cell(grid, values, base_i, base_j, stock_weight, variance_weight);
-double east = blend_cell(grid, values, base_i + 1, base_j, stock_weight, variance_weight);
-double west = blend_cell(grid, values, base_i - 1, base_j, stock_weight, variance_weight);
-double north = blend_cell(grid, values, base_i, base_j + 1, stock_weight, variance_weight);
-double south = blend_cell(grid, values, base_i, base_j - 1, stock_weight, variance_weight);
+int base_i = spot_position.cell;
+int base_j = v0_position.cell;
+double stock_weight = spot_position.weight;
+double variance_weight = v0_position.weight;
+
+if (stock_weight > off_node_tolerance || variance_weight > off_node_tolerance) {
+    std::fprintf(stderr, ...);
+}
+
+out.price = bilinear_interpolate(grid, values, base_i, base_j, stock_weight, variance_weight);
+double east = bilinear_interpolate(grid, values, base_i + 1, base_j, stock_weight, variance_weight);
+double west = bilinear_interpolate(grid, values, base_i - 1, base_j, stock_weight, variance_weight);
+double north = bilinear_interpolate(grid, values, base_i, base_j + 1, stock_weight, variance_weight);
+double south = bilinear_interpolate(grid, values, base_i, base_j - 1, stock_weight, variance_weight);
 
 out.delta = (east - west) / (2.0 * grid.stock_spacing());
 out.gamma = (east - 2.0 * out.price + west) / (grid.stock_spacing() * grid.stock_spacing());
@@ -661,7 +1057,32 @@ from the same finite differences as STUDY_GUIDE §7. Every value goes through
 the same blend, so the reported delta is the slope of the reported price and
 not of some other surface.
 
-**6.7 The blend** (`blend_cell`)
+The block runs in four parts.
+
+1. `values` is the current buffer. After the last swap it holds the option
+   value today, at every stock price and variance on the grid.
+2. `stock_position` and `variance_position` (§5.7) turn today's spot and
+   `v0` into a cell and a weight on each axis. `base_i` and `base_j` are the
+   cell's column and row.
+3. When either weight is above 1e-9, today's market sits between nodes. A
+   warning goes to stderr, because the price is then interpolated and
+   carries a little extra error. The collapse and parity tests use a grid
+   where both land on nodes, so they compare node values. The 2048 by 512
+   benchmark grid is off node, which does not matter for timing.
+4. The price is read at the point, and the same interpolation is done one
+   cell east, west, north and south. Those four values feed the central
+   differences, delta and gamma along the stock axis and vega along the
+   variance axis.
+
+```text
+              north (base_j + 1)
+                    |
+  west (base_i - 1) - price - east (base_i + 1)
+                    |
+              south (base_j - 1)
+```
+
+**6.7 The blend** (`bilinear_interpolate`)
 
 ```cpp
 double stock_lower = 1.0 - stock_weight;
@@ -689,16 +1110,35 @@ rung is tested against.
 **7.1 Set up the grid**
 
 ```cpp
+SolveResult result;
+
 Grid grid(cfg.grid, cfg.option);
 grid.init_payoff(cfg.option);
 
+double strike = cfg.option.strike;
+double rate = cfg.market.rate;
+double div_yield = cfg.market.div_yield;
+double kappa = cfg.heston.kappa;
+double theta = cfg.heston.theta;
+double xi = cfg.heston.xi;
+double rho = cfg.heston.rho;
+int num_timesteps = cfg.grid.num_timesteps;
+
 double dt = cfg.option.maturity_years / num_timesteps;
 report_stability(grid, cfg, dt, result);
+
+double max_stock_price = grid.stock_price(grid.num_stock_nodes() - 1);
 ```
 
 This block makes the two sheets, fills the first one with the payoff and
-works out the timestep. We print the stability report before any maths runs
-because a `dt` above the limit makes the whole run blow up (STUDY_GUIDE §8),
+works out the timestep. `result` starts with every field at its default
+from `solver.h`, and the solve fills it in as it goes. The short local
+names such as `rate` and `kappa` make the update in §7.6 read like the
+maths. `dt` is the maturity split into `num_timesteps` equal steps, for
+example 0.25 years over 2000 steps. `max_stock_price` is the last stock
+node, which the call's top edge needs in §7.8.
+
+The stability report prints before any maths runs because a `dt` above the limit makes the whole run blow up (STUDY_GUIDE §8),
 and it is easier to spot in the first line of output than as a NaN at the
 end.
 
@@ -720,7 +1160,7 @@ member the names refer to.
 
 ```cpp
 for (int step = 1; step <= num_timesteps; ++step) {
-    auto step_start = std::chrono::steady_clock::now();
+    double step_start = omp_get_wtime();
     for (int var_j = 1; var_j < grid.num_variance_nodes() - 1; ++var_j) {
         for (int stock_i = 1; stock_i < grid.num_stock_nodes() - 1; ++stock_i) {
 ```
@@ -845,8 +1285,8 @@ which is the Neumann condition from STUDY_GUIDE §9.
 ```cpp
 grid.swap_buffers();
 
-auto step_end = std::chrono::steady_clock::now();
-result.seconds += std::chrono::duration<double>(step_end - step_start).count();
+double step_end = omp_get_wtime();
+result.seconds += step_end - step_start;
 
 if (cfg.dump_every > 0 && step % cfg.dump_every == 0) {
     dump_snapshot(cfg.dump_dir, step, grid);
@@ -854,7 +1294,10 @@ if (cfg.dump_every > 0 && step % cfg.dump_every == 0) {
 ```
 
 This block makes the new sheet the current one, adds this step's time to the
-total and sometimes writes the sheet to a file. The timer stops before the
+total and sometimes writes the sheet to a file. `omp_get_wtime()` returns
+the wall clock time in seconds as a `double`, so the time for a step is one
+subtraction. It comes from OpenMP, and every solver uses it, the serial
+ones included, so all of them are timed the same way. The timer stops before the
 snapshot so that writing files never counts as compute time in a benchmark.
 
 **7.11 Read off the answer**
@@ -906,6 +1349,32 @@ This block holds every number the update needs that stays the same for the
 whole solve. It is a plain struct because it is just a record of values, and
 building it once before the time loop means the loop only ever reads it.
 
+**8.1b The scalars** (`StencilConstants` constructor, [stencil.cpp:12](src/stencil.cpp#L12))
+
+```cpp
+StencilConstants::StencilConstants(const Grid& grid, const Config& cfg, double timestep) {
+    num_stock_nodes = grid.num_stock_nodes();
+    num_variance_nodes = grid.num_variance_nodes();
+
+    dt = timestep;
+    rate = cfg.market.rate;
+    div_yield = cfg.market.div_yield;
+    stock_drift = cfg.market.rate - cfg.market.div_yield;
+
+    is_call = cfg.option.is_call;
+    strike = cfg.option.strike;
+    max_stock_price = grid.stock_price(grid.num_stock_nodes() - 1);
+```
+
+This block is the start of the constructor, which runs once when a solver
+writes `StencilConstants constants(grid, cfg, dt);`. It copies the grid
+size and the market numbers into the struct, so the row functions need
+only `constants` and the two buffers. `stock_drift` is r − q, worked out
+once because the update multiplies by it in every cell. `is_call`,
+`strike` and `max_stock_price` are there for `apply_stock_edges` (§8.8).
+Each field is set with a plain assignment in the body, like `self.x = x` in
+a Python `__init__`.
+
 **8.2 The reciprocals** (`StencilConstants` constructor)
 
 ```cpp
@@ -928,12 +1397,20 @@ dividing. In Milestone 1 this one change was a 2.5× speedup
 **8.3 The tables**
 
 ```cpp
+stock_price.resize(num_stock_nodes);
+stock_price_sq.resize(num_stock_nodes);
 for (int stock_i = 0; stock_i < num_stock_nodes; ++stock_i) {
     double price = stock_i * stock_spacing;
     stock_price[stock_i] = price;
     stock_price_sq[stock_i] = price * price;
 }
 
+double kappa = cfg.heston.kappa;
+double theta = cfg.heston.theta;
+double xi = cfg.heston.xi;
+double rho = cfg.heston.rho;
+stock_diffusion.resize(num_variance_nodes);
+...
 for (int var_j = 0; var_j < num_variance_nodes; ++var_j) {
     double variance = var_j * variance_spacing;
     stock_diffusion[var_j] = 0.5 * variance;
@@ -947,6 +1424,12 @@ This block stores S and S² for every column, and the four PDE coefficients
 for every row. We do it because these numbers depend only on where a cell is,
 never on time, so the baseline was recomputing the same values in every one
 of the thousands of timesteps.
+
+`resize(n)` makes a vector hold `n` zeros so the loop can fill it by index,
+like `[0.0] * n` in Python. The stock table has one entry per column
+(2048) and the coefficient tables one per row (512). The brackets in
+`(rho * xi) * variance` show the order C++ multiplies in anyway, left to
+right, which is the same order as `rho * xi * variance` in the baseline.
 
 **8.4 Copy the constants into locals** (`update_cells_scalar`)
 
@@ -1042,7 +1525,18 @@ interior. `variance_drift[0]` is κ(θ − 0), which is κθ, so the table built
 ```cpp
 void apply_stock_edges(const StencilConstants& constants, std::vector<double>& next, int row_begin, int row_end, double time_to_expiry) {
     double strike_today = constants.strike * std::exp(-constants.rate * time_to_expiry);
-    ...
+
+    double zero_stock_value = 0.0;
+    double max_stock_value = 0.0;
+    if (constants.is_call) {
+        zero_stock_value = 0.0;
+        max_stock_value = constants.max_stock_price * std::exp(-constants.div_yield * time_to_expiry) - strike_today;
+    } else {
+        zero_stock_value = strike_today;
+        max_stock_value = 0.0;
+    }
+
+    int last_stock = constants.num_stock_nodes - 1;
     for (int var_j = row_begin; var_j < row_end; ++var_j) {
         next[var_j * constants.num_stock_nodes] = zero_stock_value;
         next[var_j * constants.num_stock_nodes + last_stock] = max_stock_value;
@@ -1053,6 +1547,24 @@ void apply_stock_edges(const StencilConstants& constants, std::vector<double>& n
 This block is §7.8, but it only writes rows `row_begin` to `row_end - 1`. The
 serial rung passes the whole grid. The row range is there for the MPI rung,
 where each process only owns some of the rows.
+
+The two values come from what the option is worth at each end of the stock
+axis, with `time_to_expiry` years left (STUDY_GUIDE §9).
+
+- `strike_today` is the strike K paid at expiry, discounted back to now,
+  K·e^(−rτ). `std::exp` is e to the power, like `math.exp`.
+- A call at S = 0 is worth 0, because the stock can never climb back above
+  the strike.
+- A call at the top of the axis, 4 times the strike, is almost sure to be
+  exercised, so it is worth what a forward contract is worth, the stock
+  less its dividends minus the discounted strike, S·e^(−qτ) − K·e^(−rτ).
+- A put at S = 0 is sure to pay the full strike, so it is worth
+  K·e^(−rτ).
+- A put at the top is worth 0.
+
+The values do not depend on the variance, so one pair is worked out and
+written into every row. `var_j * num_stock_nodes` is the first cell of row
+`var_j`, and adding `last_stock` gives the last cell of the same row.
 
 **8.9 The top row** (`copy_top_row`)
 
@@ -1204,6 +1716,11 @@ __m256d south = _mm256_loadu_pd(row_below + stock_i);
 ...
 ```
 
+The pointers `row_centre`, `row_above`, `row_below` and `out_row` are made
+just before the loop at
+[stencil_avx.cpp:44](src/stencil_avx.cpp#L44), the same way as in the
+scalar row (§8.5).
+
 This block loads four consecutive doubles into each register. `east` is the
 same four-wide window as `centre` shifted one column right, so lane 0 of
 `east` is the east neighbour of lane 0 of `centre`, and so on for every lane.
@@ -1224,11 +1741,16 @@ aligned load `_mm256_load_pd` would crash on the others.
 ```cpp
 __m256d east_minus_west = _mm256_sub_pd(east, west);
 __m256d dV_dS = _mm256_mul_pd(east_minus_west, inv_two_ds);
-...
+__m256d north_minus_south = _mm256_sub_pd(north, south);
+__m256d dV_dv = _mm256_mul_pd(north_minus_south, inv_two_dv);
+
 __m256d east_plus_west = _mm256_add_pd(east, west);
 __m256d stock_curvature = _mm256_fnmadd_pd(two, centre, east_plus_west);
 __m256d d2V_dS2 = _mm256_mul_pd(stock_curvature, inv_ds_sq);
-...
+__m256d north_plus_south = _mm256_add_pd(north, south);
+__m256d variance_curvature = _mm256_fnmadd_pd(two, centre, north_plus_south);
+__m256d d2V_dv2 = _mm256_mul_pd(variance_curvature, inv_dv_sq);
+
 __m256d corners = _mm256_sub_pd(north_east, north_west);
 corners = _mm256_sub_pd(corners, south_east);
 corners = _mm256_add_pd(corners, south_west);
@@ -1241,6 +1763,13 @@ arithmetic operation. `_mm256_sub_pd(a, b)` is `a - b` in all four lanes,
 done as one instruction with one rounding. We name every intermediate so
 each line does one thing, which keeps the AVX version readable next to the
 scalar version.
+
+Each group matches one line of §8.6. `east_minus_west` times `inv_two_ds`
+is (east − west)/(2·ds). `stock_curvature` is east + west − 2·centre, the
+top of the second difference, and times `inv_ds_sq` it is d²V/dS². The
+variance lines do the same with north and south. `corners` builds
+NE − NW − SE + SW one operation at a time, because an intrinsic takes two
+inputs.
 
 **9a.6 The PDE terms with FMA**
 
@@ -1353,13 +1882,13 @@ Apple clang's libomp and g++ 8.5's libgomp, and they agree.
 **9b.3 The barrier and the serial boundaries**
 
 ```cpp
-auto boundary_start = std::chrono::steady_clock::now();
+double boundary_start = omp_get_wtime();
 update_zero_row(constants, current, next);
 apply_stock_edges(constants, next, 0, num_variance_nodes, step * dt);
 copy_top_row(constants, next);
 grid.swap_buffers();
-auto boundary_end = std::chrono::steady_clock::now();
-result.boundary_seconds += std::chrono::duration<double>(boundary_end - boundary_start).count();
+double boundary_end = omp_get_wtime();
+result.boundary_seconds += boundary_end - boundary_start;
 ```
 
 This block runs after the parallel loop, on the main thread only. A
@@ -1378,8 +1907,10 @@ about a millisecond.
 ## 9c. The MPI rung (`solver_mpi.cpp`, `MpiSolver::solve`)
 
 The MPI rung runs several copies of the program, called processes or ranks,
-possibly on different machines. Each rank owns one slab of variance rows and
-runs the OpenMP loop over its own rows only. STUDY_GUIDE §17 explains MPI,
+possibly on different machines. Each rank owns one block of variance rows
+(`owned_rows`, called a slab in STUDY_GUIDE) and runs the OpenMP loop over its
+own rows only. The rows received from the neighbours are `row_below` and
+`row_above`, called halo or ghost rows in HPC texts. STUDY_GUIDE §17 explains MPI,
 halos and the hybrid layout.
 
 **9c.1 Who am I**
@@ -1398,26 +1929,26 @@ there are in total. `MPI_COMM_WORLD` means every process started by the same
 `mpiexec`. We do it because every later decision, which rows to update and
 who to swap with, depends on these two numbers.
 
-**9c.2 Sharing out the rows** (`slab_for_rank`)
+**9c.2 Sharing out the rows** (`rows_for_rank`)
 
 ```cpp
-struct RowSlab {
+struct RowRange {
     int begin = 0;
     int end = 0;
 };
 
-static RowSlab slab_for_rank(int num_rows, int rank, int num_ranks) {
+static RowRange rows_for_rank(int num_rows, int rank, int num_ranks) {
     int rows_per_rank = num_rows / num_ranks;
     int extra_rows = num_rows % num_ranks;
-    RowSlab slab;
+    RowRange rows;
     if (rank < extra_rows) {
-        slab.begin = rank * (rows_per_rank + 1);
-        slab.end = slab.begin + rows_per_rank + 1;
+        rows.begin = rank * (rows_per_rank + 1);
+        rows.end = rows.begin + rows_per_rank + 1;
     } else {
-        slab.begin = extra_rows * (rows_per_rank + 1) + (rank - extra_rows) * rows_per_rank;
-        slab.end = slab.begin + rows_per_rank;
+        rows.begin = extra_rows * (rows_per_rank + 1) + (rank - extra_rows) * rows_per_rank;
+        rows.end = rows.begin + rows_per_rank;
     }
-    return slab;
+    return rows;
 }
 ```
 
@@ -1441,6 +1972,13 @@ last rank owns the top row, and each boundary has exactly one owner.
 if (cfg.dump_every > 0) {
     throw std::runtime_error("--dump-every is not supported by the mpi solver");
 }
+
+Grid grid(cfg.grid, cfg.option);
+grid.init_payoff(cfg.option);
+...
+if (rank == 0) {
+    report_stability(grid, cfg, dt, result);
+}
 ...
 if (num_variance_nodes / num_ranks < 2) {
     throw std::runtime_error("too many processes, each one needs at least two variance rows");
@@ -1453,11 +1991,15 @@ would hold only its own rows, so it would be a wrong picture. The last rank's
 Every rank runs the same check, so they all stop together instead of some
 waiting forever for a message.
 
+Every rank builds the whole grid and the whole payoff, the same as the
+other rungs. Only rank 0 prints the stability line, so a run on 4 ranks
+prints it once.
+
 **9c.4 This rank's part of each step**
 
 ```cpp
-int first_interior = std::max(slab.begin, 1);
-int end_interior = std::min(slab.end, num_variance_nodes - 1);
+int first_interior = std::max(owned_rows.begin, 1);
+int end_interior = std::min(owned_rows.end, num_variance_nodes - 1);
 bool owns_zero_row = (rank == 0);
 bool owns_top_row = (rank == num_ranks - 1);
 ...
@@ -1468,7 +2010,7 @@ for (int var_j = first_interior; var_j < end_interior; ++var_j) {
 if (owns_zero_row) {
     update_zero_row(constants, current, next);
 }
-apply_stock_edges(constants, next, slab.begin, slab.end, step * dt);
+apply_stock_edges(constants, next, owned_rows.begin, owned_rows.end, step * dt);
 if (owns_top_row) {
     copy_top_row(constants, next);
 }
@@ -1481,25 +2023,25 @@ owns them, and `apply_stock_edges` takes this rank's row range, which is why
 it was given one in §8.8. We do it this way so the maths is exactly the code
 the other rungs run, and only the rows each copy works on change.
 
-**9c.5 The halo exchange** (`exchange_halo_rows`)
+**9c.5 The halo exchange** (`exchange_edge_rows`)
 
 ```cpp
-double* first_row = sheet.data() + slab.begin * num_stock_nodes;
-double* last_row = sheet.data() + (slab.end - 1) * num_stock_nodes;
-double* halo_below = sheet.data() + (slab.begin - 1) * num_stock_nodes;
-double* halo_above = sheet.data() + slab.end * num_stock_nodes;
+double* first_row = buffer.data() + owned_rows.begin * num_stock_nodes;
+double* last_row = buffer.data() + (owned_rows.end - 1) * num_stock_nodes;
+double* row_below = buffer.data() + (owned_rows.begin - 1) * num_stock_nodes;
+double* row_above = buffer.data() + owned_rows.end * num_stock_nodes;
 std::vector<MPI_Request> requests;
 
 if (rank > 0) {
     MPI_Request receive_below;
-    MPI_Irecv(halo_below, num_stock_nodes, MPI_DOUBLE, rank - 1, halo_tag, MPI_COMM_WORLD, &receive_below);
+    MPI_Irecv(row_below, num_stock_nodes, MPI_DOUBLE, rank - 1, message_tag, MPI_COMM_WORLD, &receive_below);
     requests.push_back(receive_below);
     MPI_Request send_below;
-    MPI_Isend(first_row, num_stock_nodes, MPI_DOUBLE, rank - 1, halo_tag, MPI_COMM_WORLD, &send_below);
+    MPI_Isend(first_row, num_stock_nodes, MPI_DOUBLE, rank - 1, message_tag, MPI_COMM_WORLD, &send_below);
     requests.push_back(send_below);
 }
 if (rank < num_ranks - 1) {
-    ... the same with rank + 1, halo_above and last_row ...
+    ... the same with rank + 1, row_above and last_row ...
 }
 MPI_Waitall((int)requests.size(), requests.data(), MPI_STATUSES_IGNORE);
 ```
@@ -1517,17 +2059,17 @@ another that is itself waiting, which can happen with blocking sends.
 ```text
   rank 1's copy of the sheet         rank 0's copy of the sheet
 
-  row 11  first row ── send ──────►  row 11  halo_above
-  row 10  halo_below ◄────── send ── row 10  last row
+  row 11  first row ── send ──────►  row 11  row_above
+  row 10  row_below ◄────── send ── row 10  last row
 ```
 
 **9c.6 Where the exchange happens, and the timer**
 
 ```cpp
-auto halo_start = std::chrono::steady_clock::now();
-exchange_halo_rows(next, num_stock_nodes, slab, rank, num_ranks);
-auto halo_end = std::chrono::steady_clock::now();
-result.halo_seconds += std::chrono::duration<double>(halo_end - halo_start).count();
+double exchange_start = omp_get_wtime();
+exchange_edge_rows(next, num_stock_nodes, owned_rows, rank, num_ranks);
+double exchange_end = omp_get_wtime();
+result.exchange_seconds += exchange_end - exchange_start;
 
 grid.swap_buffers();
 ```
@@ -1545,13 +2087,13 @@ until the exchange is.
 
 ```cpp
 for (int other_rank = 0; other_rank < num_ranks; ++other_rank) {
-    RowSlab other_slab = slab_for_rank(num_variance_nodes, other_rank, num_ranks);
-    counts[other_rank] = (other_slab.end - other_slab.begin) * num_stock_nodes;
-    offsets[other_rank] = other_slab.begin * num_stock_nodes;
+    RowRange other_rows = rows_for_rank(num_variance_nodes, other_rank, num_ranks);
+    counts[other_rank] = (other_rows.end - other_rows.begin) * num_stock_nodes;
+    offsets[other_rank] = other_rows.begin * num_stock_nodes;
 }
-const double* my_rows = current.data() + slab.begin * num_stock_nodes;
-int my_count = (slab.end - slab.begin) * num_stock_nodes;
-MPI_Gatherv(my_rows, my_count, MPI_DOUBLE, next.data(), counts.data(), offsets.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+const double* my_values = current.data() + owned_rows.begin * num_stock_nodes;
+int my_count = (owned_rows.end - owned_rows.begin) * num_stock_nodes;
+MPI_Gatherv(my_values, my_count, MPI_DOUBLE, next.data(), counts.data(), offsets.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 grid.swap_buffers();
 if (rank == 0) {
@@ -1587,7 +2129,23 @@ can match `simd` bit for bit, and every other one must.
 | `omp_edges` | the v = 0 row and the stock edges inside the parallel loop | E8 |
 | `omp_float` | both sheets in `float`, eight cells per AVX register (`solver_float.cpp`, §9e) | E3 |
 
-**9d.1 One parallel region for the whole loop** (`OmpPersistentSolver`)
+**9d.1 The scalar row on every core** (`OmpScalarSolver`)
+
+```cpp
+#pragma omp parallel for schedule(static) default(none) shared(constants, current, next, num_variance_nodes)
+for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
+    update_row_scalar(constants, current, next, var_j);
+}
+```
+
+This block is the `omp` loop with `update_row_avx` changed back to
+`update_row_scalar`. It runs the threads without SIMD, so the strong
+scaling figure can show the thread speedup on its own next to the thread
+speedup with SIMD. Comparing the two lines shows whether the two speedups
+multiply or get in each other's way, for example when the memory bus is
+full.
+
+**9d.2 One parallel region for the whole loop** (`OmpPersistentSolver`)
 
 ```cpp
 #pragma omp parallel default(none) shared(constants, current, next, grid, num_variance_nodes, num_timesteps, dt)
@@ -1616,7 +2174,37 @@ because the `omp` rung forks and joins once per step, and this version
 swaps that for two barriers per step inside one region. Which is cheaper is
 a measurement, not a rule.
 
-**9d.2 Boundaries inside the loop** (`OmpParallelEdgesSolver`)
+```cpp
+double loop_start = omp_get_wtime();
+...
+double loop_end = omp_get_wtime();
+result.seconds = loop_end - loop_start;
+```
+
+This solver times the whole loop once, from outside the parallel region.
+Inside the region every thread runs the step loop, so a per-step timer
+would run once per thread. It has no `boundary_seconds` for the same
+reason.
+
+**9d.3 The schedule picked when the program runs** (`OmpRuntimeScheduleSolver`)
+
+```cpp
+#pragma omp parallel for schedule(runtime) default(none) shared(constants, current, next, num_variance_nodes)
+for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
+    update_row_avx(constants, current, next, var_j);
+}
+```
+
+This block is the `omp` loop with `schedule(static)` changed to
+`schedule(runtime)`. The schedule then comes from the environment variable
+`OMP_SCHEDULE`, so one build can try `dynamic,1`, `dynamic,8` or `guided`
+without recompiling. `dynamic` hands out rows a few at a time as threads
+finish, which helps when rows cost different amounts. Every row here costs
+the same, and experiment E5 measured `dynamic,1` at 0.60 times the speed of
+`static`, `dynamic,8` at 0.72 and `guided` at 0.84. The rerun gave 0.62,
+0.73 and 0.77.
+
+**9d.4 Boundaries inside the loop** (`OmpParallelEdgesSolver`)
 
 ```cpp
 #pragma omp parallel for schedule(static) default(none) shared(constants, current, next, num_variance_nodes, time_to_expiry)
@@ -1655,14 +2243,19 @@ FloatStencilConstants::FloatStencilConstants(const StencilConstants& constants) 
     dt = (float)constants.dt;
     rate = (float)constants.rate;
     ...
-    stock_price.assign(constants.stock_price.begin(), constants.stock_price.end());
+    stock_price.resize(num_stock_nodes);
+    stock_price_sq.resize(num_stock_nodes);
+    for (int stock_i = 0; stock_i < num_stock_nodes; ++stock_i) {
+        stock_price[stock_i] = (float)constants.stock_price[stock_i];
+        stock_price_sq[stock_i] = (float)constants.stock_price_sq[stock_i];
+    }
     ...
 }
 ```
 
 This block builds the float constants from the double ones. `(float)x`
-rounds a double to the nearest float, and `assign` copies a whole table,
-rounding every entry. We start from the double constants so both solvers
+rounds a double to the nearest float, and the loops copy each table one
+entry at a time, rounding every entry. We start from the double constants so both solvers
 use the same numbers up to the last rounding, and any gap in the answer
 comes from doing the arithmetic in float, not from different set-up.
 
@@ -1691,13 +2284,17 @@ one does, so it is never built with `-mfma`.
 **9e.3 The float sheets** (`OmpFloatSolver::solve`)
 
 ```cpp
-std::vector<float> current(grid.current().begin(), grid.current().end());
-std::vector<float> next(current.size(), 0.0f);
+int total_cells = num_stock_nodes * num_variance_nodes;
+std::vector<float> current(total_cells, 0.0f);
+std::vector<float> next(total_cells, 0.0f);
+for (int cell = 0; cell < total_cells; ++cell) {
+    current[cell] = (float)grid.current()[cell];
+}
 ...
 std::swap(current, next);
 ...
 std::vector<double>& answer = grid.next();
-for (int cell = 0; cell < (int)current.size(); ++cell) {
+for (int cell = 0; cell < total_cells; ++cell) {
     answer[cell] = current[cell];
 }
 grid.swap_buffers();
@@ -1721,6 +2318,9 @@ next[var_j * num_stock_nodes] = (float)zero_stock_value;
 next[var_j * num_stock_nodes + last_stock] = (float)max_stock_value;
 ```
 
+`update_zero_row_float` at [solver_float.cpp:18](src/solver_float.cpp#L18)
+is `update_zero_row` (§8.7) line for line in float.
+
 This block writes the stock edges and copies the top row on the float
 sheet. The edge values come from the double formula of `apply_stock_edges`
 and are then rounded, because `std::exp` of a float would round twice. We
@@ -1739,14 +2339,14 @@ std::printf("%.10g,%.8g,%.8g,%.8g,%d,%d,%d,%s,%.6f,%.6g,%d,%d,%.6f,%.6f\n",
             result.price, result.delta, result.gamma, result.vega,
             cfg.grid.num_stock_nodes, cfg.grid.num_variance_nodes, cfg.grid.num_timesteps,
             cfg.solver.c_str(), result.seconds, result.cell_updates_per_sec,
-            result.threads, result.ranks, result.halo_seconds, result.boundary_seconds);
+            result.threads, result.ranks, result.exchange_seconds, result.boundary_seconds);
 ```
 
 This block prints one CSV line per solve with the price, the Greeks, the grid
 size, the solver name, the timing, and the number of threads and processes.
 The benchmark and plotting scripts parse these columns by position, so new
 columns only ever go on the end, which is where `threads`, `ranks`,
-`halo_seconds` and `boundary_seconds` went.
+`exchange_seconds` and `boundary_seconds` went.
 
 **10.2 Snapshots** (`dump_snapshot`)
 
@@ -1754,21 +2354,37 @@ columns only ever go on the end, which is where `threads`, `ranks`,
 std::filesystem::create_directories(dump_dir);
 char file_name[32];
 std::snprintf(file_name, sizeof file_name, "snap_%06d.csv", step);
-std::ofstream out(dump_dir + "/" + file_name);
-...
+std::string path = dump_dir + "/" + file_name;
+FILE* out = std::fopen(path.c_str(), "w");
+if (out == NULL) {
+    std::fprintf(stderr, "dump_snapshot: cannot write %s\n", path.c_str());
+    return;
+}
+
 for (int var_j = 0; var_j < grid.num_variance_nodes(); ++var_j) {
     for (int stock_i = 0; stock_i < grid.num_stock_nodes(); ++stock_i) {
         if (stock_i > 0) {
-            out << ',';
+            std::fprintf(out, ",");
         }
-        out << grid.current()[grid.index(stock_i, var_j)];
+        std::fprintf(out, "%.10g", grid.current()[grid.index(stock_i, var_j)]);
     }
-    out << '\n';
+    std::fprintf(out, "\n");
 }
+std::fclose(out);
 ```
 
 This block writes the whole current sheet to a CSV file, one variance row per
-line. The animation scripts read these files, and the step number is
+line. It uses C's `fopen`, `fprintf` and `fclose`, the same calls as in C.
+`path.c_str()` turns the C++ string into the C string that `fopen` wants,
+and `%.10g` writes each value with 10 significant digits. `fopen` returns
+`NULL` when it cannot open the file, for example in a folder with no write
+permission. The function then prints a message and returns, so a missing
+snapshot never stops a solve. `snprintf` writes the file name into the
+32-byte buffer `file_name`, and `sizeof file_name` stops it writing past
+the end.
+`std::filesystem::create_directories` is the one C++17 call here. It is
+like `os.makedirs(dump_dir, exist_ok=True)` and makes every missing folder
+on the path, which C's `mkdir` cannot do in one call. The animation scripts read these files, and the step number is
 zero-padded so the files sort in time order. The worked example in
 STUDY_GUIDE §7.4 was checked against one of these snapshots.
 
@@ -1806,6 +2422,44 @@ is an exact identity, so there is no approximation to defend.
 
 All three tests return 0 on a pass and 1 on a fail, so `make test` stops at
 the first failure. STUDY_GUIDE §10 explains what each one proves.
+
+**12.0 How each test is built**
+
+```cpp
+static Config aligned_test_config() {
+    Config cfg;
+    cfg.grid.num_stock_nodes = 421;
+    cfg.grid.num_variance_nodes = 51;
+    cfg.grid.num_timesteps = 56000;
+    return cfg;
+}
+...
+BaselineSolver solver;
+SolveResult result = solver.solve(cfg);
+```
+
+This block is the pattern every test follows. It starts from the defaults
+in `params.h` (§4.1b), changes only the grid, runs a solver, prints one
+line per check and returns 0 or 1. No config file is read, so a test
+cannot pass or fail because a file changed.
+
+The numbers are picked so the answer lands on nodes. 421 stock nodes over
+0 to 21000 gives a spacing of 21000 / 420 = 50, so the spot 5200 is node
+104 and the strike 5250 is node 105. 51 variance nodes over 0 to 1 gives a
+spacing of 0.02, so `v0` = 0.04 is node 2. The weights are then 0 and the
+tests compare grid values directly (§6.7). 56000 steps over 0.25 years
+gives `dt` = 4.5e-6, about 0.79 of the stability limit for this grid.
+
+`BaselineSolver solver;` makes the solver as a normal local variable on the
+stack. The test knows which solver it wants, so it needs no
+`make_solver` and no `unique_ptr`, and the solver is freed at the end of
+`main`.
+
+`test_ladder_matches` uses a smaller 128 by 32 grid with 5200 steps
+([test_ladder_matches.cpp:33](tests/test_ladder_matches.cpp#L33)), because
+it runs 16 solves for the call and 16 for the put, and still finishes in
+about 7 seconds on the Mac. That grid is off node, so
+it also tests the interpolation in §6.7.
 
 **12.1 Black-Scholes collapse** (`test_bs_collapse.cpp`)
 
@@ -1848,25 +2502,34 @@ UNSTABLE message instead.
 
 ```cpp
 SolveResult reference = baseline.solve(cfg);
-for (const std::string& rung : kRungs) {
-    std::unique_ptr<Solver> solver = make_solver(rung);
+for (const std::string& solver_name : solver_names) {
+    std::unique_ptr<Solver> solver = make_solver(solver_name);
     SolveResult candidate = solver->solve(cfg);
+    ...
     double worst_diff = max_relative_diff(reference, candidate);
-    bool ok = worst_diff < kRelativeTolerance;
+    bool ok = worst_diff < relative_tolerance;
 ```
+
+The `for (... : solver_names)` loop is C++'s version of
+`for solver_name in solver_names` in Python. The check is written as
+`worst_diff < relative_tolerance` rather than `>=` for the fail case, because
+a run that blew up gives NaN, and any comparison with NaN is false, so a NaN
+fails.
 
 This block runs the baseline and every other rung on the same small grid and
 compares price, delta, gamma and vega. A rung is not benchmarked until this
 passes, because a fast wrong answer is worth nothing. Each new rung is added
-to `kRungs`.
+to `solver_names`.
 
 ```cpp
-static const std::vector<std::string> kSameBitsAsSimd = {"omp", "mpi", "omp_persistent", "omp_runtime", "omp_edges"};
+static const std::vector<std::string> same_bits_as_simd = {"omp", "mpi", "omp_persistent", "omp_runtime", "omp_edges"};
 ...
-for (const std::string& rung : kSameBitsAsSimd) {
-    SolveResult candidate = make_solver(rung)->solve(cfg);
+for (const std::string& solver_name : same_bits_as_simd) {
+    SolveResult candidate = make_solver(solver_name)->solve(cfg);
+    ...
     double simd_diff = max_relative_diff(simd_reference, candidate);
-    bool ok = simd_diff == 0.0;
+    const char* verdict = "OK";
+    if (simd_diff != 0.0) {
 ```
 
 This block checks a stronger rule for the OpenMP and MPI rungs and the experiments built on them. They must
@@ -1893,16 +2556,17 @@ int main(int argc, char** argv) {
 ```
 
 ```cpp
-static const double kFloatTolerance = 1e-4;
+static const double float_tolerance = 1e-4;
 ...
 SolveResult float_candidate = make_solver("omp_float")->solve(cfg);
+...
 double float_diff = max_relative_diff(reference, float_candidate);
-bool float_ok = float_diff < kFloatTolerance;
+bool ok = float_diff < float_tolerance;
 ```
 
 This block holds the float experiment (§9e) to its own limit of 1e-4. A
 float keeps about 7 digits, so it can never meet 1e-11, and it is not put
-in `kRungs`. On this grid it measures 2.1e-6 on the call and 8.2e-6 on the
+in `solver_names`. On this grid it measures 2.1e-6 on the call and 8.2e-6 on the
 put on rangpur (8.3e-6 on the Mac), so 1e-4 leaves room for rounding but still fails a real bug, which
 moves the answer by far more.
 
@@ -1925,6 +2589,21 @@ This block measures a difference relative to the size of the numbers. We use
 a relative difference because gamma is about 0.0008 and vega about 2000, and
 one tolerance of 1e-11 has to be fair to both.
 
+```cpp
+static double max_relative_diff(const SolveResult& a, const SolveResult& b) {
+    double worst = relative_diff(a.price, b.price);
+    worst = std::fmax(worst, relative_diff(a.delta, b.delta));
+    worst = std::fmax(worst, relative_diff(a.gamma, b.gamma));
+    worst = std::fmax(worst, relative_diff(a.vega, b.vega));
+    return worst;
+}
+```
+
+This block turns two results into one number, the worst relative
+difference across the price and the three Greeks. `std::fmax` is `max` for
+doubles. One number per solver keeps each check to one `<` and one printed
+line.
+
 **12.4 The AVX2 row against the scalar row** (`test_avx_row.cpp`)
 
 ```cpp
@@ -1933,8 +2612,16 @@ if (!avx_row_is_vectorised()) {
     return 1;
 }
 ...
+std::mt19937 random_engine(3500);
 std::vector<int> row_lengths = {130, 131, 132, 133, 2048};
 ...
+std::uniform_real_distribution<double> noise(-1.0, 1.0);
+for (int cell = 0; cell < num_cells; ++cell) {
+    int stock_i = cell % num_stock_nodes;
+    double payoff = std::fmax(constants.stock_price[stock_i] - cfg.option.strike, 0.0);
+    current[cell] = payoff + noise(random_engine);
+}
+
 std::vector<double> next_scalar(num_cells, -7.0);
 std::vector<double> next_avx(num_cells, -7.0);
 for (int var_j = 1; var_j < cfg.grid.num_variance_nodes - 1; ++var_j) {
@@ -1944,7 +2631,12 @@ for (int var_j = 1; var_j < cfg.grid.num_variance_nodes - 1; ++var_j) {
 ```
 
 This block fills a sheet with a call payoff plus random noise, runs both row
-functions on it, and compares every cell of the two outputs. The row lengths
+functions on it, and compares every cell of the two outputs. A plain payoff
+is a straight line or flat in most places, so most derivatives would be
+zero and a wrong term could hide. The noise makes every derivative non
+zero. `std::mt19937` is a random number generator, and the fixed seed 3500
+makes every run use the same numbers, like `random.seed(3500)` in Python.
+`cell % num_stock_nodes` is the column of a cell in the flat buffer. The row lengths
 130 to 133 leave zero, one, two and three cells for the scalar remainder, so
 every path through §9a.3 is tested. Both outputs start filled with -7, so if
 the AVX row wrote outside the interior the edges would differ and the test
@@ -1954,7 +2646,7 @@ it would only be comparing the scalar row with itself. It runs with
 separate x86_64 build.
 
 ```cpp
-static const double kFloatTolerance = 1e-5;
+static const double float_tolerance = 1e-5;
 ...
 std::vector<int> float_row_lengths = {130, 131, 132, 133, 134, 135, 136, 137, 2048};
 ...
@@ -2087,8 +2779,22 @@ same target builds natively.
 
 ## 14. Practice questions on the code
 
-- Why does `main` read the config file in a separate first pass? (§3.2)
-- Why does `parse_double` check how many characters `stod` used? (§4.2)
+- Starting from `main`, name every function a serial run calls, in order.
+  (§1.5)
+- Which lines of `solver_omp.cpp` differ from `solver_serial.cpp`? (§1.5)
+- When `main` calls `solver->solve(cfg)`, how does the program know which
+  `solve` to run? (§1.5, §6.2)
+- Why must `--config` come first on the command line? (§3.1)
+- Why do the tests build a `Config` in code and not read a file? (§4.1b,
+  §12.0)
+- With a stock spacing of 50, what cell and weight does `locate` give for
+  5225? (§5.6)
+- What is the call worth at the top of the stock axis, and why? (§8.8)
+- Why are the test grids 421 by 51? (§12.0)
+- What does `words >> key >> equals >> value` do with a blank line? (§4.3)
+- What is `std::size_t`, and where does the code meet one? (§2.2)
+- How does a solver time one step, and why does every solver use
+  `omp_get_wtime`? (§7.10)
 - Why are `Grid`'s fields private, and why are the getters written inside the
   class? (§5.1)
 - Why does `init_payoff` write into `current_` and not `next_`? (§5.5)
@@ -2137,6 +2843,583 @@ same target builds natively.
   grid too big for one machine? (§9c.7, STUDY_GUIDE §17)
 - Why does only rank 0 compare results in `test_ladder_matches`? (§12.3)
 - How many barriers does `omp_persistent` have per step, and where are
-  they? (§9d.1)
+  they? (§9d.2)
+- Why does `omp_persistent` time the whole loop once and not each step?
+  (§9d.2)
+- What does `schedule(runtime)` read, and what did E5 measure? (§9d.3)
 - Why can row 0 and the stock edges join the parallel loop, but the top row
-  cannot? (§9d.2)
+  cannot? (§9d.4)
+
+---
+
+## 15. Before and after, one change at a time
+
+This section takes every code change in [CHANGELOG.md](CHANGELOG.md), in the
+same order, and puts the code before the change next to the code after it.
+Each pair is followed by what changed and why. Every After snippet is copied
+from the real file with most comments removed. Each Before snippet comes from
+the `milestone1` tag or from the rung below. Two of them were never
+committed on their own (§15.5 and §15.12), so they are rebuilt from the
+changelog's description and say so.
+
+Phases 6, 8 and 9 only changed figures, documents and slides, so they have
+no entry here.
+
+### 15.1 Names that read like the PDE (Phase 1, Change 1)
+
+**Before** (`solver_baseline.cpp` at the `milestone1` tag)
+
+```cpp
+double S = g.stock_price(stock_i);
+double V = cur[g.index(stock_i, var_j)];
+double v = g.variance(var_j);
+double ne = cur[g.index(stock_i + 1, var_j + 1)];
+double V_S = (east - west) / (2.0 * g.stock_spacing());
+double V_SS = (east - 2.0 * V + west) / (g.stock_spacing() * g.stock_spacing());
+double pde = V + dt * (0.5 * v * S * S * V_SS + rho * xi * v * S * V_Sv + ...);
+```
+
+**After** (`solver_baseline.cpp`)
+
+```cpp
+double stock_price = grid.stock_price(stock_i);
+double centre = current[grid.index(stock_i, var_j)];
+double variance = grid.variance(var_j);
+double north_east = current[grid.index(stock_i + 1, var_j + 1)];
+double dV_dS = (east - west) / (2.0 * grid.stock_spacing());
+double d2V_dS2 = (east - 2.0 * centre + west) / (grid.stock_spacing() * grid.stock_spacing());
+double updated = centre + dt * (0.5 * variance * stock_price * stock_price * d2V_dS2 + ...);
+```
+
+Only the names changed. `V` and `v` differed by one capital letter, so the
+cell value is now `centre` and the variance is `variance`. `ne` is spelled
+out as `north_east`, and `V_S` became `dV_dS` so it reads like the
+derivative it is. No arithmetic moved, so the baseline still gives exactly
+the Milestone 1 answer.
+
+### 15.2 The constants move out of the cell loop (Phase 1, Decisions 1 to 3)
+
+**Before** (`solver_baseline.cpp`, inside the loop over every cell)
+
+```cpp
+double stock_price = grid.stock_price(stock_i);
+double variance = grid.variance(var_j);
+double centre = current[grid.index(stock_i, var_j)];
+double east = current[grid.index(stock_i + 1, var_j)];
+double dV_dS = (east - west) / (2.0 * grid.stock_spacing());
+double d2V_dS2 = (east - 2.0 * centre + west) / (grid.stock_spacing() * grid.stock_spacing());
+```
+
+**After** (`stencil.cpp`, `StencilConstants` constructor, runs once)
+
+```cpp
+inv_two_ds = 1.0 / (2.0 * stock_spacing);
+inv_ds_sq = 1.0 / (stock_spacing * stock_spacing);
+for (int stock_i = 0; stock_i < num_stock_nodes; ++stock_i) {
+    double price = stock_i * stock_spacing;
+    stock_price[stock_i] = price;
+    stock_price_sq[stock_i] = price * price;
+}
+for (int var_j = 0; var_j < num_variance_nodes; ++var_j) {
+    double variance = var_j * variance_spacing;
+    stock_diffusion[var_j] = 0.5 * variance;
+    ...
+}
+```
+
+**After** (`stencil.cpp`, `update_cells_scalar`, inside the loop over every cell)
+
+```cpp
+double dt = constants.dt;
+double inv_two_ds = constants.inv_two_ds;
+...
+const double* row_centre = current.data() + var_j * num_stock_nodes;
+const double* row_above = row_centre + num_stock_nodes;
+const double* row_below = row_centre - num_stock_nodes;
+
+for (int stock_i = first_stock; stock_i < end_stock; ++stock_i) {
+    double centre = row_centre[stock_i];
+    double east = row_centre[stock_i + 1];
+    double dV_dS = (east - west) * inv_two_ds;
+    double d2V_dS2 = (east - 2.0 * centre + west) * inv_ds_sq;
+```
+
+Three things moved out of the cell loop.
+
+1. The baseline divides by the spacing five times per cell. Division is
+   slow, so `StencilConstants` works out each `1 / spacing` once, and the
+   loop multiplies by it.
+2. The baseline works out S, S² and the four `v` coefficients again for
+   every cell. They only depend on the column or the row, so they are now
+   tables built once, and the loop looks them up.
+3. The baseline calls `grid.index(i, j)` for each of the nine neighbours.
+   The new code keeps a pointer to the start of the row, the row above and
+   the row below, so a neighbour is just `row_above[stock_i + 1]`.
+
+The constants are also copied into local variables at the top of the row
+function. Without that the compiler would have to reload them after every
+write through `out_row`, because it cannot prove the write did not change
+them. Only hoisting and reciprocals moved the M1 number (53 to 131
+Mcell-updates/s), so those are the only M1 techniques the serial rung keeps.
+
+### 15.3 One long expression becomes five named terms (Phase 1, Change 2)
+
+**Before** (`solver_baseline.cpp`, kept this way on purpose)
+
+```cpp
+double updated = centre + dt * (0.5 * variance * stock_price * stock_price * d2V_dS2
+                                + rho * xi * variance * stock_price * d2V_dS_dv
+                                + 0.5 * xi * xi * variance * d2V_dv2
+                                + (rate - div_yield) * stock_price * dV_dS
+                                + kappa * (theta - variance) * dV_dv
+                                - rate * centre);
+```
+
+**After** (`stencil.cpp`, `update_cells_scalar`)
+
+```cpp
+double stock_diffusion_term = stock_diffusion * stock_price_sq[stock_i] * d2V_dS2;
+double cross_term = cross_diffusion * stock_price[stock_i] * d2V_dS_dv;
+double variance_diffusion_term = variance_diffusion * d2V_dv2;
+double stock_drift_term = stock_drift * stock_price[stock_i] * dV_dS;
+double variance_drift_term = variance_drift * dV_dv;
+
+double change = stock_diffusion_term + cross_term + variance_diffusion_term + stock_drift_term + variance_drift_term - rate * centre;
+out_row[stock_i] = centre + dt * change;
+```
+
+Each PDE term now has its own line and its own name, so you can point at one
+term and say which part of the equation it is. The baseline was left as one
+expression so its answer stays bit for bit the M1 answer. On the Mac this
+split cost about 13%, because Apple clang only fuses a multiply and an add
+into one FMA instruction inside a single statement. Rangpur's build has no
+`-mfma` for this file, so it is not affected there.
+
+### 15.4 The time loop becomes five function calls (Phase 1, Decision 2)
+
+**Before** (`solver_baseline.cpp`, the body of one timestep, shortened)
+
+```cpp
+for (int var_j = 1; var_j < grid.num_variance_nodes() - 1; ++var_j) {
+    for (int stock_i = 1; stock_i < grid.num_stock_nodes() - 1; ++stock_i) {
+        ... about 30 lines of maths per cell ...
+    }
+}
+for (int stock_i = 1; stock_i < grid.num_stock_nodes() - 1; ++stock_i) {
+    ... the v = 0 row ...
+}
+for (int var_j = 0; var_j < grid.num_variance_nodes(); ++var_j) {
+    next[grid.index(0, var_j)] = zero_stock_value;
+    next[grid.index(grid.num_stock_nodes() - 1, var_j)] = max_stock_value;
+}
+for (int stock_i = 0; stock_i < grid.num_stock_nodes(); ++stock_i) {
+    next[grid.index(stock_i, top_row)] = next[grid.index(stock_i, top_row - 1)];
+}
+grid.swap_buffers();
+```
+
+**After** (`solver_serial.cpp`)
+
+```cpp
+for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
+    update_row_scalar(constants, current, next, var_j);
+}
+update_zero_row(constants, current, next);
+apply_stock_edges(constants, next, 0, num_variance_nodes, step * dt);
+copy_top_row(constants, next);
+grid.swap_buffers();
+```
+
+The four loops are the same four jobs, each moved into a function in
+`stencil.cpp`. The point is that every later rung changes only one of these
+lines. Keep this snippet in mind, because §15.6 to §15.9 are all small edits
+to it.
+
+### 15.5 The scalar row takes a column range (Phase 2, Decision 3)
+
+**Before** (rebuilt from the changelog, not committed on its own)
+
+```cpp
+void update_row_scalar(const StencilConstants& constants, const std::vector<double>& current, std::vector<double>& next, int var_j) {
+    ...
+    for (int stock_i = 1; stock_i < num_stock_nodes - 1; ++stock_i) {
+        ... the cell update ...
+    }
+}
+```
+
+**After** (`stencil.cpp`)
+
+```cpp
+void update_cells_scalar(const StencilConstants& constants, const std::vector<double>& current, std::vector<double>& next, int var_j, int first_stock, int end_stock) {
+    ...
+    for (int stock_i = first_stock; stock_i < end_stock; ++stock_i) {
+        ... the same cell update ...
+    }
+}
+
+void update_row_scalar(const StencilConstants& constants, const std::vector<double>& current, std::vector<double>& next, int var_j) {
+    update_cells_scalar(constants, current, next, var_j, 1, constants.num_stock_nodes - 1);
+}
+```
+
+The loop body did not change. It only gained a start and an end column. The
+AVX2 row does four cells at a time, and when a row's interior is not a
+multiple of four the last one to three cells are left over. The AVX2 row
+hands those to `update_cells_scalar`, so they are done by exactly the serial
+rung's code and not by a second copy of it.
+
+### 15.6 One cell at a time becomes four cells at a time (Phase 2)
+
+**Before** (`stencil.cpp`, `update_cells_scalar`)
+
+```cpp
+for (int stock_i = first_stock; stock_i < end_stock; ++stock_i) {
+    double centre = row_centre[stock_i];
+    double east = row_centre[stock_i + 1];
+    double west = row_centre[stock_i - 1];
+
+    double dV_dS = (east - west) * inv_two_ds;
+    double d2V_dS2 = (east - 2.0 * centre + west) * inv_ds_sq;
+    ...
+    double change = stock_diffusion_term + cross_term + variance_diffusion_term + stock_drift_term + variance_drift_term - rate * centre;
+    out_row[stock_i] = centre + dt * change;
+}
+```
+
+**After** (`stencil_avx.cpp`, `update_row_avx`)
+
+```cpp
+__m256d inv_two_ds = _mm256_set1_pd(constants.inv_two_ds);
+__m256d two = _mm256_set1_pd(2.0);
+
+while (stock_i + 3 <= last_interior) {
+    __m256d centre = _mm256_loadu_pd(row_centre + stock_i);
+    __m256d east = _mm256_loadu_pd(row_centre + stock_i + 1);
+    __m256d west = _mm256_loadu_pd(row_centre + stock_i - 1);
+
+    __m256d east_minus_west = _mm256_sub_pd(east, west);
+    __m256d dV_dS = _mm256_mul_pd(east_minus_west, inv_two_ds);
+    __m256d east_plus_west = _mm256_add_pd(east, west);
+    __m256d stock_curvature = _mm256_fnmadd_pd(two, centre, east_plus_west);
+    __m256d d2V_dS2 = _mm256_mul_pd(stock_curvature, inv_ds_sq);
+
+    __m256d change = _mm256_mul_pd(stock_diffusion_factor, d2V_dS2);
+    change = _mm256_fmadd_pd(cross_factor, d2V_dS_dv, change);
+    ...
+    change = _mm256_fnmadd_pd(rate, centre, change);
+    __m256d new_value = _mm256_fmadd_pd(dt, change, centre);
+    _mm256_storeu_pd(out_row + stock_i, new_value);
+
+    stock_i = stock_i + 4;
+}
+update_cells_scalar(constants, current, next, var_j, stock_i, last_interior + 1);
+```
+
+The maths is the same. What changed is the size of each
+value. A `double` holds one cell and a `__m256d` holds four cells side by
+side, so every line now works on four cells. This table maps one to the
+other.
+
+| Scalar (one cell) | AVX2 (four cells) | What it does |
+|---|---|---|
+| `double x` | `__m256d x` | a value, or four values in one register |
+| `double c = constants.c` | `_mm256_set1_pd(constants.c)` | the same constant in all four lanes |
+| `row_centre[stock_i + 1]` | `_mm256_loadu_pd(row_centre + stock_i + 1)` | read four cells starting there |
+| `a - b`, `a + b`, `a * b` | `_mm256_sub_pd`, `_mm256_add_pd`, `_mm256_mul_pd` | the same operation on all four lanes |
+| `c + a * b` | `_mm256_fmadd_pd(a, b, c)` | multiply and add in one instruction, one rounding |
+| `c - a * b` | `_mm256_fnmadd_pd(a, b, c)` | the same, with the product taken away |
+| `out_row[stock_i] = x` | `_mm256_storeu_pd(out_row + stock_i, x)` | write four cells |
+| `++stock_i` | `stock_i = stock_i + 4` | move on four cells |
+
+The scalar `east - 2.0 * centre + west` is written as `east + west` then
+`fnmadd(two, centre, ...)`, which takes `2 * centre` off in one instruction.
+The leftover cells at the end of the row go to `update_cells_scalar` from
+§15.5. Because FMA rounds once where a multiply then an add rounds twice,
+the SIMD rung differs from serial in the last bits (about 1e-15), well
+inside the 1e-11 test tolerance.
+
+### 15.7 The SIMD time loop (Phase 2)
+
+**Before** (`solver_serial.cpp`)
+
+```cpp
+for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
+    update_row_scalar(constants, current, next, var_j);
+}
+```
+
+**After** (`solver_simd.cpp`)
+
+```cpp
+if (!avx_row_is_vectorised()) {
+    std::fprintf(stderr, "[simd] built without AVX2 and FMA, using the scalar row\n");
+}
+...
+for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
+    update_row_avx(constants, current, next, var_j);
+}
+```
+
+One function name changed in the loop. The warning at the top is new. On the
+Mac, `update_row_avx` is the scalar fallback from the `#else` branch, and the
+warning makes sure nobody mistakes a Mac run for an AVX2 result.
+
+### 15.8 One pragma spreads the rows over the cores (Phase 3, Phase 5 Decision 5)
+
+**Before** (`solver_simd.cpp`)
+
+```cpp
+for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
+    update_row_avx(constants, current, next, var_j);
+}
+
+update_zero_row(constants, current, next);
+apply_stock_edges(constants, next, 0, num_variance_nodes, step * dt);
+copy_top_row(constants, next);
+grid.swap_buffers();
+```
+
+**After** (`solver_omp.cpp`)
+
+```cpp
+result.threads = omp_get_max_threads();
+...
+#pragma omp parallel for schedule(static) default(none) shared(constants, current, next, num_variance_nodes)
+for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
+    update_row_avx(constants, current, next, var_j);
+}
+
+double boundary_start = omp_get_wtime();
+update_zero_row(constants, current, next);
+apply_stock_edges(constants, next, 0, num_variance_nodes, step * dt);
+copy_top_row(constants, next);
+grid.swap_buffers();
+double boundary_end = omp_get_wtime();
+result.boundary_seconds += boundary_end - boundary_start;
+```
+
+The loop itself is untouched. The pragma above it tells OpenMP to split the
+rows into one equal band per thread (`schedule(static)`) and to make every
+variable we did not list a compile error (`default(none)`). Each thread
+reads only `current` and writes only its own rows of `next`, so no locks are
+needed. The boundaries stay serial after the loop. The two timer lines
+around them were added in Phase 5 so the CSV shows how much of each step is
+serial work. `result.threads` records the thread count the program really
+got.
+
+### 15.9 Each process takes a slab of rows (Phase 4)
+
+**Before** (`solver_omp.cpp`)
+
+```cpp
+#pragma omp parallel for schedule(static) default(none) shared(constants, current, next, num_variance_nodes)
+for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
+    update_row_avx(constants, current, next, var_j);
+}
+
+update_zero_row(constants, current, next);
+apply_stock_edges(constants, next, 0, num_variance_nodes, step * dt);
+copy_top_row(constants, next);
+
+grid.swap_buffers();
+```
+
+**After** (`solver_mpi.cpp`)
+
+```cpp
+RowRange owned_rows = rows_for_rank(num_variance_nodes, rank, num_ranks);
+int first_interior = std::max(owned_rows.begin, 1);
+int end_interior = std::min(owned_rows.end, num_variance_nodes - 1);
+bool owns_zero_row = (rank == 0);
+bool owns_top_row = (rank == num_ranks - 1);
+...
+#pragma omp parallel for schedule(static) default(none) shared(constants, current, next, first_interior, end_interior)
+for (int var_j = first_interior; var_j < end_interior; ++var_j) {
+    update_row_avx(constants, current, next, var_j);
+}
+
+if (owns_zero_row) {
+    update_zero_row(constants, current, next);
+}
+apply_stock_edges(constants, next, owned_rows.begin, owned_rows.end, step * dt);
+if (owns_top_row) {
+    copy_top_row(constants, next);
+}
+
+exchange_edge_rows(next, num_stock_nodes, owned_rows, rank, num_ranks);
+
+grid.swap_buffers();
+```
+
+Four things changed, and the row function is still the same AVX2 one.
+
+1. The loop runs over this process's rows only, `first_interior` to
+   `end_interior`, instead of every row. Inside a process the rows are still
+   split between threads with the same pragma.
+2. Each boundary is done only by the process that owns it. The bottom
+   process does the v = 0 row and the top process copies the top row. Every
+   process writes the stock edges of its own rows, which is why
+   `apply_stock_edges` was given a row range back in Phase 1.
+3. `exchange_edge_rows` is new. The next step needs one row just outside
+   each end of the process's rows, and those rows belong to the neighbours. So each
+   process sends its first and last row and receives the row below and
+   above it.
+4. After the time loop, `MPI_Gatherv` collects every slab into rank 0 so it
+   can read the price, and only rank 0 prints.
+
+### 15.10 The experiment solvers (Phase 5, Decision 1)
+
+Each experiment is a copy of the omp loop in §15.8 with one thing changed.
+Two of them only change one word. `omp_scalar` calls `update_row_scalar`
+instead of `update_row_avx`, and `omp_runtime` says `schedule(runtime)`
+instead of `schedule(static)` so `OMP_SCHEDULE` can pick the schedule. The
+other two change the shape of the loop.
+
+**Before** (`solver_omp.cpp`, a new thread team every step)
+
+```cpp
+for (int step = 1; step <= num_timesteps; ++step) {
+    #pragma omp parallel for schedule(static) default(none) shared(constants, current, next, num_variance_nodes)
+    for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
+        update_row_avx(constants, current, next, var_j);
+    }
+    update_zero_row(constants, current, next);
+    apply_stock_edges(constants, next, 0, num_variance_nodes, step * dt);
+    copy_top_row(constants, next);
+    grid.swap_buffers();
+}
+```
+
+**After** (`solver_experiments.cpp`, `OmpPersistentSolver`, one team for the whole solve)
+
+```cpp
+#pragma omp parallel default(none) shared(constants, current, next, grid, num_variance_nodes, num_timesteps, dt)
+{
+    for (int step = 1; step <= num_timesteps; ++step) {
+        #pragma omp for schedule(static)
+        for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
+            update_row_avx(constants, current, next, var_j);
+        }
+
+        #pragma omp single
+        {
+            update_zero_row(constants, current, next);
+            apply_stock_edges(constants, next, 0, num_variance_nodes, step * dt);
+            copy_top_row(constants, next);
+            grid.swap_buffers();
+        }
+    }
+}
+```
+
+`parallel for` is really two pragmas in one, `parallel` (start the threads)
+and `for` (share out the loop). Here they are split. `parallel` moves
+outside the time loop, so the threads are started once, and every thread
+runs every step. `omp for` shares out the rows as before, and `omp single`
+lets one thread do the boundaries while the others wait at its end. This
+tests whether starting the team every step costs anything.
+
+**After** (`solver_experiments.cpp`, `OmpParallelEdgesSolver`, boundaries inside the loop)
+
+```cpp
+#pragma omp parallel for schedule(static) default(none) shared(constants, current, next, num_variance_nodes, time_to_expiry)
+for (int var_j = 0; var_j < num_variance_nodes - 1; ++var_j) {
+    if (var_j == 0) {
+        update_zero_row(constants, current, next);
+    } else {
+        update_row_avx(constants, current, next, var_j);
+    }
+    apply_stock_edges(constants, next, var_j, var_j + 1, time_to_expiry);
+}
+copy_top_row(constants, next);
+grid.swap_buffers();
+```
+
+The loop now starts at row 0, and row 0 takes the v = 0 update. Each thread
+also writes the stock edges of its own rows. Only `copy_top_row` stays after
+the loop, because it reads the row below it, which some other thread might
+still be writing. This tests how much the serial boundary work holds back
+the omp rung.
+
+### 15.11 Denormals flushed to zero (Phase 5, Decision 7)
+
+There is no before and after inside `heston`, which did not change. The fix
+is a separate five-line library, `slurm/flush_denormals.c`, that the
+benchmark scripts load into every timed run.
+
+```c
+__attribute__((constructor)) static void flush_denormals(void) {
+    _mm_setcsr(_mm_getcsr() | 0x8040);
+}
+```
+
+`constructor` makes the function run before `main`. It sets two bits of the
+CPU's floating point control register, so a number too small to be a normal
+double becomes 0 instead of taking a slow path. Before this, short runs on
+big grids left many cells below 1e-300, and the 2896 by 724 grid ran 2.4
+times slower than its neighbours for that reason.
+
+### 15.12 The triad arrays stop touching every page on one thread (Phase 5, Decision 8)
+
+**Before** (rebuilt from the changelog, not committed on its own)
+
+```cpp
+std::vector<double> a(n), b(n), c(n);
+#pragma omp parallel for schedule(static)
+for (long i = 0; i < n; ++i) { a[i] = 0.0; b[i] = 1.0; c[i] = 2.0; }
+```
+
+**After** (`slurm/bench_peak.sh`, the C++ inside it)
+
+```cpp
+std::unique_ptr<double[]> a(new double[n]), b(new double[n]), c(new double[n]);
+#pragma omp parallel for schedule(static)
+for (long i = 0; i < n; ++i) { a[i] = 0.0; b[i] = 1.0; c[i] = 2.0; }
+```
+
+A `std::vector<double>(n)` fills itself with zeros the moment it is made, on
+the main thread. Linux places a page of memory on the socket of the thread
+that first writes it, so every page ended up on socket 0 and the parallel
+loop never got the chance to place them. `new double[n]` leaves the memory
+untouched, so the parallel loop is the first write and each page lands next
+to the thread that uses it. `unique_ptr` still frees the memory on its own,
+so there is no `delete`. Before this change 24 threads measured about the
+same bandwidth as 12, which is what one socket's memory gives.
+
+### 15.13 double becomes float (Phase 7)
+
+**Before** (`stencil_avx.cpp`, `update_row_avx`)
+
+```cpp
+__m256d dt = _mm256_set1_pd(constants.dt);
+while (stock_i + 3 <= last_interior) {
+    __m256d centre = _mm256_loadu_pd(row_centre + stock_i);
+    ...
+    __m256d new_value = _mm256_fmadd_pd(dt, change, centre);
+    _mm256_storeu_pd(out_row + stock_i, new_value);
+    stock_i = stock_i + 4;
+}
+```
+
+**After** (`stencil_avx.cpp`, `update_row_avx_float`)
+
+```cpp
+__m256 dt = _mm256_set1_ps(constants.dt);
+while (stock_i + 7 <= last_interior) {
+    __m256 centre = _mm256_loadu_ps(row_centre + stock_i);
+    ...
+    __m256 new_value = _mm256_fmadd_ps(dt, change, centre);
+    _mm256_storeu_ps(out_row + stock_i, new_value);
+    stock_i = stock_i + 8;
+}
+```
+
+A float is half the size of a double, so the same 256-bit register holds
+eight of them instead of four. That is the whole change. `__m256d` becomes
+`__m256`, every `_pd` (packed double) becomes `_ps` (packed single), and the
+loop moves eight cells at a time. In `solver_float.cpp` the sheets become
+`std::vector<float>`, and the constants are worked out in double first and
+then rounded, so both solvers start from the same numbers. Float was 1.75
+times faster at 2048 by 512 on 24 threads, but it was rejected because the
+price and gamma moved too far from the double answer.

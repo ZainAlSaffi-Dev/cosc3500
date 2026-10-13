@@ -48,7 +48,9 @@ per second of wall-clock time, `ns · nv · nt / seconds / 10⁶`. This is the
 CSV column `cell_updates_per_sec` that the harness computes from a
 `std::chrono::steady_clock` timer wrapped around the stepping loop only
 (allocation, payoff setup and readout excluded; snapshot I/O disabled in
-every benchmark job). It is a *rate*, which is why a 400-step benchmark run
+every benchmark job). Since Phase 9g the code reads the same monotonic
+clock through `omp_get_wtime()` instead, with no change to what is timed.
+It is a *rate*, which is why a 400-step benchmark run
 and a 980 000-step production run measure the same quantity. A **speedup
 (×)** is always a ratio of two throughputs, higher meaning faster, taken on
 the same grid, the same node and the same page regime — the regime is named
@@ -640,33 +642,38 @@ the scaled speedup on 24 threads is 24 x 0.142 / 0.179 = 19.1 against an
 ideal 24. The one-thread grid (23 rows, 370 KiB per sheet) sits in L2, which
 flatters the one-thread point.
 
-## M2.4 Grid size (job 651299, figure F4)
+## M2.4 Grid size (job 656959, figure F4)
 
 | Grid | Working set | serial | simd | omp 24 | omp over serial |
 |---|---|---|---|---|---|
-| 512 x 128 | 1 MiB | 143 | 342 | 1181 | 8x |
-| 1024 x 256 | 4 MiB | 158 | 379 | 4097 | 26x |
-| 2048 x 512 | 16 MiB | 158 | 381 | 5694 | 36x |
-| 2896 x 724 | 32 MiB | 167 | 171 | 6538 | 39x |
-| 4096 x 1024 | 64 MiB | 156 | 342 | 2997 | 19x |
-| 8192 x 1024 | 128 MiB | 154 | 321 | 1852 | 12x |
+| 512 x 128 | 1 MiB | 145 | 327 | 1250 | 9x |
+| 1024 x 256 | 4 MiB | 158 | 377 | 4104 | 26x |
+| 2048 x 512 | 16 MiB | 159 | 382 | 5711 | 36x |
+| 2896 x 724 | 32 MiB | 58 | 171 | 6499 | 111x, serial slow |
+| 4096 x 1024 | 64 MiB | 156 | 334 | 3141 | 20x |
+| 8192 x 1024 | 128 MiB | 153 | 323 | 1709 | 11x |
+
+Job 656959 reran this sweep on the current code. Every point is within 6%
+of the first run (job 651299) except two. Serial at 2896 x 724 fell from
+167 to 58, and omp at 8192 x 1024 from 1852 to 1709. The prices match the
+first run to every printed digit.
 
 Serial and simd barely care about size, because one core cannot pull data
 fast enough for memory to be its limit. The 24-thread rung peaks while the
 grid fits in the two L3 caches (60 MiB) and halves once it does not.
 Small grids lose to the fork and barrier every step, which costs the same
-whatever the size. The simd point at 2896 x 724 is an address effect, not a
-size effect (M2.8).
+whatever the size. The serial and simd points at 2896 x 724 are an address
+effect, not a size effect (M2.8), so the 111x there is not a real speedup.
 
-## M2.5 Roofline (jobs 651302, 651295, 651299, figure F5)
+## M2.5 Roofline (jobs 651302, 651295, 656959, figure F5)
 
 `bench_peak.sh` measured, on r730-2, a scalar peak of 5.12 GFLOP/s, an AVX2
 FMA peak of 43.4 GFLOP/s on one core and 971 on 24, and a triad bandwidth of
 12.4 GB/s on one thread and 67.9 GB/s on 24. The kernel does 31 flops per
 cell update over 24 bytes, so the DRAM roof at its intensity of 1.29 is
-about 88 GFLOP/s. omp on 24 threads reaches 178 GFLOP/s at 2048 by 512, twice
-the DRAM roof, because the grid is in L3. At 4096 by 1024 it is 93 GFLOP/s,
-on the DRAM roof. PLAN §5 hypothesis 3 held. The kernel turns from
+about 88 GFLOP/s. omp on 24 threads reaches 177 GFLOP/s at 2048 by 512, twice
+the DRAM roof, because the grid is in L3. At 4096 by 1024 it is 97 GFLOP/s,
+about the DRAM roof. PLAN §5 hypothesis 3 held. The kernel turns from
 cache-fed to memory-bound once the grid leaves L3.
 
 The first peak job (651154) reported only 24.8 GB/s on 24 threads, because
@@ -677,22 +684,27 @@ gave 67.9 GB/s.
 ## M2.6 Experiments (jobs 651300, 651301, 651474, 652647, figures F1 side panel, F7 and F9)
 
 All at 24 threads on 2048 by 512 unless stated, relative to the omp rung in
-the same job.
+the same job. The figures use the jobs above. Jobs 656960, 656961, 656962 and
+656963 rerun the same four sweeps on the final code. Every rate in the rerun
+is within 4% of the first run except the four rows marked rerun below.
 
 | Id | Variant | Result |
 |---|---|---|
-| E4 | one parallel region for the whole solve | 1.035x at 2048 x 512, 1.155x at 512 x 128 |
-| E5 | `schedule(dynamic,1)`, `(dynamic,8)`, `guided` | 0.60x, 0.72x, 0.84x, static wins |
-| E8 | v = 0 row and stock edges inside the parallel loop | 1.05x at 2048 x 512, 1.07x at 512 x 128, serial share 8.2% to 1.9% |
+| E4 | one parallel region for the whole solve | 1.035x at 2048 x 512, 1.155x at 512 x 128. Rerun 1.04x and 1.05x |
+| E5 | `schedule(dynamic,1)`, `(dynamic,8)`, `guided` | 0.60x, 0.72x, 0.84x, static wins. Rerun 0.62x, 0.73x, 0.77x |
+| E8 | v = 0 row and stock edges inside the parallel loop | 1.05x at 2048 x 512, 1.07x at 512 x 128, serial share 8.2% to 1.9%. Rerun 1.11x and 1.10x |
 | E6 | 12 threads `spread` (socket 0 only) against `close` (both sockets), 4096 x 1024 | 1880 against 3319 |
-| E6 | unbound threads (`OMP_PROC_BIND=false`), 24 threads | 1.165x at 2048 x 512, 1.141x at 4096 x 1024, not explained |
+| E6 | unbound threads (`OMP_PROC_BIND=false`), 24 threads | 1.165x at 2048 x 512, 1.141x at 4096 x 1024, not explained. Rerun 1.20x and 1.05x |
 | E7 | `numactl --interleave=all`, 24 threads | 1.065x at 2048 x 512, 1.28x at 4096 x 1024, and far less spread between reps |
 | E11 | glibc default allocator against huge pages pinned | omp 24: 3990 against 5883 (0.68x), serial 88 against 158 (0.56x). Only the first rep of each run gets huge pages |
 | E12 | denormals not flushed (job 651294) | see M2.7 |
 | E3 | float sheets, `omp_float` (job 652647) | 1 thread 735 against simd 383 (1.92x), 24 threads 10048 against 5732 at 2048 x 512 (1.75x), 12945 against 2902 at 4096 x 1024 (4.46x). Rejected for accuracy, see below |
 
-E4 and E8 are small wins that matter most on small grids, where the per-step
-cost is a larger share. E7 confirms the first-touch problem. Every page of
+E4 and E8 are small wins, between 4% and 16% across the two runs. The
+persistent region at 512 x 128 gave 1385 to 1514 Mcell/s in the first run and
+1262 to 1302 in the rerun, so the size of that gain changes from run to run.
+The 24 thread rows on 4096 x 1024 in E6 range from 2699 to 5147 Mcell/s
+within one job, so the unbound ratio there is noise. E7 confirms the first-touch problem. Every page of
 the grid is written first by the main thread, so it all lives in socket 0's
 memory, and spreading the pages gives the big grid 28% more.
 
@@ -728,7 +740,8 @@ price in the table is identical to ten digits with and without flushing.
 simd on one thread runs at 169 to 183 on any grid whose two sheets land
 exactly 2^24 bytes apart (2896 x 724, 1448 x 1448, 2044 x 1026), and at about
 405 on neighbouring grids. omp on 2 threads shows the same (336 against
-814). The trigger is established, the hardware mechanism is not
+814). Serial ran normally at 2896 x 724 in job 651299 (167). On the current
+code it runs at 58 there (job 656959), so serial is hit as well. The trigger is established, the hardware mechanism is not
 (CHANGELOG Phase 5, Finding 1).
 
 ## M2.9 Hybrid MPI and OpenMP (job 651303, figures F6 and F8)
@@ -751,6 +764,11 @@ latency and by waiting for the slower neighbour, not by bandwidth. PLAN §5
 hypothesis 6 (above 80% efficiency) did not hold. The run excludes Open MPI's
 fast transports (`OMPI_MCA_mtl`, `OMPI_MCA_btl`), as the matrixass MPI runs
 needed, so messages go over TCP.
+
+Job 656965 reran this sweep on the final code. Every layout is within 3.1%
+of the table except 2 nodes with 1 rank x 24 each on 2048 x 512, which ran
+at 6288 to 6489 against 5489 to 6008, with a 29% halo share. The best
+layouts and the 1.41 and 1.57 times gains did not move.
 
 ## M2.10 Hypotheses from PLAN §5 against the data
 

@@ -253,7 +253,7 @@ def main():
     # Rung 3, omp. The serial row loop on the left, the same loop with one pragma on the right.
     compose(
         [code_pane(solver_simd,
-                   "Every interior row, four cells at a time",
+                   "Update every interior row, four cells at a time.",
                    "}",
                    [],
                    "simd, one thread"),
@@ -267,16 +267,16 @@ def main():
         out_dir / "shot_omp_pragma.png",
     )
 
-    # Rung 4, mpi. The halo exchange, receive posted before send.
+    # Rung 4, mpi. The edge row exchange, receive posted before send.
     compose(
         [code_pane(solver_mpi,
                    "The bottom process has nobody below it",
                    "MPI_Waitall(",
                    ["MPI_Irecv", "MPI_Isend", "MPI_Waitall"],
                    "mpi, swapping edge rows each step")],
-        "Each process owns a slab of rows and swaps one edge row with each "
+        "Each process owns a block of rows and swaps one edge row with each "
         "neighbour every step. On one node 2x12 beat 1x24 by 1.05x.",
-        out_dir / "shot_mpi_halo.png",
+        out_dir / "shot_mpi_exchange.png",
     )
 
     # No benchmark without a just-passed test suite.

@@ -6,7 +6,7 @@
 # Each script sets SWEEP_NAME first, then calls build_and_validate, write_header and run.
 #
 # CSV columns, the first two are added here so rows from different sweeps never mix up
-#   sweep,label,price,delta,gamma,vega,ns,nv,nt,solver,seconds,cell_updates_per_sec,threads,ranks,halo_seconds,boundary_seconds
+#   sweep,label,price,delta,gamma,vega,ns,nv,nt,solver,seconds,cell_updates_per_sec,threads,ranks,exchange_seconds,boundary_seconds
 
 # Compiler runtime and Open MPI, which provides mpicxx and mpiexec
 module load compiler-rt/latest
@@ -87,7 +87,7 @@ write_header() {
     echo "# cpu=$(lscpu | grep -m1 'Model name' | sed 's/.*: *//')"
     lscpu | grep -E '^(Socket|Core|Thread|NUMA node)' | sed 's/^/# /'
     lscpu | grep -E '^(L1d|L1i|L2|L3) cache' | sed 's/^/# cache_/'
-    echo "# sweep,label,price,delta,gamma,vega,ns,nv,nt,solver,seconds,cell_updates_per_sec,threads,ranks,halo_seconds,boundary_seconds"
+    echo "# sweep,label,price,delta,gamma,vega,ns,nv,nt,solver,seconds,cell_updates_per_sec,threads,ranks,exchange_seconds,boundary_seconds"
   } > "$OUT"
 }
 

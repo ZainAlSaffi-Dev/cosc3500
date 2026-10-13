@@ -10,7 +10,7 @@
 #include "solver.h"
 
 // A grid where today's stock price, the strike and v0 all land exactly on nodes.
-// Stock spacing is 50 and variance spacing is 0.02, and the timestep is stable.
+// Stock spacing 50, variance spacing 0.02, stable timestep.
 static Config aligned_test_config() {
     Config cfg;
     cfg.grid.num_stock_nodes = 421;
@@ -20,28 +20,28 @@ static Config aligned_test_config() {
 }
 
 // Switches off the random variance and checks the solver matches Black-Scholes.
-// With xi = 0 and v0 = theta the variance never moves, so the two must agree.
+// With xi = 0 and v0 = theta the variance never moves.
 int main() {
     Config cfg = aligned_test_config();
 
-    // These two lines turn Heston into Black-Scholes
+    // Setting xi to 0 and v0 to theta turns Heston into Black-Scholes.
     cfg.heston.xi = 0.0;
     cfg.heston.v0 = cfg.heston.theta;
 
-    // Measured error is about 1.1e-3, the tolerance is roughly twice that
+    // Measured error is about 1.1e-3. The tolerance is about twice that.
     double rel_tolerance = 2.5e-3;
     double sigma = std::sqrt(cfg.heston.theta);
 
-    // The solver lives on the stack and is cleaned up at the end of main
+    // The solver lives on the stack and is freed at the end of main.
     BaselineSolver solver;
     bool all_ok = true;
 
     for (int leg = 0; leg < 2; ++leg) {
-        // First leg is the call, second leg is the put
+        // First leg is the call, second leg is the put.
         cfg.option.is_call = (leg == 0);
         SolveResult result = solver.solve(cfg);
 
-        // An unstable run would make the comparison meaningless
+        // Fail on an unstable run.
         double dt = cfg.option.maturity_years / cfg.grid.num_timesteps;
         if (dt > result.dt_stable_estimate) {
             std::printf("test_bs_collapse: UNSTABLE dt %.3e > bound %.3e\n", dt, result.dt_stable_estimate);

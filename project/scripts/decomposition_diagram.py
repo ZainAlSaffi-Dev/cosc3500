@@ -5,7 +5,7 @@
 
 Left, four neighbouring cells of one row in one AVX2 register.
 Middle, OpenMP threads each owning a band of rows.
-Right, MPI ranks each owning a slab, with the halo rows copied from the neighbours.
+Right, MPI ranks each owning a block of rows, with the edge rows copied from the neighbours.
 
     arch -arm64 .venv/bin/python scripts/decomposition_diagram.py --out results/m2/f10_decomposition.png
 """
@@ -95,24 +95,24 @@ def main():
     ax.text(COLUMNS / 2, ROWS + 0.1, "OpenMP, each thread owns a band of rows", ha="center", fontsize=11, weight=600)
     ax.text(COLUMNS / 2, -1.0, "all threads read the old sheet and write only their own rows,\ngrey boundaries are done by the main thread after the barrier", ha="center", fontsize=8.5, color=DARK_GREY)
 
-    # MPI, every row split between 3 ranks, halo rows outlined
+    # MPI, every row split between 3 ranks, received edge rows outlined
     ax = axes[2]
-    slabs = split(ROWS, 3)
+    row_blocks = split(ROWS, 3)
 
     def mpi_colour(row, col):
-        for rank, (begin, end) in enumerate(slabs):
+        for rank, (begin, end) in enumerate(row_blocks):
             if begin <= row < end:
                 return WORKER_COLOURS[rank]
         return LIGHT_GREY
 
     draw_grid(ax, mpi_colour)
-    for rank, (begin, end) in enumerate(slabs):
+    for rank, (begin, end) in enumerate(row_blocks):
         ax.text(COLUMNS + 0.2, (begin + end) / 2, f"rank {rank}", va="center", fontsize=8.5, color=WORKER_COLOURS[rank])
         if rank > 0:
             ax.plot([0, COLUMNS], [begin, begin], color=TEXT, lw=2.5)
             ax.annotate("", xy=(-0.3, begin - 0.5), xytext=(-0.3, begin + 0.5),
                         arrowprops=dict(arrowstyle="<->", color=RED, lw=1.5))
-    ax.text(COLUMNS / 2, ROWS + 0.1, "MPI, each rank owns a slab of rows", ha="center", fontsize=11, weight=600)
+    ax.text(COLUMNS / 2, ROWS + 0.1, "MPI, each rank owns a block of rows", ha="center", fontsize=11, weight=600)
     ax.text(COLUMNS / 2, -1.0, "each step the two rows either side of a black line are swapped,\nso every rank has the one row it reads from each neighbour", ha="center", fontsize=8.5, color=DARK_GREY)
 
     fig.tight_layout()

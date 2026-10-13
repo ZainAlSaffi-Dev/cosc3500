@@ -60,7 +60,7 @@ answer is completely known, because at that moment the option is simply worth
 whatever the payoff is. If the share is above the strike the option is worth
 the difference and otherwise it is worth zero. There is no uncertainty left,
 so no modelling is required. That known sheet is where the program starts, and
-it is created in `Grid::init_payoff` in `src/grid.cpp:35`.
+it is created in `Grid::init_payoff` in `src/grid.cpp:37`.
 
 From there the program steps backwards in time, one small step at a time. At
 each step it works out what every cell of the sheet must have been worth a
@@ -79,7 +79,7 @@ you. This is the same idea as a NumPy array in Python. The class that owns this
 is `Grid` in `include/grid.h`.
 
 To find a particular cell you use the formula in `Grid::index` at
-`include/grid.h:37`, which is the variance row number multiplied by the number
+`include/grid.h:38`, which is the variance row number multiplied by the number
 of share price columns, plus the share price column number. The important
 consequence is that moving one step along the share price direction moves you
 one step along in memory, whereas moving one step along the variance direction
@@ -94,7 +94,7 @@ of the cells around it. If it wrote the new value straight back over the old
 one, then the next cell along would read a value that had already been updated,
 and it would be mixing two different instants in time. So one sheet is read
 from and the other is written to, and at the end of the step they trade places.
-That trade happens in `Grid::swap_buffers` at `src/grid.cpp:27`, and it costs
+That trade happens in `Grid::swap_buffers` at `src/grid.cpp:31`, and it costs
 nothing at all no matter how big the grid is, because swapping two vectors only
 exchanges the small internal pointers rather than copying any of the numbers.
 
@@ -103,7 +103,7 @@ exchanges the small internal pointers rather than copying any of the numbers.
 ## Part 4. What happens in one timestep
 
 This is the heart of the program and it lives in `BaselineSolver::solve` in
-`src/solver_baseline.cpp:62`.
+`src/solver_baseline.cpp:16`.
 
 For every cell in the middle of the sheet the program reads that cell and its
 eight neighbours, which is the cell to the left and right, the cell above and
@@ -112,12 +112,12 @@ slopes and curvatures, which are how fast the value changes as the share price
 moves, how that rate of change is itself changing, the same two quantities in
 the variance direction, and finally a mixed term that captures how the two
 directions interact. Those five estimates are built at
-`src/solver_baseline.cpp:81` to `85`, and each one is just a difference between
+`src/solver_baseline.cpp:68` to `72`, and each one is just a difference between
 neighbouring cells divided by the spacing between them, which is the standard
 way of approximating a derivative on a grid.
 
 Those five quantities are then fed into the Heston equation itself at
-`src/solver_baseline.cpp:87`. Each term of that line has a plain meaning. The
+`src/solver_baseline.cpp:75`. Each term of that line has a plain meaning. The
 first term is the diffusion of the share price, which is the random wobble in
 the share itself. The second is the cross term, which is the effect of the
 share price and the variance being correlated. The third is the diffusion of
@@ -137,7 +137,7 @@ chosen for the project.
 The price of that simplicity is that the timestep cannot be made too large. If
 it is, the scheme becomes unstable and the numbers explode into nonsense within
 a few dozen steps. The program computes the largest safe timestep at
-`src/solver_baseline.cpp:39` and prints it, and the animation in
+`src/solver_baseline.cpp:34` and prints it, and the animation in
 `results/blowup.mp4` shows what happens when that bound is deliberately
 ignored.
 
@@ -152,17 +152,17 @@ separately. There are four of them and each has its own reason.
 The left edge is where the share price is zero. A share worth nothing stays
 worth nothing forever, so at that edge the outcome is certain. A call option is
 worthless there and a put option is certain to pay the strike, which just needs
-discounting back to today. This is at `src/solver_baseline.cpp:118`.
+discounting back to today. This is at `src/solver_baseline.cpp:109`.
 
 The right edge is where the share price is four times the strike. The option is
 so deeply in the money there that exercising it is effectively guaranteed, so
-the value is simply the share less the discounted strike. This is the line
-immediately after, at `src/solver_baseline.cpp:120`.
+the value is simply the share less the discounted strike. This is at
+`src/solver_baseline.cpp:106`.
 
 The top edge is where the variance is at its maximum. By that point the option
 value has stopped responding to further increases in volatility, so the program
 imposes a flat slope by copying the row underneath. This is at
-`src/solver_baseline.cpp:133`, and it deliberately runs last, because the row
+`src/solver_baseline.cpp:121`, and it deliberately runs last, because the row
 it copies has to be finished first.
 
 The bottom edge, where the variance is zero, is the interesting one and it is
@@ -171,7 +171,7 @@ by hand there, but that would be wrong. Every diffusion term in the equation
 carries a factor of the variance, so when the variance is zero all of them
 vanish and what is left behind is a simpler transport equation. The program
 solves that reduced equation instead of guessing, at
-`src/solver_baseline.cpp:100`.
+`src/solver_baseline.cpp:93`.
 
 There is one further subtlety on that bottom row. The slope in the variance
 direction has to be measured using the row above only, rather than by
@@ -188,15 +188,15 @@ information is actually coming from.
 Once the backward march reaches today, the finished sheet holds the option's
 value for every share price and every variance level. The program only needs
 one of those, which is the cell matching today's actual market. That readout
-is `Solver::extract_result` in `src/solver.cpp:42`.
+is `Solver::extract_result` in `src/solver.cpp:34`.
 
 There is a catch that cost real accuracy before it was found. Today's share
 price almost never lands exactly on a grid column. Reading the nearest column
 instead sounds harmless, but on the small test grid it produced a price of
 205.32 when the true answer was 195.25, which is an error of nearly five
 percent. The fix is to blend the four cells surrounding the true market point
-in proportion to how close it is to each, which is done by `blend_cell` at
-`src/solver.cpp:24`.
+in proportion to how close it is to each, which is done by `bilinear_interpolate` at
+`src/solver.cpp:18`.
 
 The same function is then reused to compute the sensitivities, which traders
 call the Greeks. Delta is how much the option price moves when the share price

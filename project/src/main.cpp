@@ -22,91 +22,78 @@ static void usage() {
     std::fprintf(stderr, "              [--bench R] [--ns X] [--nv X] [--nt X] [--maturity Y] [--vmax V]\n");
 }
 
-// Returns the value that follows a flag, such as 1024 in --ns 1024.
-// Moves i forward past the value so the caller skips it.
-static std::string flag_value(int argc, char** argv, int& i) {
-    if (i + 1 >= argc) {
-        throw std::runtime_error(std::string(argv[i]) + " needs a value");
-    }
-    i = i + 1;
-    return argv[i];
-}
-
-// Reads the settings, runs the chosen solver and prints one CSV line per solve.
-// Only the first process prints, and any error is caught and printed instead of crashing.
+// Reads the settings, runs the chosen solver and prints one CSV line for each solve.
+// Only the first process prints. Errors are caught and printed here.
 static int run(int argc, char** argv, int rank) {
+    // Works like try and except in Python. A throw anywhere inside jumps to the catch below.
     try {
-        // First pass finds only the config file.
-        // That way the other flags can override it in any order
-        std::string config_path;
-        for (int i = 1; i < argc; ++i) {
-            if (std::string(argv[i]) == "--config") {
-                config_path = flag_value(argc, argv, i);
-            }
-        }
-        if (config_path.empty()) {
+        // The config file comes first, as in heston --config file.cfg.
+        if (argc < 3 || std::string(argv[1]) != "--config") {
             usage();
             return 1;
         }
-        Config cfg = load_config(config_path);
+        Config cfg = load_config(argv[2]);
 
-        // Second pass applies every other flag on top of the config file
-        for (int i = 1; i < argc; ++i) {
-            std::string arg = argv[i];
-            if (arg == "--config") {
-                // Already read in the first pass, just skip its value
-                flag_value(argc, argv, i);
-            } else if (arg == "--solver") {
-                cfg.solver = flag_value(argc, argv, i);
-            } else if (arg == "--type") {
-                std::string type = flag_value(argc, argv, i);
-                if (type != "call" && type != "put") {
+        // Every other flag is a pair, the flag then its value.
+        // Each flag overwrites the value from the config file.
+        for (int i = 3; i < argc; i = i + 2) {
+            std::string flag = argv[i];
+            // A flag typed last with no value after it.
+            if (i + 1 >= argc) {
+                throw std::runtime_error(flag + " needs a value");
+            }
+            std::string value = argv[i + 1];
+
+            if (flag == "--solver") {
+                cfg.solver = value;
+            } else if (flag == "--type") {
+                if (value != "call" && value != "put") {
                     throw std::runtime_error("--type must be call or put");
                 }
-                cfg.option.is_call = (type == "call");
-            } else if (arg == "--dump-every") {
-                cfg.dump_every = std::stoi(flag_value(argc, argv, i));
-            } else if (arg == "--dump-dir") {
-                cfg.dump_dir = flag_value(argc, argv, i);
-            } else if (arg == "--bench") {
-                cfg.bench_reps = std::stoi(flag_value(argc, argv, i));
-            } else if (arg == "--ns") {
-                cfg.grid.num_stock_nodes = std::stoi(flag_value(argc, argv, i));
-            } else if (arg == "--nv") {
-                cfg.grid.num_variance_nodes = std::stoi(flag_value(argc, argv, i));
-            } else if (arg == "--nt") {
-                cfg.grid.num_timesteps = std::stoi(flag_value(argc, argv, i));
-            } else if (arg == "--vmax") {
-                // The weak scaling sweep grows the grid in variance at a fixed spacing
-                cfg.grid.variance_max = std::stod(flag_value(argc, argv, i));
-            } else if (arg == "--maturity") {
-                // A shorter maturity keeps a big grid stable for benchmarks
-                cfg.option.maturity_years = std::stod(flag_value(argc, argv, i));
+                cfg.option.is_call = (value == "call");
+            } else if (flag == "--dump-every") {
+                cfg.dump_every = std::stoi(value);
+            } else if (flag == "--dump-dir") {
+                cfg.dump_dir = value;
+            } else if (flag == "--bench") {
+                cfg.bench_reps = std::stoi(value);
+            } else if (flag == "--ns") {
+                cfg.grid.num_stock_nodes = std::stoi(value);
+            } else if (flag == "--nv") {
+                cfg.grid.num_variance_nodes = std::stoi(value);
+            } else if (flag == "--nt") {
+                cfg.grid.num_timesteps = std::stoi(value);
+            } else if (flag == "--vmax") {
+                // Used by the weak scaling sweep to grow the variance axis.
+                cfg.grid.variance_max = std::stod(value);
+            } else if (flag == "--maturity") {
+                // A shorter maturity keeps a big grid stable in the benchmarks.
+                cfg.option.maturity_years = std::stod(value);
             } else {
-                // Anything else is a typo, so stop
+                // Anything else is a typo.
                 usage();
-                throw std::runtime_error("unknown flag: " + arg);
+                throw std::runtime_error("unknown flag: " + flag);
             }
         }
 
-        // The unique_ptr owns the solver and deletes it at the end of run
+        // The unique_ptr owns the solver and deletes it at the end of run.
         std::unique_ptr<Solver> solver = make_solver(cfg.solver);
 
-        // --bench R repeats the solve so the scripts can take a median
+        // --bench R repeats the solve R times.
         int reps = 1;
         if (cfg.bench_reps > 0) {
             reps = cfg.bench_reps;
         }
         for (int rep = 0; rep < reps; ++rep) {
             SolveResult result = solver->solve(cfg);
-            // With several processes only the first one prints the result
+            // With several processes only the first one prints.
             if (rank == 0) {
                 print_result_csv(result, cfg);
             }
         }
         return 0;
     } catch (const std::exception& e) {
-        // Reading the config, picking the solver or a bad process count can throw
+        // Errors from the config, the solver choice or the process count land here.
         std::fprintf(stderr, "heston: %s\n", e.what());
         return 1;
     }
@@ -115,7 +102,7 @@ static int run(int argc, char** argv, int rank) {
 // Starts MPI, runs the program, and shuts MPI down again.
 // MPI_Finalize must run even when the program fails, so the work is in run().
 int main(int argc, char** argv) {
-    // Every rung runs inside MPI, the non MPI ones simply as one process
+    // Every solver runs inside MPI. The non MPI solvers run as one process.
     MPI_Init(&argc, &argv);
     int rank = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);

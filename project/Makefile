@@ -76,7 +76,7 @@ test: $(TESTS)
 	@echo "ALL TESTS PASS"
 
 # The ladder test again as 2 and 3 processes.
-# 3 does not divide the test grid's 32 rows, so the slabs come out uneven.
+# 3 does not divide the test grid's 32 rows, so the row blocks come out uneven.
 # Two threads per process, and no core pinning so the threads can spread out
 MPIEXEC = mpiexec --oversubscribe --bind-to none
 test-mpi: tests/test_ladder_matches
@@ -178,7 +178,7 @@ bench-plot:
 # Every CSV is named by its job id, so the figures can always be traced to a run
 M2_CSVS = results/bench_m2_ladder_651295.csv results/bench_m2_strong_omp_651296.csv \
           results/bench_m2_strong_omp_scalar_651297.csv results/bench_m2_weak_651298.csv \
-          results/bench_m2_size_651299.csv results/bench_m2_exp_a_651300.csv \
+          results/bench_m2_size_656959.csv results/bench_m2_exp_a_651300.csv \
           results/bench_m2_exp_b_651301.csv results/bench_m2_exp_c_651474.csv \
           results/bench_m2_exp_float_652647.csv results/bench_m2_optlevels_652696.csv \
           results/bench_m2_mpi_651303.csv results/bench_m2_denormal_651294.csv
@@ -187,6 +187,7 @@ m2-figures:
 	  --test-log results/logs/slurm-652647.out --out results/m2 \
 	  --profile results/profile_baseline_652697.txt results/profile_serial_652697.txt results/profile_simd_652697.txt
 	$(PY) scripts/decomposition_diagram.py --out results/m2/f10_decomposition.png
+	$(PY) scripts/method_figures.py --out results/m2
 
 # Why layout and loop order dominate: the cache-line sweep (row-major vs the
 # ctl-order control, with a modelled LRU cache) and the double-buffer
@@ -264,7 +265,7 @@ package:
 	         ./ /tmp/$(PKG)/code/
 	cp "$(VIDEO)" /tmp/$(PKG)/
 	@echo "--- verifying no secrets made it in ---"
-	@! grep -rqI --exclude-dir=.git 'PASSWORD\|password *=' /tmp/$(PKG)/code/ \
+	@! grep -rqI --exclude-dir=.git '[P]ASSWORD\|[p]assword *=' /tmp/$(PKG)/code/ \
 	  || { echo "REFUSING: something password-shaped is in the payload"; exit 1; }
 	@test ! -e /tmp/$(PKG)/code/.env || { echo "REFUSING: .env present"; exit 1; }
 	cd /tmp && rm -f $(PKG).zip && zip -qr $(PKG).zip $(PKG)

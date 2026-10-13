@@ -6,7 +6,6 @@
 #include <omp.h>
 
 #include <algorithm>
-#include <chrono>
 #include <stdexcept>
 #include <vector>
 
@@ -14,78 +13,79 @@
 #include "solver.h"
 #include "stencil.h"
 
-// The block of variance rows one process owns, from begin up to end - 1.
+// The variance rows one process owns, from begin up to end - 1.
 // A plain record, like a Python tuple with names.
-struct RowSlab {
+struct RowRange {
     int begin = 0;
     int end = 0;
 };
 
 // Works out which rows a process owns when the rows are shared out evenly.
-// When they do not divide evenly the first processes get one extra row each.
-static RowSlab slab_for_rank(int num_rows, int rank, int num_ranks) {
+// The first few processes get one extra row each when they do not divide evenly.
+static RowRange rows_for_rank(int num_rows, int rank, int num_ranks) {
     int rows_per_rank = num_rows / num_ranks;
     int extra_rows = num_rows % num_ranks;
 
-    RowSlab slab;
+    RowRange rows;
     if (rank < extra_rows) {
-        // This process is one of the first few, so it takes one extra row
-        slab.begin = rank * (rows_per_rank + 1);
-        slab.end = slab.begin + rows_per_rank + 1;
+        // One of the first few processes, with one extra row.
+        rows.begin = rank * (rows_per_rank + 1);
+        rows.end = rows.begin + rows_per_rank + 1;
     } else {
-        // Skip past the processes that took an extra row
-        slab.begin = extra_rows * (rows_per_rank + 1) + (rank - extra_rows) * rows_per_rank;
-        slab.end = slab.begin + rows_per_rank;
+        // Skip past the processes that took an extra row.
+        rows.begin = extra_rows * (rows_per_rank + 1) + (rank - extra_rows) * rows_per_rank;
+        rows.end = rows.begin + rows_per_rank;
     }
-    return slab;
+    return rows;
 }
 
-// Swaps the edge rows of one sheet with the processes above and below.
-// Afterwards this process holds a fresh copy of the row just outside each end of its slab.
-static void exchange_halo_rows(std::vector<double>& sheet, int num_stock_nodes, RowSlab slab, int rank, int num_ranks) {
-    // Each row is num_stock_nodes doubles in a row, so it goes as one message
-    double* first_row = sheet.data() + slab.begin * num_stock_nodes;
-    double* last_row = sheet.data() + (slab.end - 1) * num_stock_nodes;
-    double* halo_below = sheet.data() + (slab.begin - 1) * num_stock_nodes;
-    double* halo_above = sheet.data() + slab.end * num_stock_nodes;
-    int halo_tag = 0;
+// Sends this process's first and last rows to the processes below and above, and receives theirs.
+// The received rows land just outside this process's rows. HPC texts call them halo or ghost rows.
+static void exchange_edge_rows(std::vector<double>& buffer, int num_stock_nodes, RowRange owned_rows, int rank, int num_ranks) {
+    // Each row is num_stock_nodes doubles next to each other, sent as one message.
+    double* first_row = buffer.data() + owned_rows.begin * num_stock_nodes;
+    double* last_row = buffer.data() + (owned_rows.end - 1) * num_stock_nodes;
+    double* row_below = buffer.data() + (owned_rows.begin - 1) * num_stock_nodes;
+    double* row_above = buffer.data() + owned_rows.end * num_stock_nodes;
+    int message_tag = 0;
 
-    // One request per message, so we can wait for all of them at the end
+    // One request per message.
+    // push_back adds to the end, like append in Python.
     std::vector<MPI_Request> requests;
 
-    // The bottom process has nobody below it
+    // The bottom process has nobody below it.
     if (rank > 0) {
-        // Post the receive first so the message can land straight in place
+        // Post the receive first.
         MPI_Request receive_below;
-        MPI_Irecv(halo_below, num_stock_nodes, MPI_DOUBLE, rank - 1, halo_tag, MPI_COMM_WORLD, &receive_below);
+        MPI_Irecv(row_below, num_stock_nodes, MPI_DOUBLE, rank - 1, message_tag, MPI_COMM_WORLD, &receive_below);
         requests.push_back(receive_below);
 
         MPI_Request send_below;
-        MPI_Isend(first_row, num_stock_nodes, MPI_DOUBLE, rank - 1, halo_tag, MPI_COMM_WORLD, &send_below);
+        MPI_Isend(first_row, num_stock_nodes, MPI_DOUBLE, rank - 1, message_tag, MPI_COMM_WORLD, &send_below);
         requests.push_back(send_below);
     }
 
-    // The top process has nobody above it
+    // The top process has nobody above it.
     if (rank < num_ranks - 1) {
         MPI_Request receive_above;
-        MPI_Irecv(halo_above, num_stock_nodes, MPI_DOUBLE, rank + 1, halo_tag, MPI_COMM_WORLD, &receive_above);
+        MPI_Irecv(row_above, num_stock_nodes, MPI_DOUBLE, rank + 1, message_tag, MPI_COMM_WORLD, &receive_above);
         requests.push_back(receive_above);
 
         MPI_Request send_above;
-        MPI_Isend(last_row, num_stock_nodes, MPI_DOUBLE, rank + 1, halo_tag, MPI_COMM_WORLD, &send_above);
+        MPI_Isend(last_row, num_stock_nodes, MPI_DOUBLE, rank + 1, message_tag, MPI_COMM_WORLD, &send_above);
         requests.push_back(send_above);
     }
 
-    // Nothing may touch these rows until every send and receive has finished
+    // Wait for every send and receive to finish.
     MPI_Waitall((int)requests.size(), requests.data(), MPI_STATUSES_IGNORE);
 }
 
-// Prices the option on several processes, each owning one slab of variance rows.
-// Each process runs the OpenMP loop over its own rows and swaps one edge row with each neighbour per step.
+// Prices the option on several processes, each owning a block of variance rows.
+// Each process runs the OpenMP loop over its rows and swaps edge rows with its neighbours every step.
 SolveResult MpiSolver::solve(const Config& cfg) {
     SolveResult result;
 
-    // Which process this is, and how many there are
+    // Which process this is, and how many there are.
     int rank = 0;
     int num_ranks = 1;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -93,18 +93,18 @@ SolveResult MpiSolver::solve(const Config& cfg) {
     result.ranks = num_ranks;
     result.threads = omp_get_max_threads();
 
-    // Snapshots would only hold this process's rows, so they are not supported
+    // Snapshots are not supported with MPI.
     if (cfg.dump_every > 0) {
         throw std::runtime_error("--dump-every is not supported by the mpi solver");
     }
 
-    // Every process keeps the whole grid but only updates its own rows
+    // Every process keeps the whole grid and updates only its own rows.
     Grid grid(cfg.grid, cfg.option);
     grid.init_payoff(cfg.option);
 
     int num_timesteps = cfg.grid.num_timesteps;
     double dt = cfg.option.maturity_years / num_timesteps;
-    // Only the first process prints the stability line
+    // Only the first process prints the stability line.
     if (rank == 0) {
         report_stability(grid, cfg, dt, result);
     }
@@ -113,16 +113,16 @@ SolveResult MpiSolver::solve(const Config& cfg) {
     int num_stock_nodes = constants.num_stock_nodes;
     int num_variance_nodes = constants.num_variance_nodes;
 
-    // The top row copies the row below it, so the last slab needs at least two rows
+    // Each process needs at least two rows.
     if (num_variance_nodes / num_ranks < 2) {
         throw std::runtime_error("too many processes, each one needs at least two variance rows");
     }
-    // This process's rows, out of all rows from 0 to num_variance_nodes - 1
-    RowSlab slab = slab_for_rank(num_variance_nodes, rank, num_ranks);
+    // The rows this process owns.
+    RowRange owned_rows = rows_for_rank(num_variance_nodes, rank, num_ranks);
 
-    // The interior rows inside this slab, skipping row 0 and the top row
-    int first_interior = std::max(slab.begin, 1);
-    int end_interior = std::min(slab.end, num_variance_nodes - 1);
+    // Interior rows this process owns, without row 0 and the top row.
+    int first_interior = std::max(owned_rows.begin, 1);
+    int end_interior = std::min(owned_rows.end, num_variance_nodes - 1);
     bool owns_zero_row = (rank == 0);
     bool owns_top_row = (rank == num_ranks - 1);
 
@@ -130,53 +130,53 @@ SolveResult MpiSolver::solve(const Config& cfg) {
     std::vector<double>& next = grid.next();
 
     for (int step = 1; step <= num_timesteps; ++step) {
-        auto step_start = std::chrono::steady_clock::now();
+        double step_start = omp_get_wtime();
 
-        // This process's interior rows, split between its threads as in the omp solver
+        // Split this process's interior rows between its threads.
         #pragma omp parallel for schedule(static) default(none) shared(constants, current, next, first_interior, end_interior)
         for (int var_j = first_interior; var_j < end_interior; ++var_j) {
             update_row_avx(constants, current, next, var_j);
         }
 
-        // Each boundary is done only by the process that owns it
-        auto boundary_start = std::chrono::steady_clock::now();
+        // Only the owning process updates each boundary.
+        double boundary_start = omp_get_wtime();
         if (owns_zero_row) {
             update_zero_row(constants, current, next);
         }
-        apply_stock_edges(constants, next, slab.begin, slab.end, step * dt);
+        apply_stock_edges(constants, next, owned_rows.begin, owned_rows.end, step * dt);
         if (owns_top_row) {
             copy_top_row(constants, next);
         }
-        auto boundary_end = std::chrono::steady_clock::now();
-        result.boundary_seconds += std::chrono::duration<double>(boundary_end - boundary_start).count();
+        double boundary_end = omp_get_wtime();
+        result.boundary_seconds += boundary_end - boundary_start;
 
-        // Send our edge rows to the neighbours and receive theirs.
-        // The next step reads one row past each end of the slab, so it needs these
-        auto halo_start = std::chrono::steady_clock::now();
-        exchange_halo_rows(next, num_stock_nodes, slab, rank, num_ranks);
-        auto halo_end = std::chrono::steady_clock::now();
-        result.halo_seconds += std::chrono::duration<double>(halo_end - halo_start).count();
+        // Send the edge rows to the neighbours and receive theirs.
+        // The next step reads one row past each end of this process's rows.
+        double exchange_start = omp_get_wtime();
+        exchange_edge_rows(next, num_stock_nodes, owned_rows, rank, num_ranks);
+        double exchange_end = omp_get_wtime();
+        result.exchange_seconds += exchange_end - exchange_start;
 
         grid.swap_buffers();
 
-        auto step_end = std::chrono::steady_clock::now();
-        result.seconds += std::chrono::duration<double>(step_end - step_start).count();
+        double step_end = omp_get_wtime();
+        result.seconds += step_end - step_start;
     }
 
-    // Collect every slab into the first process's spare sheet.
-    // Gatherv is the version of gather where each process can send a different amount
+    // Collect the rows of every process into the next buffer of the first process.
+    // Gatherv lets each process send a different amount.
     std::vector<int> counts(num_ranks);
     std::vector<int> offsets(num_ranks);
     for (int other_rank = 0; other_rank < num_ranks; ++other_rank) {
-        RowSlab other_slab = slab_for_rank(num_variance_nodes, other_rank, num_ranks);
-        counts[other_rank] = (other_slab.end - other_slab.begin) * num_stock_nodes;
-        offsets[other_rank] = other_slab.begin * num_stock_nodes;
+        RowRange other_rows = rows_for_rank(num_variance_nodes, other_rank, num_ranks);
+        counts[other_rank] = (other_rows.end - other_rows.begin) * num_stock_nodes;
+        offsets[other_rank] = other_rows.begin * num_stock_nodes;
     }
-    const double* my_rows = current.data() + slab.begin * num_stock_nodes;
-    int my_count = (slab.end - slab.begin) * num_stock_nodes;
-    MPI_Gatherv(my_rows, my_count, MPI_DOUBLE, next.data(), counts.data(), offsets.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    const double* my_values = current.data() + owned_rows.begin * num_stock_nodes;
+    int my_count = (owned_rows.end - owned_rows.begin) * num_stock_nodes;
+    MPI_Gatherv(my_values, my_count, MPI_DOUBLE, next.data(), counts.data(), offsets.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    // The gathered sheet becomes current, so extract_result reads it
+    // Make the gathered buffer current for extract_result.
     grid.swap_buffers();
     if (rank == 0) {
         extract_result(grid, cfg, result);

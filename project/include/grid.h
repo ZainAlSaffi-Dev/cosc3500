@@ -10,19 +10,19 @@
 #include "params.h"
 
 // Where a point such as today's stock price falls along one axis.
-// cell is the node just below it, weight is how far towards the next node (0 to 1).
+// cell is the node just below the point. weight is how far towards the next node, from 0 to 1.
 struct AxisPosition {
     int cell = 0;
     double weight = 0.0;
 };
 
-// The grid of option values, stock price across and variance down.
-// It holds two copies of the sheet, one being read and one being written.
+// The grid of option values. Stock price goes across and variance goes down.
+// Holds two buffers, one read and one written each step.
 class Grid {
 public:
     Grid(const GridSpec& spec, const OptionSpec& opt);
 
-    // Simple getters for the grid size and spacing.
+    // Getters for the grid size and spacing.
     // The const at the end means calling them cannot change the grid.
     int num_stock_nodes() const { return num_stock_nodes_; }
     int num_variance_nodes() const { return num_variance_nodes_; }
@@ -34,12 +34,13 @@ public:
     double variance(int var_j) const { return var_j * variance_spacing_; }
 
     // Position of node (stock_i, var_j) in the flat buffer.
-    // Each row is laid out one after another in memory.
+    // Rows are stored one after another in memory.
     int index(int stock_i, int var_j) const { return var_j * num_stock_nodes_ + stock_i; }
 
-    // The sheet being read this step, given back read only.
+    // The buffer read this step, read only.
+    // The & returns the buffer itself without a copy.
     const std::vector<double>& current() const { return current_; }
-    // The sheet being written this step.
+    // The buffer written this step.
     std::vector<double>& next() { return next_; }
 
     void swap_buffers();
@@ -48,13 +49,15 @@ public:
     AxisPosition variance_position(double v0) const;
 
 private:
+    // Only Grid's own functions can use these.
+    // The trailing _ marks them as private fields.
     int num_stock_nodes_ = 0;
     int num_variance_nodes_ = 0;
-    // Gap between stock nodes, called ds in the maths
+    // Gap between stock nodes, ds in the maths.
     double stock_spacing_ = 0.0;
-    // Gap between variance nodes, called dv in the maths
+    // Gap between variance nodes, dv in the maths.
     double variance_spacing_ = 0.0;
-    // The two sheets
+    // The two buffers.
     std::vector<double> current_;
     std::vector<double> next_;
 };

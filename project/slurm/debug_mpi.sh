@@ -38,7 +38,7 @@ echo "nodes: $SLURM_JOB_NODELIST"
 
 export OMP_NUM_THREADS=2
 
-# One process per node, so the halo rows cross the network
+# One process per node, so the edge row exchange crosses the network
 echo "== 2 processes, one per node"
 mpiexec -n 2 --map-by node --bind-to none --report-bindings ./tests/test_ladder_matches 2>/dev/null
 

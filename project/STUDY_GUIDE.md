@@ -17,7 +17,9 @@ Everything else is background, validation and Milestone 1 history.
 **This guide is about the maths and the ideas.** The code, file by file and
 snippet by snippet, is in [CODE_GUIDE.md](CODE_GUIDE.md). Read this guide
 first, because the code guide points back here for the why behind each
-formula.
+formula. To follow the logic through the code itself, CODE_GUIDE §1.5
+traces one run from `main` to the printed result, with a link to the line
+of every step.
 
 **How the code snippets work.** Every snippet is copied from the real file,
 mostly with its comments removed so it stays short. The file and function are
@@ -317,7 +319,9 @@ the small test grid so the numbers are real.
 
 #### 6.1 What one sheet is
 
-One sheet is a table of option values at one moment in time.
+One sheet is a table of option values at one moment in time. The code calls
+each sheet a buffer (`current` and `next`), because only two are kept and
+they are reused every step.
 
 - Each column is a possible stock price. On the test grid the columns are
   50 apart, so column 0 is S = 0, column 104 is S = 5200 and column 105 is
@@ -1212,6 +1216,79 @@ This part covers the ideas behind how the program runs fast and how we
 measure it. The code itself, file by file and snippet by snippet, is in
 [CODE_GUIDE.md](CODE_GUIDE.md).
 
+### 10b. Bytes, MiB and memory pages
+
+Memory is counted in bytes. One byte is 8 bits, and one `double` takes 8
+bytes. Bigger units go up in steps of 1024, because memory hardware is built
+in powers of two, and 1024 is 2 to the power 10.
+
+| Unit | Bytes | In this project |
+|---|---|---|
+| byte | 1 | one `double` is 8 bytes |
+| cache line | 64 | 8 doubles, the amount the cache moves at once |
+| KiB, kibibyte | 1024 | 4 KiB is one normal memory page |
+| MiB, mebibyte | 1024 KiB = 1,048,576 | one sheet is 8 MiB |
+| GiB, gibibyte | 1024 MiB | |
+| TiB, tebibyte | 1024 GiB | keeping every sheet would take 7.5 TiB |
+
+The i in KiB and MiB marks the 1024 version. KB and MB strictly mean 1000 and
+1,000,000, so 1 MiB is about 5% more than 1 MB. Chip makers often write MB for
+cache sizes when they mean MiB, so the 30 MB L3 cache on an r730 socket is 30
+MiB.
+
+The sizes to know by heart.
+
+```text
+one row     2048 doubles × 8 bytes          = 16,384 bytes    = 16 KiB
+one sheet   2048 × 512 doubles × 8 bytes    = 8,388,608 bytes = 8 MiB
+two sheets  current and next                                  = 16 MiB
+L3 cache    one r730 socket                                   = 30 MiB, so both sheets fit
+```
+
+A memory page is the fixed-size chunk the operating system hands out memory
+in. A program never sees real RAM addresses. Every address it uses is a
+virtual address, and the operating system keeps a page table that says which
+piece of real RAM each page of addresses lives in. On Linux on x86 a normal
+page is 4 KiB. In Python terms, the page table is a dict from page number to a
+place in RAM, and every load and every store has to look its page up.
+
+```text
+address the program uses  =  page number  +  position inside the page
+                                  |              (last 12 bits, because 4 KiB = 2^12)
+                                  v
+              TLB, a small cache of recent lookups    hit   almost free
+                                  | miss
+                                  v
+              page table in RAM, four levels deep     page walk, several extra memory reads
+```
+
+The page table itself sits in RAM, so a full lookup on every access would
+make every load several loads. The core keeps the translations it used
+recently in the TLB, the translation lookaside buffer. In Python terms it is
+an `lru_cache` in front of the dict. On the r730 Haswell cores the
+second-level TLB holds 1024 entries, one entry per page.
+
+Because the TLB counts pages, not bytes, the page size decides how much memory
+it covers. 1024 entries of 4 KiB cover only 4 MiB. 1024 entries of 2 MiB huge
+pages cover 2 GiB.
+
+| Page size | Pages needed for the 16 MiB of sheets | Fits in 1024 TLB entries? |
+|---|---|---|
+| 4 KiB, normal page | 4096 | no, so the core keeps doing page walks |
+| 2 MiB, huge page | 8 | yes, with room to spare |
+
+That is where the 1.66 times in the page-size trap (§13) comes from. The same binary on
+the same grid ran at 134.8 Mcell/s on huge pages and 81.1 on 4 KiB pages.
+Nothing in the code changed, only the page size the memory happened to get.
+Linux gives a block huge pages by itself (transparent huge pages) when the
+block comes fresh from the operating system through `mmap`.
+`MALLOC_MMAP_THRESHOLD_=1048576` makes every block over 1 MiB come that way,
+so every benchmark sets it.
+
+Pages also decide where memory sits on a two-socket node. Each page is placed
+on the socket of the thread that first writes to it, one page at a time. This
+is first touch (§16.8).
+
 ### 11. The double-buffer trick
 
 Within one timestep, every new cell must be computed from the *old* sheet
@@ -1891,6 +1968,18 @@ serial fraction of the work, and our per-step barrier is exactly such a
 fraction. The lecture example is that 90% parallel code can reach at most
 10×. **Gustafson's law** says that if you scale the *problem* up with the
 machine, efficiency comes back, so finer grids justify more cores.
+The task sheet names Gustafson's law, but the lectures do not teach it, so
+the video cites the paper, J. L. Gustafson, Reevaluating Amdahl's law, Communications of the ACM 31(5), 532 to 533, 1988. With serial share f of the scaled run on N cores, the scaled speedup
+is f + (1 - f)N. Our measured f = 0.0836 on 24 threads gives 22, against 19
+measured.
+
+The video stays with what the course teaches. Where a slide uses an idea from
+outside the lectures, it carries a source line, and M2_SCRIPT.md lists them.
+The roofline is from Williams, Waterman and Patterson (2009). Fitting
+Amdahl's serial fraction to measured speedups is the Karp and Flatt metric
+(1990), which `amdahl_fit` in `scripts/m2_figures.py` does by least squares
+over every thread count. First touch and NUMA are from Drepper (2007).
+Denormal numbers are from Goldberg (1991).
 
 ---
 
@@ -2429,7 +2518,8 @@ Each rank owns a contiguous block of variance rows, a slab. With 512 rows on
 2 ranks, rank 0 owns rows 0 to 255 and rank 1 owns 256 to 511. When the rows
 do not divide evenly the first ranks get one extra row. Rank 0 owns the
 v = 0 row and the last rank owns the top row, so every boundary has exactly
-one owner.
+one owner. In the code a slab is a `RowRange` called `owned_rows`, made by
+`rows_for_rank`.
 
 Rows are the right unit here for the same reasons as in OpenMP (§16.4), and
 for one more. A row is contiguous in memory (`idx = j*Ns + i`), so a whole
@@ -2444,6 +2534,8 @@ rank's first row needs the row just below its slab, and its last row needs
 the row just above. Those rows belong to the neighbours. Each step, each
 rank receives a copy of them. Those copies are called halo rows (or ghost
 rows), and they are one row deep because the stencil reaches exactly one row.
+The code names them by position, `row_below` and `row_above`, and the
+function that swaps them is `exchange_edge_rows`.
 
 ```text
   rank 1 owns rows 256..511                    rank 0 owns rows 0..255
@@ -2509,7 +2601,7 @@ The wait in step 3 is also a synchronisation point. A rank cannot start step
 k + 1 until its neighbours have finished step k, which keeps neighbouring
 ranks in step with each other without any global barrier.
 
-The time spent in step 3 is added up in `halo_seconds` so the benchmarks can
+The time spent in step 3 is added up in `exchange_seconds` so the benchmarks can
 show communication against compute. Experiment E9 overlaps it with compute,
 by updating and sending the edge rows first and then doing the middle rows
 while the messages travel.
@@ -2549,7 +2641,7 @@ reuse the same `extract_result` after one gather.
 
 For a grid too big for one machine, each rank would instead allocate only
 its slab plus one halo row on each side, and every row index would be shifted
-by `slab.begin - 1`. The maths would not change. That is the textbook layout,
+by `owned_rows.begin - 1`. The maths would not change. That is the textbook layout,
 and it is what this rung would become if memory ran out.
 
 #### 17.8 Collecting the answer with MPI_Gatherv

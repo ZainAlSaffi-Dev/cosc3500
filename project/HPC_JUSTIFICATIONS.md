@@ -72,7 +72,7 @@ repetitive, which is the kind of work parallel hardware is good at.
 ### Why two buffers instead of updating the grid in place?
 
 ```cpp
-// src/grid.cpp:24-25 and 30-32
+// src/grid.cpp:25-26 and 31-33
 current_.assign(total_cells, 0.0);
 next_.assign(total_cells, 0.0);
 
@@ -98,7 +98,7 @@ pointers.
 ### Why was the hot spot measured before anything was optimised?
 
 ```cpp
-// src/solver_serial.cpp:40-50 (excerpt)
+// src/solver_serial.cpp:42-52 (excerpt)
 for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
     update_row_scalar(constants, current, next, var_j);
 }
@@ -129,14 +129,15 @@ one loop nest.
 ### Why is the grid one flat array and not a 2-D array of rows?
 
 ```cpp
-// src/grid.cpp:23-25
-std::size_t total_cells = (std::size_t)num_stock_nodes_ * num_variance_nodes_;
+// src/grid.cpp:24-26
+int total_cells = num_stock_nodes_ * num_variance_nodes_;
 current_.assign(total_cells, 0.0);
 next_.assign(total_cells, 0.0);
 ```
 
-- `total_cells` is the number of cells in the whole grid, worked out in
-  `std::size_t` so a large grid cannot overflow an `int`.
+- `total_cells` is the number of cells in the whole grid. An `int` holds
+  up to about 2.1 billion, and the largest grid benchmarked, 8192 by 1024,
+  has 8.4 million cells.
 - Each `assign` makes one contiguous block of `total_cells` doubles.
 
 A flat array is one contiguous block of memory, so the hardware prefetcher
@@ -193,7 +194,7 @@ OpenMP rung dropped to 0.68 times the pinned rate.
 ### Why replace divisions with multiplications by hand?
 
 ```cpp
-// src/solver_baseline.cpp:66-67, before
+// src/solver_baseline.cpp:68-69, before
 double dV_dS = (east - west) / (2.0 * grid.stock_spacing());
 double d2V_dS2 = (east - 2.0 * centre + west) / (grid.stock_spacing() * grid.stock_spacing());
 
@@ -430,7 +431,7 @@ remainder, not by arithmetic.
 ### Why OpenMP, and why one pragma over the rows?
 
 ```cpp
-// src/solver_omp.cpp:46-49
+// src/solver_omp.cpp:45-48
 #pragma omp parallel for schedule(static) default(none) shared(constants, current, next, num_variance_nodes)
 for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
     update_row_avx(constants, current, next, var_j);
@@ -469,7 +470,7 @@ nothing is summed across threads. So there is no data race, and there is no
 ### Why `schedule(static)`?
 
 ```cpp
-// src/solver_experiments.cpp:132, the experiment E5 version
+// src/solver_experiments.cpp:131, the experiment E5 version
 #pragma omp parallel for schedule(runtime) default(none) shared(constants, current, next, num_variance_nodes)
 ```
 
@@ -481,7 +482,8 @@ nothing is summed across threads. So there is no data race, and there is no
 
 Every row has the same number of cells and the same formula, so every row
 costs the same. Experiment E5 measured the alternatives. `dynamic,1` ran at
-0.60 times, `dynamic,8` at 0.72 times and `guided` at 0.84 times, because
+0.60 times, `dynamic,8` at 0.72 times and `guided` at 0.84 times (0.62,
+0.73 and 0.77 in the rerun, job 656960), because
 dynamic scheduling hands out work at run time and breaks the contiguous
 bands, for no benefit when the load is already balanced.
 
@@ -496,7 +498,7 @@ most data races start.
 ### Why do the boundaries stay serial?
 
 ```cpp
-// src/solver_omp.cpp:55-57
+// src/solver_omp.cpp:54-56
 update_zero_row(constants, current, next);
 apply_stock_edges(constants, next, 0, num_variance_nodes, step * dt);
 copy_top_row(constants, next);
@@ -509,7 +511,7 @@ copy_top_row(constants, next);
 
 The boundaries are about 5100 cells against about a million interior cells.
 Leaving them on the main thread kept the OpenMP change to one pragma.
-Experiment E8 (`OmpEdgesSolver`, `src/solver_experiments.cpp:177-185`) then
+Experiment E8 (`OmpEdgesSolver`, `src/solver_experiments.cpp:176-184`) then
 measured what that cost by moving the zero row and the stock edges inside
 the parallel loop. It gained 1.05 times at 2048 by 512 and cut the serial
 share of the step from 8.2% to 1.9%.
@@ -547,7 +549,7 @@ threads.
 ### Why one persistent parallel region was tried
 
 ```cpp
-// src/solver_experiments.cpp:81-97 (excerpt)
+// src/solver_experiments.cpp:80-97 (excerpt)
 #pragma omp parallel default(none) shared(constants, current, next, grid, num_variance_nodes, num_timesteps, dt)
 {
     for (int step = 1; step <= num_timesteps; ++step) {
@@ -574,14 +576,14 @@ threads.
 
 Experiment E4 tested whether starting the team once is faster than forking
 it every step. It gained 1.035 times at 2048 by 512 and 1.155 times at 512
-by 128. The gain is real on small grids, where the per-step fork is a
-larger share, but it is small on the benchmark grid, and keeping the
+by 128. The rerun (job 656960) gave 1.04 and 1.05 times, so the gain at
+512 by 128 changes from run to run. The gain is small on the benchmark grid, and keeping the
 one-pragma rung made the step from SIMD to OpenMP easier to show.
 
 ### What happens if `OMP_NUM_THREADS` is larger than the number of cores?
 
 ```cpp
-// src/solver_omp.cpp:20
+// src/solver_omp.cpp:19
 result.threads = omp_get_max_threads();
 ```
 
@@ -618,7 +620,7 @@ this.
 ### Why does page placement matter, and why was it tested with numactl?
 
 ```cpp
-// src/grid.cpp:24
+// src/grid.cpp:25
 current_.assign(total_cells, 0.0);
 ```
 ```bash
@@ -646,7 +648,7 @@ question without changing code. It gave 1.065 times at 2048 by 512 and
 ### Why add MPI at all, when OpenMP already uses the whole node?
 
 ```cpp
-// src/main.cpp:119-123
+// src/main.cpp:106-110
 MPI_Init(&argc, &argv);
 ...
 int exit_code = run(argc, argv, rank);
@@ -665,19 +667,19 @@ the number of messages small while still using every core.
 ### Why split the grid into slabs of rows?
 
 ```cpp
-// src/solver_mpi.cpp:26-40
-static RowSlab slab_for_rank(int num_rows, int rank, int num_ranks) {
+// src/solver_mpi.cpp:25-39
+static RowRange rows_for_rank(int num_rows, int rank, int num_ranks) {
     int rows_per_rank = num_rows / num_ranks;
     int extra_rows = num_rows % num_ranks;
-    RowSlab slab;
+    RowRange rows;
     if (rank < extra_rows) {
-        slab.begin = rank * (rows_per_rank + 1);
-        slab.end = slab.begin + rows_per_rank + 1;
+        rows.begin = rank * (rows_per_rank + 1);
+        rows.end = rows.begin + rows_per_rank + 1;
     } else {
-        slab.begin = extra_rows * (rows_per_rank + 1) + (rank - extra_rows) * rows_per_rank;
-        slab.end = slab.begin + rows_per_rank;
+        rows.begin = extra_rows * (rows_per_rank + 1) + (rank - extra_rows) * rows_per_rank;
+        rows.end = rows.begin + rows_per_rank;
     }
-    return slab;
+    return rows;
 }
 ```
 
@@ -695,15 +697,15 @@ rank runs the same parallel row loop over its own slab
 ### Why is the halo exactly one row, and why non-blocking messages with the receives first?
 
 ```cpp
-// src/solver_mpi.cpp:47-50 and 57-80 (excerpt)
-double* first_row = sheet.data() + slab.begin * num_stock_nodes;
-double* last_row = sheet.data() + (slab.end - 1) * num_stock_nodes;
-double* halo_below = sheet.data() + (slab.begin - 1) * num_stock_nodes;
-double* halo_above = sheet.data() + slab.end * num_stock_nodes;
+// src/solver_mpi.cpp:46-49 and 57-80 (excerpt)
+double* first_row = buffer.data() + owned_rows.begin * num_stock_nodes;
+double* last_row = buffer.data() + (owned_rows.end - 1) * num_stock_nodes;
+double* row_below = buffer.data() + (owned_rows.begin - 1) * num_stock_nodes;
+double* row_above = buffer.data() + owned_rows.end * num_stock_nodes;
 ...
 if (rank > 0) {
-    MPI_Irecv(halo_below, num_stock_nodes, MPI_DOUBLE, rank - 1, halo_tag, MPI_COMM_WORLD, &receive_below);
-    MPI_Isend(first_row, num_stock_nodes, MPI_DOUBLE, rank - 1, halo_tag, MPI_COMM_WORLD, &send_below);
+    MPI_Irecv(row_below, num_stock_nodes, MPI_DOUBLE, rank - 1, message_tag, MPI_COMM_WORLD, &receive_below);
+    MPI_Isend(first_row, num_stock_nodes, MPI_DOUBLE, rank - 1, message_tag, MPI_COMM_WORLD, &send_below);
 }
 ...
 MPI_Waitall((int)requests.size(), requests.data(), MPI_STATUSES_IGNORE);
@@ -711,7 +713,7 @@ MPI_Waitall((int)requests.size(), requests.data(), MPI_STATUSES_IGNORE);
 
 - `first_row` and `last_row` are this rank's own edge rows, which the
   neighbours need.
-- `halo_below` and `halo_above` are the rows just outside the slab, where
+- `row_below` and `row_above` are the rows just outside the slab, where
   the neighbours' edge rows land.
 - `MPI_Irecv` posts the receive first and returns straight away, then
   `MPI_Isend` starts the send and also returns straight away.
@@ -755,13 +757,13 @@ threads beat one rank of 24 threads by 1.09 times on the 2048 grid and by
 // src/solver_mpi.cpp:102 and 124-125
 Grid grid(cfg.grid, cfg.option);
 ...
-int first_interior = std::max(slab.begin, 1);
-int end_interior = std::min(slab.end, num_variance_nodes - 1);
+int first_interior = std::max(owned_rows.begin, 1);
+int end_interior = std::min(owned_rows.end, num_variance_nodes - 1);
 ```
 
 - Every rank makes a full-size grid, then only updates the rows from
   `first_interior` to `end_interior`.
-- `std::max(slab.begin, 1)` and `std::min(slab.end, num_variance_nodes - 1)`
+- `std::max(owned_rows.begin, 1)` and `std::min(owned_rows.end, num_variance_nodes - 1)`
   cut off row 0 and the top row, which are boundaries.
 
 Keeping the full grid on every rank means row indices are the same
@@ -775,12 +777,12 @@ two halo rows and shift every index by the slab's first row.
 ```cpp
 // src/solver_mpi.cpp:170-177
 for (int other_rank = 0; other_rank < num_ranks; ++other_rank) {
-    RowSlab other_slab = slab_for_rank(num_variance_nodes, other_rank, num_ranks);
-    counts[other_rank] = (other_slab.end - other_slab.begin) * num_stock_nodes;
-    offsets[other_rank] = other_slab.begin * num_stock_nodes;
+    RowRange other_rows = rows_for_rank(num_variance_nodes, other_rank, num_ranks);
+    counts[other_rank] = (other_rows.end - other_rows.begin) * num_stock_nodes;
+    offsets[other_rank] = other_rows.begin * num_stock_nodes;
 }
 ...
-MPI_Gatherv(my_rows, my_count, MPI_DOUBLE, next.data(), counts.data(), offsets.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+MPI_Gatherv(my_values, my_count, MPI_DOUBLE, next.data(), counts.data(), offsets.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 ```
 
 - `counts` holds how many doubles each rank sends, which differs when the
@@ -797,13 +799,13 @@ number.
 
 ```cpp
 // src/solver_mpi.cpp:155-158
-auto halo_start = std::chrono::steady_clock::now();
-exchange_halo_rows(next, num_stock_nodes, slab, rank, num_ranks);
-auto halo_end = std::chrono::steady_clock::now();
-result.halo_seconds += std::chrono::duration<double>(halo_end - halo_start).count();
+double exchange_start = omp_get_wtime();
+exchange_edge_rows(next, num_stock_nodes, owned_rows, rank, num_ranks);
+double exchange_end = omp_get_wtime();
+result.exchange_seconds += exchange_end - exchange_start;
 ```
 
-- The halo exchange is timed on its own and written to the `halo_seconds`
+- The halo exchange is timed on its own and written to the `exchange_seconds`
   column, so its share of each step can be measured.
 
 Across two nodes the best layout is 1.41 times one node at 2048 by 512 and
@@ -821,7 +823,7 @@ hide the same halo cost.
 Overlap would start the exchange, update the interior rows that do not need
 the halo, then wait and finish the edge rows. It is the obvious next step
 given that the halo is 38% of a short step. It was on the cut list because
-the rungs, sweeps and figures came first, and it needs `exchange_halo_rows`
+the rungs, sweeps and figures came first, and it needs `exchange_edge_rows`
 split into a start and a finish around the update.
 
 ---
@@ -848,22 +850,24 @@ build_and_validate() {
 A faster answer that is wrong is worth nothing, and a bug in a parallel
 rung often shows up as a small numerical change rather than a crash. Every
 rung must match the baseline to 1e-11 on price, delta, gamma and vega
-(`kRelativeTolerance`, `tests/test_ladder_matches.cpp:25`). The measured
+(`relative_tolerance`, `tests/test_ladder_matches.cpp:25`). The measured
 worst gap is 3.3e-15.
 
 ### Why must OpenMP and MPI match the SIMD rung exactly, to zero difference?
 
 ```cpp
-// tests/test_ladder_matches.cpp:21 and 118-120
-static const std::vector<std::string> kSameBitsAsSimd = {"omp", "mpi", "omp_persistent", "omp_runtime", "omp_edges"};
+// tests/test_ladder_matches.cpp:21 and 125-128
+static const std::vector<std::string> same_bits_as_simd = {"omp", "mpi", "omp_persistent", "omp_runtime", "omp_edges"};
 ...
 double simd_diff = max_relative_diff(simd_reference, candidate);
-bool ok = simd_diff == 0.0;
+// Any difference at all means a bug.
+const char* verdict = "OK";
+if (simd_diff != 0.0) {
 ```
 
-- `kSameBitsAsSimd` lists every solver that must give exactly the SIMD
+- `same_bits_as_simd` lists every solver that must give exactly the SIMD
   rung's answer.
-- `simd_diff == 0.0` allows no difference at all, not even in the last bit.
+- `simd_diff != 0.0` fails on any difference at all, not even in the last bit.
 
 Each cell runs the same instructions in the OpenMP and MPI rungs as in the
 SIMD rung, a halo row is an exact copy of 64-bit values, and nothing is
@@ -1076,9 +1080,9 @@ The roofline compares a kernel's arithmetic intensity, flops per byte
 moved, with the machine's measured compute and memory ceilings. It tells me
 whether a rung is limited by arithmetic or by memory, and so what kind of
 change could make it faster. The intensity here is 31/24 = 1.29. On 24
-threads at 2048 by 512 the kernel reaches 178 GFLOP/s, twice the DRAM roof,
-because the grid fits in the two L3 caches. At 4096 by 1024 it falls to 93
-GFLOP/s, on the DRAM roof, because the grid no longer fits.
+threads at 2048 by 512 the kernel reaches 177 GFLOP/s, twice the DRAM roof,
+because the grid fits in the two L3 caches. At 4096 by 1024 it falls to 97
+GFLOP/s, about the DRAM roof, because the grid no longer fits.
 
 ### Why does grid size change the result so much?
 

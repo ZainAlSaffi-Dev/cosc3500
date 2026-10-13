@@ -209,6 +209,10 @@
   \end{beamercolorbox}%
 }
 
+% Small grey source line under the callout, for ideas not in the lectures.
+% It stops at the callout's width, clear of the webcam corner.
+\newcommand{\sigcite}[1]{\par\begin{minipage}{0.74\linewidth}\tiny\color{gray}#1\end{minipage}\par}
+
 % ***************************************************
 % Title data
 % ***************************************************
@@ -221,25 +225,13 @@
 
 \begin{document}
 
+% 0:00 Cold open, spoken over the title frame
 \begin{frame}[plain]
   \titlepage
 \end{frame}
 
 % --------------------------------------------------------------------------
-% 0:00 Cold open
-% --------------------------------------------------------------------------
-
-\begin{frame}{101 times faster on one node}{Every version gives the same answer to 15 digits}
-  \setlength{\sigslotheight}{0.56\textheight}
-  \begin{center}
-    \sigfigure[0.95\linewidth]{../results/m2/f1_ladder.png}{}
-  \end{center}
-  \sigcallout{Four techniques, each measured on its own, from 57 to 5729
-    million cell updates per second.}
-\end{frame}
-
-% --------------------------------------------------------------------------
-% 0:20 The problem
+% 0:15 The problem
 % --------------------------------------------------------------------------
 
 \begin{frame}{The problem}{The price today of the right to buy at a fixed strike}
@@ -252,12 +244,76 @@
         step back towards today.}
     \end{sigcolumn}
   \end{sigcolumns}
-  \sigcallout{Heston turns the price into a PDE in stock price, variance and
-    time. The same formula runs on a million cells every step.}
+  \sigcallout{Black-Scholes holds the volatility constant. Heston lets the
+    variance move randomly too, so the price depends on $S$, $v$ and $t$.}
 \end{frame}
 
 % --------------------------------------------------------------------------
-% 1:20 The data structure
+% 0:45 The equation
+% --------------------------------------------------------------------------
+
+\begin{frame}{The equation}{The price $V(S, v, t)$ solves one PDE, every other symbol is a known number}
+  \vspace*{-0.8em}
+  \begin{block}{The Heston pricing equation}
+    \vspace{-0.6em}
+    \begin{equation*}
+      V_t
+      + \underbrace{\tfrac{1}{2} v S^2 V_{SS} + \rho\xi v S\, V_{Sv} + \tfrac{1}{2}\xi^2 v\, V_{vv}}_{\text{randomness in } S \text{ and } v}
+      + \underbrace{(r - q) S\, V_S + \kappa(\theta - v)\, V_v}_{\text{drift}}
+      - r V = 0
+    \end{equation*}
+    \vspace{-1.0em}
+  \end{block}
+  \begin{block}{On the grid, each derivative is a difference of neighbouring cells}
+    \vspace{-0.6em}
+    {\small
+    \begin{gather*}
+      V_S \approx \frac{V_{i+1,j} - V_{i-1,j}}{2\,\Delta S}
+      \qquad
+      V_{SS} \approx \frac{V_{i+1,j} - 2V_{i,j} + V_{i-1,j}}{\Delta S^2}
+      \qquad
+      V_v,\ V_{vv} \text{ the same way in } j
+      \\
+      V_{Sv} \approx \frac{V_{i+1,j+1} - V_{i-1,j+1} - V_{i+1,j-1} + V_{i-1,j-1}}{4\,\Delta S\,\Delta v}
+    \end{gather*}}
+    \vspace{-1.2em}
+    \begin{equation*}
+      V^{\text{new}}_{i,j} = V_{i,j} + \Delta t \,\big(\text{the five terms} - r V_{i,j}\big)
+    \end{equation*}
+    \vspace{-1.2em}
+  \end{block}
+  \sigcallout{One explicit step reads only the old values, so every cell in a
+    step can be computed at the same time.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 1:15 The grid
+% --------------------------------------------------------------------------
+
+\begin{frame}{The grid}{One step back in time, from expiry $T$ to $T - \Delta t$}
+  \setlength{\sigslotheight}{0.55\textheight}
+  \begin{center}
+    \sigfigure[0.94\linewidth]{../results/m2/f13_grid.png}{}
+  \end{center}
+  \sigcallout{The value is known only at expiry, so the solve starts there
+    and steps back. No new cell depends on another new cell.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 1:45 The check against Black-Scholes
+% --------------------------------------------------------------------------
+
+\begin{frame}{Checking the answer}{With $\xi = 0$ and $\rho = 0$ the variance never moves and Heston becomes Black-Scholes}
+  \setlength{\sigslotheight}{0.56\textheight}
+  \begin{center}
+    \sigfigure[0.86\linewidth]{../results/m2/f14_bs_collapse.png}{}
+  \end{center}
+  \sigcallout{The solver runs the full stencil and lands 4 cents from the
+    closed form at today's price. Every job runs this as a test.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 2:05 The data structure
 % --------------------------------------------------------------------------
 
 \begin{frame}{The data structure}{Two flat arrays of doubles, read one, write the other, swap}
@@ -272,7 +328,33 @@
 \end{frame}
 
 % --------------------------------------------------------------------------
-% 2:00 Where the time goes
+% 2:30 How the numbers were measured
+% --------------------------------------------------------------------------
+
+\begin{frame}{How every number was measured}{One exclusive rangpur r730 node through sbatch, never the login node}
+  \vspace*{-0.4em}
+  \begin{sigcolumns}
+    \begin{sigcolumn}
+      {\small
+      \begin{itemize}
+        \item Dual Xeon E5-2670 v3, 2 x 12 cores, 30 MiB L3 per socket, g++ 8.5, Open MPI 4.1.
+        \item \texttt{-{}-exclusive} on a named node, so no other job shares it.
+        \item Median of 5 repetitions. Threads pinned to cores.
+        \item The tests run first in the same job. The price is printed, so the compiler cannot delete the loop.
+      \end{itemize}}
+    \end{sigcolumn}
+    \begin{sigcolumn}
+      \begin{block}{A first round was thrown away}
+        Short runs leave cells below $2.2 \times 10^{-308}$, which this CPU handles slowly. That varied with the grid, so rungs ran in different regimes. Every sweep was rerun with these flushed to zero.
+      \end{block}
+    \end{sigcolumn}
+  \end{sigcolumns}
+  \sigcallout{Rates are million cell updates per second on the 2048 by 512 grid.}
+  \sigcite{Denormal numbers, D.\,Goldberg, What every computer scientist should know about floating-point arithmetic, \emph{ACM Computing Surveys} 23(1), 5--48, 1991.}
+\end{frame}
+
+% --------------------------------------------------------------------------
+% 2:55 Where the time goes
 % --------------------------------------------------------------------------
 
 \begin{frame}{Where the time goes}{gprof flat profile, one thread, 2048 x 512}
@@ -294,7 +376,7 @@
 \end{frame}
 
 % --------------------------------------------------------------------------
-% 2:40 The serial rung
+% 3:25 The serial rung
 % --------------------------------------------------------------------------
 
 \begin{frame}{The serial rung}{Divisions replaced by multiplications, once per solve}
@@ -307,7 +389,7 @@
 \end{frame}
 
 % --------------------------------------------------------------------------
-% 3:10 SIMD
+% 3:55 SIMD
 % --------------------------------------------------------------------------
 
 \begin{frame}{SIMD with AVX2}{Four neighbouring cells per instruction, fused multiply-add}
@@ -322,16 +404,17 @@
 \end{frame}
 
 \begin{frame}{SIMD on the roofline}{Measured ceilings on one r730 node}
-  \setlength{\sigslotheight}{0.54\textheight}
+  \setlength{\sigslotheight}{0.50\textheight}
   \begin{center}
     \sigfigure[0.62\linewidth]{../results/m2/f5_roofline.png}{}
   \end{center}
   \sigcallout{The SIMD rung does 12 GFLOP/s against an AVX2 ceiling of 43
     for one core.}
+  \sigcite{S.\,Williams, A.\,Waterman and D.\,Patterson, Roofline: an insightful visual performance model for multicore architectures, \emph{Communications of the ACM} 52(4), 65--76, 2009.}
 \end{frame}
 
 % --------------------------------------------------------------------------
-% 4:10 OpenMP
+% 4:50 OpenMP
 % --------------------------------------------------------------------------
 
 \begin{frame}{OpenMP}{One pragma shares the rows of each step between threads}
@@ -347,31 +430,34 @@
 \end{frame}
 
 \begin{frame}{Strong scaling}{Fixed 2048 x 512 grid, 1 to 24 threads}
-  \setlength{\sigslotheight}{0.56\textheight}
+  \setlength{\sigslotheight}{0.44\textheight}
   \begin{center}
     \sigfigure[0.95\linewidth]{../results/m2/f2_strong.png}{}
   \end{center}
-  \sigcallout{Amdahl fit, serial fraction 1.2 percent. The scalar row
+  \sigcallout{Amdahl's law $1/S = f + (1 - f)/p$, fitted by least squares
+    to the measured speedups, gives $f = 1.2$ percent. The scalar row
     scales better, 18.5x, because it moves data at half the rate.}
+  \sigcite{Amdahl's law, COSC3500 lecture 3. Fitting $f$ to measured speedups, A.\,H. Karp and H.\,P. Flatt, Measuring parallel processor performance, \emph{Communications of the ACM} 33(5), 539--543, 1990.}
 \end{frame}
 
 \begin{frame}{Placement}{Which socket the threads and the pages sit on}
-  \setlength{\sigslotheight}{0.56\textheight}
+  \setlength{\sigslotheight}{0.50\textheight}
   \begin{center}
     \sigfigure[0.95\linewidth]{../results/m2/f7_placement.png}{}
   \end{center}
   \sigcallout{12 threads on one socket 1880, over both sockets 3319.
     Interleaving the pages gave the big grid 28 percent more.}
+  \sigcite{Pages and sockets, U.\,Drepper, What every programmer should know about memory, Red Hat, 2007, section 5 on NUMA.}
 \end{frame}
 
 % --------------------------------------------------------------------------
-% 5:25 Hybrid MPI
+% 5:55 Hybrid MPI
 % --------------------------------------------------------------------------
 
 \begin{frame}{Hybrid MPI}{A slab of rows per process, one halo row swapped with each neighbour}
   \begin{sigcolumns}
     \begin{sigcolumn}
-      \sigfigure{../results/m2/code_shots/shot_mpi_halo.png}{Receives are
+      \sigfigure{../results/m2/code_shots/shot_mpi_exchange.png}{Receives are
         posted before sends.}
     \end{sigcolumn}
     \begin{sigcolumn}
@@ -381,6 +467,7 @@
   \end{sigcolumns}
   \sigcallout{One process of 12 threads per socket first-touches its own
     copy of the grid on its own socket.}
+  \sigcite{First touch, U.\,Drepper, What every programmer should know about memory, Red Hat, 2007, section 5 on NUMA.}
 \end{frame}
 
 \begin{frame}{Hybrid layouts}{One and two nodes, two grid sizes}
@@ -393,7 +480,7 @@
 \end{frame}
 
 % --------------------------------------------------------------------------
-% 6:15 Same answer on every rung
+% 6:45 Same answer on every rung
 % --------------------------------------------------------------------------
 
 \begin{frame}{Same answer on every rung}{Price, delta, gamma and vega against the baseline}
@@ -406,16 +493,18 @@
 \end{frame}
 
 % --------------------------------------------------------------------------
-% 6:40 Weak scaling and grid size
+% 7:05 Weak scaling and grid size
 % --------------------------------------------------------------------------
 
 \begin{frame}{Weak scaling}{21 rows per thread, the grid grows with the threads}
-  \setlength{\sigslotheight}{0.56\textheight}
+  \setlength{\sigslotheight}{0.44\textheight}
   \begin{center}
     \sigfigure[0.95\linewidth]{../results/m2/f3_weak.png}{}
   \end{center}
   \sigcallout{Step time 0.14 to 0.18 ms, a scaled speedup of 19 on 24
-    threads.}
+    threads. Gustafson's law, $f + (1 - f)N$ with the measured serial share
+    $f = 0.08$, predicts 22.}
+  \sigcite{J.\,L. Gustafson, Reevaluating Amdahl's law, \emph{Communications of the ACM} 31(5), 532--533, 1988.}
 \end{frame}
 
 \begin{frame}{Grid size}{1 MiB to 128 MiB of working set}
@@ -428,7 +517,7 @@
 \end{frame}
 
 % --------------------------------------------------------------------------
-% 7:25 Bottlenecks
+% 7:45 Bottlenecks
 % --------------------------------------------------------------------------
 
 \begin{frame}{Where each step goes}{Parallel rows, serial boundaries and halo exchange}
@@ -441,16 +530,17 @@
 \end{frame}
 
 \begin{frame}{After threads, bandwidth}{The roofline again}
-  \setlength{\sigslotheight}{0.54\textheight}
+  \setlength{\sigslotheight}{0.50\textheight}
   \begin{center}
     \sigfigure[0.62\linewidth]{../results/m2/f5_roofline.png}{}
   \end{center}
   \sigcallout{The large grid sits on the memory roof, so the limit is
     bandwidth, not arithmetic.}
+  \sigcite{S.\,Williams, A.\,Waterman and D.\,Patterson, Roofline: an insightful visual performance model for multicore architectures, \emph{Communications of the ACM} 52(4), 65--76, 2009.}
 \end{frame}
 
 % --------------------------------------------------------------------------
-% 8:00 Tried and rejected
+% 8:20 Tried and rejected
 % --------------------------------------------------------------------------
 
 \begin{frame}{Tried and rejected}{Each bar is a variant against the OpenMP rung}
@@ -463,7 +553,7 @@
 \end{frame}
 
 % --------------------------------------------------------------------------
-% 8:30 Conclusion
+% 8:50 Conclusion
 % --------------------------------------------------------------------------
 
 \begin{frame}{Conclusion}{The ladder against the measured ceilings}
@@ -495,7 +585,7 @@
 \end{frame}
 
 % --------------------------------------------------------------------------
-% 9:10 Close
+% 9:30 Close
 % --------------------------------------------------------------------------
 
 \begin{frame}[plain]
