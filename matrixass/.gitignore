@@ -1,0 +1,8 @@
+.env
+*.o
+Assignment1_GradeBot
+slurm-*.out
+COSC3500Assignment_*.txt
+graphify-out/
+results/
+.DS_Store

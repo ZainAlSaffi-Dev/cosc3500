@@ -1,40 +1,115 @@
 {
+  "COSC3500_GetAssignmentFiles.sh": {
+    "mtime": 1754552009.0,
+    "ast_hash": "595a0ef7a06e4484bf3c38304ce2af3e",
+    "semantic_hash": "595a0ef7a06e4484bf3c38304ce2af3e"
+  },
+  "include/matrixMultiply.h": {
+    "mtime": 1752478909.0,
+    "ast_hash": "84c5fe5a746debf29b949edfb063ca2c",
+    "semantic_hash": "84c5fe5a746debf29b949edfb063ca2c"
+  },
+  "include/matrixMultiplyGPU.cuh": {
+    "mtime": 1752480973.0,
+    "ast_hash": "c7a9de582400310d37b39c83f04095cb",
+    "semantic_hash": "c7a9de582400310d37b39c83f04095cb"
+  },
+  "include/matrixMultiplyMPI.h": {
+    "mtime": 1751523534.0,
+    "ast_hash": "721a96aef53cada197237f62eef34557",
+    "semantic_hash": "721a96aef53cada197237f62eef34557"
+  },
+  "include/rubric.h": {
+    "mtime": 1781067273.0,
+    "ast_hash": "284f26634f3b754ba8d5cbbc4492ac44",
+    "semantic_hash": "284f26634f3b754ba8d5cbbc4492ac44"
+  },
   "matrixMultiply.cpp": {
-    "mtime": 1786100437.0,
+    "mtime": 1787720639.8790214,
     "ast_hash": "8c9fc7f741ce41efc8959fea651749ae",
     "semantic_hash": "8c9fc7f741ce41efc8959fea651749ae"
   },
   "matrixMultiplyGPU.cu": {
-    "mtime": 1786100437.0,
+    "mtime": 1787720639.8793929,
     "ast_hash": "ea4bea91d6e59a552d363f7b916a726e",
     "semantic_hash": "ea4bea91d6e59a552d363f7b916a726e"
   },
   "matrixMultiplyMPI.cpp": {
-    "mtime": 1786100437.0,
+    "mtime": 1787720639.8798375,
     "ast_hash": "56b0b11c0ba7faa928e242c0f7211e64",
     "semantic_hash": "56b0b11c0ba7faa928e242c0f7211e64"
   },
+  "slurm/bench_cpu_2048.sh": {
+    "mtime": 1787720779.382163,
+    "ast_hash": "2f4a56c4eb5da5ef50796558031b91ef",
+    "semantic_hash": "2f4a56c4eb5da5ef50796558031b91ef"
+  },
+  "slurm/bench_gpu_2048.sh": {
+    "mtime": 1787720782.8949578,
+    "ast_hash": "02ebf60b463f6b43b8d7e336256edb2e",
+    "semantic_hash": "02ebf60b463f6b43b8d7e336256edb2e"
+  },
+  "slurm/bench_mpi_2node.sh": {
+    "mtime": 1787720788.539763,
+    "ast_hash": "a4b75d150d585c61c16fee37fa293a6b",
+    "semantic_hash": "a4b75d150d585c61c16fee37fa293a6b"
+  },
   "slurm/goslurm_COSC3500Assignment_RangpurDebugCPU": {
-    "mtime": 1786100437.0,
+    "mtime": 1755809029.0,
     "ast_hash": "334a14081caf046ff7e69a5772accf2e",
     "semantic_hash": "334a14081caf046ff7e69a5772accf2e"
   },
   "slurm/goslurm_COSC3500Assignment_RangpurDebugGPU": {
-    "mtime": 1786100437.0,
+    "mtime": 1752532472.0,
     "ast_hash": "0bc15c0b2c9389355aca20b6a3f9ffc7",
     "semantic_hash": "0bc15c0b2c9389355aca20b6a3f9ffc7"
   },
   "slurm/goslurm_COSC3500Assignment_RangpurDebugMPI": {
-    "mtime": 1786100437.0,
+    "mtime": 1751086416.0,
     "ast_hash": "44a47e04e2ccd78bf815d3223381ea20",
     "semantic_hash": "44a47e04e2ccd78bf815d3223381ea20"
   },
   "slurm/goslurm_COSC3500Assignment_RangpurJudgementDay": {
-    "mtime": 1786100437.0,
+    "mtime": 1751086213.0,
     "ast_hash": "e9f3fc11cc122b35f0fee3ab0e2d0bba",
     "semantic_hash": "e9f3fc11cc122b35f0fee3ab0e2d0bba"
   },
-  "COSC3500_Assignment.pdf": {
+  "slurm/sweep_args.sh": {
+    "mtime": 1787720794.180088,
+    "ast_hash": "6ebcfac4046671396c990732468633d7",
+    "semantic_hash": "6ebcfac4046671396c990732468633d7"
+  },
+  "src/Assignment1_GradeBot.cpp": {
+    "mtime": 1781075683.0,
+    "ast_hash": "9bf1edb238879ffc5a41acc0d4e08c6e",
+    "semantic_hash": "9bf1edb238879ffc5a41acc0d4e08c6e"
+  },
+  "MASTERDOC.md": {
+    "mtime": 1787720990.4085555,
+    "ast_hash": "559ad6d96829e2dae5840607a8906a10",
+    "semantic_hash": "559ad6d96829e2dae5840607a8906a10"
+  },
+  "docs/COSC3500_Assignment_-transcript.txt": {
+    "mtime": 1787717637.9780614,
+    "ast_hash": "17635bfa4c5aadbf1caa9d0edc1feaaf",
+    "semantic_hash": "17635bfa4c5aadbf1caa9d0edc1feaaf"
+  },
+  "docs/COSC3500_T04_OMP.mp4-transcript.txt": {
+    "mtime": 1787718849.8990214,
+    "ast_hash": "9483df91d685f2b4dbf78eb8b7bcd215",
+    "semantic_hash": "9483df91d685f2b4dbf78eb8b7bcd215"
+  },
+  "docs/COSC3500_T05_MPI.mp4-transcript.txt": {
+    "mtime": 1787718857.9395747,
+    "ast_hash": "7c5721e3b86c8d8545430266b261677d",
+    "semantic_hash": "7c5721e3b86c8d8545430266b261677d"
+  },
+  "docs/COSC3500_T06_CUDA.mp-transcript.txt": {
+    "mtime": 1787718865.883466,
+    "ast_hash": "e45a752bf36343f29c733cff68dc48d1",
+    "semantic_hash": "e45a752bf36343f29c733cff68dc48d1"
+  },
+  "docs/COSC3500_Assignment.pdf": {
     "mtime": 1786100437.0,
     "ast_hash": "9a6a0c00abe0aaf582e7ffa09091a2fd",
     "semantic_hash": "9a6a0c00abe0aaf582e7ffa09091a2fd"
