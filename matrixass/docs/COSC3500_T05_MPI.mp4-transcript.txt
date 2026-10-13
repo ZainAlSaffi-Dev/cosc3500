@@ -1,0 +1,1001 @@
+SPEAKER 0
+Hi everyone, um, it's Cullen here, and today we're going to go through a tutorial of how to produce a parallel programme using uh MPI or the message passing interface. So MPI is a programming sort of language which uh allows us to distribute a code across many processes or processes. Um, and using that what we can do is we can basically take. Uh, a codes which may effectively compute a series of executions or compute a series of calculations. And we can ask a bunch of different processors or a bunch of different um nodes on a supercomputer, or even on my laptop here, to compute only a fraction of that, and then um accumulate the result at the end potentially. Where NPI comes in is effectively when we paralyse a programme, what we want to do is we want to make sure that each, um process can work as independently as possible on the complicated parts of the programme. But inevitably there will come a time where we need to allow those processes to communicate with each other, either because they want to share their results at the end, or because they may be working on different things and the results from one processor's calculation may influence the results
+
+SPEAKER 1
+of another processor's calculation.
+
+SPEAKER 0
+And so what MPI allows us to do is if we have a bunch of, uh, tasks or processes effectively computing things in parallel, MPI allows us to force some communication between them to share those results when necessary, or to tell one processor to wait for others, or to, um, Basically share the state of how the entire system is evolving. So in this tutorial, um, the way we're gonna go through this is we're gonna look at a simple numerical uh integration example. This is the same numerical integration that was used in Ian's um excellent Open MP lecture, uh as an example. And so we're just gonna borrow from this, uh, from that, sorry, to um show you some of the functionality of MPI as well. This is the same er example we're also using in the Kuda um tutorial, so if you're already familiar with that one, then hopefully this code will not be too new to you. If you're not familiar with that one then hopefully this code will er set you in good stead for that tutorial in the future as well. OK, so just to quickly recap this function if you haven't seen it before, um, this is designed to just very quickly compute the integral of this function 1 on 1 + X2. Uh, this is a convenient function to choose for integration purposes because it has an exact analytic solution, which is that it should be pi on 4. And so we can use this function and we can numerically evaluate it and compare it to its known analytic solution to test that the code is working. And we can also time how long that takes us to compute this uh integral. And look at how that time might change when we have um different um parallelization included in the function as
+
+SPEAKER 1
+well.
+
+SPEAKER 0
+OK, so what's been included in the UQ blackboard is a simple serial version of this code, and also a make file. So what I'm first going to do is see if I can actually make this code.
+
+SPEAKER 1
+Um, and let me just clean up my repository a bit. Um, so that this makes. Good, and then let's see if we can make this. Um, I'm gonna start a new version of this MPI code, so let's type make, and we see that, uh,
+
+SPEAKER 0
+other than some warnings, what we get is, uh, something which has compiled, and if we look in here, we now have this executable serial, and if I run that code. We should find that it computes the integral. So the integral, um, is something around 0.78. Um, the error is effectively taken by comparing the numerical results to the exact result of palm four, we find this is the tiny error, which means that the integral is given the right answer numerically. And it also takes uh some small amount of time to actually compute that, um, for the number of points that we've asked for, which is about 1 million uh here. So, this is the serial version of the code, it works well, but we can definitely make it faster by using some parallel programming. So er what we're gonna do is we're gonna split this up, split up the task using NPI. So the fundamental idea behind parallelization is that we want to effectively make this calculation here, the sort of the main part of the code, um, quicker by effectively changing the number of calculations and operations that the code does. So with MPI what we can do is we can effectively make the number of evaluations here. Um, much smaller by just splitting the, the total amount of calculations over a larger number of processes. So for instance, if we were to run this on 100 processors, we could effectively, effectively take this million iterations and we can split it over 100 processors, so that essentially each process only has to do 10,000 calculations. That ignoring any overheads associated with paralysing the code means that it should take 100 times less time. Um, so with MPI, um, we can do exactly that very easily. Um, and the benefit of NPI is that it enables you to really split this up, uh, these sorts of problems up, um. Extremely efficiently across hundreds or even thousands of processors on a supercomputer, for instance. So in order to get started with the NPI, the first thing we have to do is we need to include uh a set of NPI routines. So in C this is as simple as first including an MPI header, so the same way that we include the standard math headers, um, or input output headers, um, with MPI we can also include a header MPI.H if you have MPI installed. Which will tell the code where er basically all the different functions that you can use, if we want to see the kinds of functions that we can use in MPI I'm gonna have a look quickly at this API so I'm gonna look at the open MP, Uh, documentation, and if we look here, um, we can see that there is, Uh, a large number of MPI functions, uh, that we can call, uh, to allow the processors to talk to each other during the code. We're not gonna go through all of these in the tutorial. Uh, there's far more than I think you would ever need here. But we are gonna look at some of the most useful ones. So the first one we want to actually use if we're trying to create an MPI programme, there's actually two. The first is we need to initialise MPI at the start of the programme. And the other thing we need to do is end MPI at the end of the programme with MPI finalised. So let's have a look at those two first and see if we can at the very least set up code up. To um start and end MPI. OK, so the first thing I'm gonna do is I'm gonna take this command here, MPI in it, which just initialises the MPI environment inside the code. It takes just two arguments which are the same arguments effectively as the main function provides.
+
+SPEAKER 1
+So if we go here and we just type MPI
+
+SPEAKER 0
+in it.
+
+SPEAKER 1
+And then we passed through AGC and AGV, um.
+
+SPEAKER 0
+By a reference, um you'll see here that it actually
+
+SPEAKER 1
+asks for the pointers to these, there's an extra star
+
+SPEAKER 0
+here, so we have to pass these little ampersands, To pass that, that function call then allows us to. Start MPI And the other thing we can do when we want to finish MPI is we can just type
+
+SPEAKER 1
+MPI finalise, finalise.
+
+SPEAKER 0
+The MPI finalise command doesn't take any um. Functions, er or as any inputs rather, um, so if we look at MPI finalise here, we'll see that, it really is as simple as just writing MPI finalise with
+
+SPEAKER 1
+no input arguments.
+
+SPEAKER 0
+So these 3 lines here, the header, the initialization, and the finalisation should effectively allow us to have made this programme now an NPI programme. So what I'm gonna do is I'm gonna re-save this. Um, has its own code, let's put this MPI CPP. Um, I'll quickly revert the changes in the original one cos I should have not saved them in there, so
+
+SPEAKER 1
+let's just move that in that. He's all give you that.
+
+SPEAKER 0
+And so now if I try and make these, I should be able to make both the cereal and the
+
+SPEAKER 1
+MP version as well.
+
+SPEAKER 0
+In order to make an NPI code, we actually have to do a couple of things, it's not quite as simple as a serial code. So here's a make file I've provided in the UQ Blackboard, the one I made earlier. And how to actually compile an MPI code is very similar to a C code, but with a couple of crucial differences. The first is that MPI actually requires its own set of compilers, so I've already got all these installed on my laptop, um, they're also installed already on Getafix if you load the appropriate modules, and I'm sure they're installed on Rangpur as well. Um, so what I'm using here is I'm using the MPI version of the C++ compiler, MPI C++, and I'm just pointing the code to where that is, and I'll be using that to actually do the compilation instead of G++. The other thing we need to provide is a link to the library for MPI. So again, I've just told it where those libraries are and I've just provided the only library we'll need here which is MPI library dash LMPI. And then lastly, we've included an MPI header in our code, so we need to tell the compiler where to find their header file. So in my laptop it's just under this include directory here, um, but on your laptop or on Getta Fix, it might be somewhere different, but you can always just change the paths to wherever those are stored. So given a new compiler and then libraries and include paths, um, actually compiling the NPI code is as simple as any other C++ or C code, so we just turn it the compiler, we can pass in some optional flags, so here I've got some optimisation flags and also some flags about warnings. And then I've also told it where the libraries and where the includes are, uh, and then we're going to compile the MPI. CPP code and we're just going to create an executable.
+
+SPEAKER 1
+So let's see if this works, so let me just type make in here.
+
+SPEAKER 0
+OK, good, you can see that it's made um successfully by the looks of it, if I look in here, you'll see that we now have a serial executable and an MPI executable as well.
+
+SPEAKER 1
+So if I run the serial version of the code again.
+
+SPEAKER 0
+You can see that er this outputs the integral as well, but now we can also run the MPI version of the programme which should also effectively do the same thing except it initialises and then ends uh MPI.
+
+SPEAKER 1
+But it's wrong.
+
+SPEAKER 0
+So let's have a look at that. So, uh, if you type, uh, run an MPI programme, uh, as a standard executable, actually it should run on a as a single process. So you can see here that I've run this as a standard executable, um, and it's effectively outputs, uh, the same answer as the serial code, same error, uh, the time has varied somewhat just because my, um, laptop, um, is not always consistent in the time that it takes when you run 22 different codes or to the same code twice. Um But functionally it's doing the same thing, so it's effectively opening MPI doing stuff in serial and then closing it, but what we can also do with um, MPI now that we have that uh initialised and finalised, is we can run the entire programme using multiple cores. So my laptop actually has 4 different cores, uh, I think, so the max I can run is 4.
+
+SPEAKER 1
+So if I type MPI exec, which as Ian covered
+
+SPEAKER 0
+in his MPI lecture is how you actually run an
+
+SPEAKER 1
+MPI programme, I ask it to run 4 cores.
+
+SPEAKER 0
+Uh and then I run the same executable. Uh, you'll actually see that I now effectively have 4 different processors all running the same version of the code. They all took roughly the same amount of time, they are all running exactly the same code, so they all give the same answer effectively, so the errors and the integrals are the same, but because I'm running an NPI code on 4 different processors, I have the same code
+
+SPEAKER 1
+4 times.
+
+SPEAKER 0
+OK, so that's uh our first MPI programme effectively run, but as you can tell, this is not particularly useful. Uh, all we've done is compute the same thing 4 times, we haven't done anything novel and we haven't sped up the code in any way. So let's look into how we might actually utilise this functionality with MPI to actually make the code faster. So the first thing we're gonna do is uh what is good practise in basically any MPI code is to first check that you can uh identify all the various processes or tasks that are running during the MPI call. So let's have a look here. So the first thing we might want to do is um work out first how many processors are running in this code. So you can do that with a command called uh MPI com size. So MPI com size is written somewhere here, so yes, MPI com size. So MPI con size just returns the size of the group associated with a particular communicator. A communicator is just a set of MPI um tasks. That are all running, uh, nearly always always, you'll ask, you'll just basically use a communicator called MPIcom World, which effectively says all tasks, uh, that are being used currently, uh, as, but there may be some occasions where you want to split your MPIcomworld tasks into subgroups. So for instance you could say I've got, um, 10 tasks in total in NPIcomworld, and I split those into two sets of 5 so that those two sets of 5 can do different things. But in this tutorial we're just going to cover the standard usage which is using MPI comworld. So let's have a look at um the syntax here. So what we need to do is we uh need to use this function MPI comsize. It takes as the first argument the communicator that we're asking for, which as I said we're going to use MPI comworld for. And the second thing it takes is just a pointer to an integer that it can use to store the value of that. So I'm gonna first create an integer to store the, Value, so we'll call this world ties. And we'll paste in this, so we have uh MPI com size is the command and we're asking for all. The tasks in the in the full communicator, which is this MPI Comm world argument, and then here we're just passing in a pointer or reference sorry to um, The variable where we're going to store the answer, so this MPI com size will now effectively look in the MPIcom world communicator, work out how many tasks there are and save that number in world size. The other thing we can do is we can ask um for each processor, what number are you in the communicator, so, we'll each, each communicator or each task now will know that there are world size, Different tasks being run at the same time, but we can also say of, for each task, what, what number are you? So let's do that, so the command for that is called MPI com rank, so let's have a look.
+
+SPEAKER 1
+Here, so let's go here, so MPI.
+
+SPEAKER 0
+Um rank. So this uh as it says, determines the rank of the calling process within the communicator. So, um, the command is very similar to MPI com size, it's just to ask for the communicator, and then a reference to a uh integer. That it can use to return the rank of the processor. So let's copy this command as well, and we'll create an integer in order to store, uh the rank of the task, so here I've called it my rank, so.
+
+SPEAKER 1
+We'll save that there, the MPIcom world. And make sure you have the reference.
+
+SPEAKER 0
+So now we can see that we've created a A couple of lines of code which will tell uh or basically return variables that contain both the total number of, Uh, tasks or processes we're using, and the rank of the tasks in particular that is, um, Uh, being utilised. So let's have a look at what happens if we, um, Uh, print these values on each task, so I'll,
+
+SPEAKER 1
+let's write some, some print statement here, uh, I'm process blah of. Yeah Uh, OK, so then we'll pass in, uh, the
+
+SPEAKER 0
+rank of the processor. And the total number of processes. And what should happen is that each task that's being run should print out its number and the total number that it er says there is, OK, so let's see
+
+SPEAKER 1
+if this works now, er, for now I'm gonna comment out these other, Print statements Um, so let's see if
+
+SPEAKER 0
+we can make this, yep, no errors there, so now what happens when we run this is we should see that, um, each of the processors has printed to the screen.
+
+SPEAKER 1
+I forgot the dash slash end. In the print statements, so it didn't add any, Line
+
+SPEAKER 0
+breaks, but now we see, uh, you know, a bit more nicer formatting, that there's 4 processes and each one of those has printed out, Uh, it's number, and the total number of processes that are running. You can see that these are not orders, right, so just like with Open MP, um, or any other language, the exact order in which these tasks run is not predetermined. If I was to run this a second time, there's no guarantee it would run in the same order. In fact, you can see that the order has changed again. Um, But there are 4 different tasks running, and if I was to run this with 2 tasks, uh, we'd
+
+SPEAKER 1
+only get 2 processes now.
+
+SPEAKER 0
+So now each process knows both its rank in the communicator and the total number of tasks in the communicator. So what we can do is you can actually use these values to work out how to distribute our computation between the different processes. OK, so if each task knows um. It's got a particularly unique rank, and how many total tasks there are. What we can actually do is we can start to think about allocating unique pieces of this integral to each unique task. So here, you can see that we've defined our integral as going between 0 and 1 with um, a million different pieces, and each fraction or a portion of the integral basically is 1 divided by the total number of pieces we're splitting it into. What we could consider doing instead is we could consider defining some unique pieces for each, um.
+
+SPEAKER 1
+MPI process. So here let's say, so I'm going to allocate some unique pieces to each uh MPI. It was based on its rank and the Total number. Of us Yeah, oh, well. OK, so, Uh, the first question we might ask is
+
+SPEAKER 0
+if we have, uh, 4 tasks in MPI Commonworld or end tasks in MPI Commonwal, um, how many would we be allocating to each?
+
+SPEAKER 1
+Um, task, so let's do that. So let's ask how, what is N per rank. So here I'm quoting a variable where I'm just saying
+
+SPEAKER 0
+the number of, I know what the total N is basically, it's 1 million, but what is the N per each rank we would assign. Um, so let's make this an integer amount, um. And uh to make sure we don't make any mistakes
+
+SPEAKER 1
+in terms of dividing two integers because we define N
+
+SPEAKER 0
+as an integer here, let's make it a float, and
+
+SPEAKER 1
+then divide it by uh the total number of rings.
+
+SPEAKER 0
+So here, um, basically you see that I've taken a million pieces here, or end pieces, and then we've said if there's 4 tasks or world size number of tasks, then each task is gonna have a value N per
+
+SPEAKER 1
+rank.
+
+SPEAKER 0
+Um, so for instance if there's a million and we're using 4 processors, then this number here should evaluate to about 250,000. Um, the next thing we can do is we can ask, uh, for each task, if we want to split this up over a million. Uh, this million Uh, evaluations over different tasks, what would the first and the last part of this integral be for each task. So, uh, let's create some more variables which tell each task the start and the end point of its calculation. So these variables are all, none of these variables are shared, OK, so. The NP rank here will evaluate to the same value for each task, but as we can see in the terminal, um, the value of my rank changes for each task. So if we were to create a new variable, which uses this number, my, uh, the, the value we've assigned to my rank, um, as part of its calculation. That The resulting variable would also be different for each process or each task as well. So let's do just that. So if we had, um, a million points and we split them up equally across 4 different. Um, Processes, then we could ask what is the first
+
+SPEAKER 1
+um, value, so my first end what I say, um.
+
+SPEAKER 0
+Of each task, and that would effectively just be the rank of the task. Um, times by, uh, the total number of. Um, pieces we're asking for each task. Um, this works because in NPI the first rank is always zero, so that means if your process, uh, zero, your first entry here will be zero, it'll be 0 times say 250,000. If you'rece one, your first will be um, 1 times 250,000 and if you're the second it'll be 2 times
+
+SPEAKER 1
+250,000 and so on.
+
+SPEAKER 0
+And the other thing we can say is that if we can compute the first we can also compute the
+
+SPEAKER 1
+last so let's do that.
+
+SPEAKER 0
+Um, the calculation is the same, except, We can just
+
+SPEAKER 1
+add one here, um, and then we have the last as well.
+
+SPEAKER 0
+There we go, so we've computed both the first and the last, um. Points, so let's see if this actually works, so, um,
+
+SPEAKER 1
+I'm gonna move this print statement down here.
+
+SPEAKER 0
+And so you can see that the Tasker is still being printed out here.
+
+SPEAKER 1
+And Um That's good. And, here, so let's write the tasks that are being
+
+SPEAKER 0
+computed. Um, and let's just ask it to each task to print out what it thinks is first and last. Parts of the computation are, so it says I'm process something or something and I'm computing, uh, the parts of the integral that go from N equals something to something else. Uh, so let's see what happens when we make this now, and first let's see if it compiles, uh, which it does, so now let's see what happens when I run this with 4 processors. And you can see that process 0 of 4 says correctly that I'm computing 0 to 250,000. Process 1 of 4 says correctly that I'm computing 250,000 to 500,000.
+
+SPEAKER 1
+And the process, uh, 204, so it's 500,000 702,0003 goes from 7000 to 10 million.
+
+SPEAKER 0
+Um, of course this, uh, has all been based on integers, so there may be an issue, for instance, if we ask what happens if you're using a non-nice round number. Um, for this, so let's give that a go. So you can see here that actually if we do this, uh, we do run across this issue which is that, um, Process 0 and 1 seem to be doing fine, but process 2 actually, I mean, it basically evaluates the exactly the same number. Um, and means that between the three of them, those processes have effect, effectively missed out the last pun. Um, so what I'm also gonna do actually is force, um, the last process to pick up the slack effectively. And so I'm gonna say if, um, I'm the last processor, so that's to say if my rank is equal
+
+SPEAKER 1
+to world size minus 1. So basically, if I'm using 4 processes, if I'm number
+
+SPEAKER 0
+3, Or if I'm using 3 processes, if I'm number 2, I'm actually gonna hard code, uh, the last one
+
+SPEAKER 1
+to be equal to N so that should, uh this
+
+SPEAKER 0
+is not necessarily an equitable distribution, Um, it will mean that the last rank is always doing a little bit more work than the others, but at least for this calculation that shouldn't be too much more. For certain scenarios you may want to find other ways to more equitable, uh, equitably distribute the computations across the
+
+SPEAKER 1
+tasks.
+
+SPEAKER 0
+OK, so now if we were on this, we should see that um.
+
+SPEAKER 1
+The Uh, for 3, it should now work out a little bit better, basically, yes, we now see that the last process has also picked up that last extra piece.
+
+SPEAKER 0
+OK, so we've basically worked out now some code which allows each process in the MPI communicator to evaluate or know basically a unique part of the code that it should uh of the of the total computation that it should be doing. Um, so what we can do now is we can say if we know these numbers, we know basically that we've split our integral up into a million pieces. And we're asking just the first process to do the first portion of it and the second process to do the second portion of it.
+
+SPEAKER 1
+We can effectively code that up now, uh so that
+
+SPEAKER 0
+each, um, portion only does a, uh, part of the
+
+SPEAKER 1
+computation.
+
+SPEAKER 0
+So here, um, what we can do is we know that now each process doesn't need to allocate an amount of memory. Which is given by the total million, each process, according to this is that we're gonna be going to be computing, 1/3 of the total amount, so what we can do is we can say well you then only need to allocate 1/3 of the total amount, Um, so rather than end here, we're just gonna allocate, um, less space. This is one of the real benefits of NPI because it means that if you have, um, a computation which for instance would have. Uh, an enormous amount of, um, memory requirements, for instance, say you're running a simulation with a billion particles or you're doing a matrix inversion with hundreds of thousands of elements. Um, with MPI, what you can do is you can effectively split not just the computation, but also the memory requirements across multiple nodes. And so because the memory is not shared with MPI, um. And each MPI process allocates its own unique segment in memory, that makes very, seemingly very, very large tasks, computationally,
+
+SPEAKER 1
+uh, computationally tractable.
+
+SPEAKER 0
+And so here, we are effectively saving about, you know, 11 quarter if we're running on 4 processors of the amount of memory we would otherwise need here. OK, then the other thing we want a processor to do is evaluate the correct portion of the integral here, so for the correct XI. So by default with this line of code here. We see that each process will evaluate from 0 to N, which we're going to change to N per rank. And we're going to evaluate Xi equal to 0 and add that onto F and we're gonna evaluate N per
+
+SPEAKER 1
+rank and add that onto F as well.
+
+SPEAKER 0
+The problem with this is that if I was to now run this. Um, we can see that, uh, it's processed, uh, so, let me, um.
+
+SPEAKER 1
+Comment these lines.
+
+SPEAKER 0
+We can see that. Each process um is still not computing the right portion of the integral, in fact, we've got a segmentation fault here which happens a lot in MPI. Um, primarily because what's happened is one of the processors has tried to access a, a portion of, um, of, of space that it doesn't have access to. So what we can do instead is we can uh have a look. At um Basically checking each of the Zi values here that is being passed to each, uh or is being computed by each. Task, so. First up, we have that. Um Uh, the, there's, there's this segmentation fault here, so let me just see if I can work out.
+
+SPEAKER 1
+Um, a way to fix that, so, Um, Fundamentally the
+
+SPEAKER 0
+issue is that we have this. Um, argument here lower, which is not varying, um, from process to process, but we don't want all the processes to be computing, the same, um, portion of this integral. So each, um, Task here, we've got going from 0 to however many pieces it's got, uh, and then it's
+
+SPEAKER 1
+saving that in this variable here, but, The problem is
+
+SPEAKER 0
+that um each Uh, processor has the same value here for lower. Uh, and the second issue is that then when it's doing the sum, it's effectively still going from N per rank to N, so it's trying to access parts out up here of F which are not the same, uh, oh sorry, which it does not have access to here. So this integral or this sum here, we've allocated only, uh, a fraction of the size of the array. Uh, yet we're still trying to access the full portion
+
+SPEAKER 1
+of the array, so if I change that to N per rank, that should be correct for here, so it should stop a segmentation folding hopefully.
+
+SPEAKER 0
+Um, but what it won't do is it won't correct the integral, so if I run this. We'll see that now we have something which is working. Each of the four tasks is computing a portion of the integral, but actually you can see that it's only computing what is effectively the same fraction of the integral. None of these is, um, the right answer. In fact, it each, each of the tasks is producing exactly the same wrong answer, um, because it's only computing
+
+SPEAKER 1
+some, One quarter effectively um of the, of the integral.
+
+SPEAKER 0
+So the other thing we need to do first is we need to make sure that each portion of the um full set of tasks in the communicator is computed still computing a unique portion. So the way I'm gonna do that is I'm, I'm gonna add um, Basically a new variable here which changes lower to depend also on, Um, The rank of the task, so we know that each piece of the integral is effectively given by this DX variable here, and we also know that each task should be doing the first end part, my first end of the integral, so we should also be able to work out, what the first, the, the lower bound of the integral is here by
+
+SPEAKER 1
+just marking those two together. So if I now change this here.
+
+SPEAKER 0
+Then each portion of the uh task should be computing a unique portion of the integral, and so we can see now, whereas before we had that each task was computing the same part of the integral. OK, so these are all identical. Now we can see that each part of The MI communicators computing a unique portion of the integral. And if we were to sum these numbers up, um, we would find that the correct answer should be, um, basically that the, the correct answer for 04, so 0.78-ish. But more importantly, what we've done is we've also split this up now into 4 parts, each of which computes 1/4 of the integral, but also it only takes 1/4 of the time. So if we now look quickly back at um the code we had in the beginning for serial, we can see that the total code was taking around 1400 here microseconds. Uh, but now if we look at what each processor is taking here, it's only 270 microseconds, so it's divided
+
+SPEAKER 1
+that by about a factor of 4.
+
+SPEAKER 0
+As you would expect because each task is now only doing 1/4 of the total number of operations. However, we still have one problem, which is that the answer that we actually get spit out is not correct. Um, and if you were to ask each task what it thinks the answer is, it would give you a different answer. So this is where MPI comes in again, so what we're gonna do now is we're gonna do two things. Firstly, we're going to uh ask each task. To pass its portion of the integral back to some master task effectively, and then we're going to get what we've decided the master task to be to print out the result so we don't get conflicting answers from the different processes. So let's do that, so um in order to identify a master task, it's as simple as just adding in an if statement, so let's have a look here, so let's go um and add in an if statement, so let's say if, I'm task 0. Then uh I'm the one doing all the work.
+
+SPEAKER 1
+Um, so what we want this tough to do is
+
+SPEAKER 0
+we want it to get ready. To receive All the pieces.
+
+SPEAKER 1
+Uh, of the integral. From the Other processes. And And it's You going OK, so that's what we'll
+
+SPEAKER 0
+do if you're task 0. If you're not task 0, you've only got one job, and that is.
+
+SPEAKER 1
+Um, just say pass, so I'm passing. Meyer was always To the other fellow. 0.
+
+SPEAKER 0
+OK, so that's the only thing that the other tasks
+
+SPEAKER 1
+need to do.
+
+SPEAKER 0
+So MPI provides two fundamental, um, commands here to do this. The first is called MPI send, so that's exactly what these other tasks can be doing, but they're gonna effectively be MPI sending. Um, I'll sort out the call signature for that in a minute, and what is task zero doing?
+
+SPEAKER 1
+Well, task zero is NPI receiving, so it's receiving the
+
+SPEAKER 0
+pieces from, Uh, all the other tasks. OK, so let's have a look at what the API says, uh, the syntax for these is. So first up we have, let's have a look at
+
+SPEAKER 1
+MPI send.
+
+SPEAKER 0
+So MPI send allows us to send a piece of information. Um, to, uh, a different destination, so here we have MPI send. It sends effectively, whatever is contained in this buffer. Um, to a destination desk here. Uh, A science is a tag to that, um, That, that, um send as well just so we can track back where, uh, a send has been sent effectively, it's almost like um, uh a stamp addressed envelope here, um where we're just, Telling the er the, the receiver where that message came from, um here we have to provide a communicator, And in order for the sentence to actually know how much information to send, we provide these two things here. So one is just how many things are you sending, and then here we specify what is the size or the type of the things you're sending. OK, so if we're sending just a single number, which is what we're doing here, we would put 1 here, and if it's an integer we'll put in, if it's a float or a double, we can put a float or double here. Um, but also we can use, we can send multiple things at once, so if we wanted to pass 8, send 8 integers all in a row, here we would put uh MPI hint, and here we would put 8. OK, so let's uh copy that API so I'm just gonna copy that into here.
+
+SPEAKER 1
+And start replacing it with something that's actually useful.
+
+SPEAKER 0
+So, first things first, um, what do we have? Well, we have, uh, each portion of the integral from, um, each process that we want to send. So let's replace this here. With the portion of the integral, again it's passed by reference. Uh, this is a single double number here, so here we're gonna put one, because there was only 11 thing, and then MPI also provides its own set of sizes, that you, that it basically can be used to, Determine what the size of something is, so this is a double, so I'm gonna put MTI double. If it was an int, we could put MPI int, and there are a bunch of other cases as well, there's complex numbers, there's uh short ints, long ints, um
+
+SPEAKER 1
+unsigned ints, floating point numbers, um, they're all available um
+
+SPEAKER 0
+on the API. Then we want to also um. Tell the command where we're sending that, so we're gonna send it to task 0, so here we put 0. We can provide a tag here, so this is just a, Number to identify um where or what what the what the send has been, so let's um use here for instance, Um, we use 100 plus, uh, my rank. OK, so this is gonna be a number 1001, 4.1,
+
+SPEAKER 1
+102.2, and let's see if that works. And then here we're gonna do MPI.com world.
+
+SPEAKER 0
+OK, so here we have told the code to send its part of the integral back to process zero. So what does Processo have to do? Well, so Processo has to receive that. However, what it can't do is it can't receive very easily with these commands.
+
+SPEAKER 1
+All everything at once, so what is actually happening is
+
+SPEAKER 0
+um each process is sending a message, but, The task zero has to do all the work and receive all, all of those messages, so if we've got 4 tasks, it needs to receive a message for each of the other tasks that's in the, in the thing.
+
+SPEAKER 1
+And then add it to the total, so in order
+
+SPEAKER 0
+to do that, let's uh first create a running total,
+
+SPEAKER 1
+so we'll start off with er something called results, and we'll add the first portion of, Um, the integral to
+
+SPEAKER 0
+it, so the integral here, according to the rank 0 is just, um, one of these numbers here, so it's just some, some portion of the total integral. But then what we're going to do is we're going to also create a new variable to store, Um Basically, the portion of the integral from all the other tasks,
+
+SPEAKER 1
+so we've got other pieces here, so this is the
+
+SPEAKER 0
+other piece of the integral, and then we're going to receive, so let's have a look at the syntax for
+
+SPEAKER 1
+MPI receive, so MPI receive, Uh, is here.
+
+SPEAKER 0
+So MPI receive conveniently has very similar syntax to MPI send, we basically tell it where to store the the message that it's received, the size of the message in terms of how many pieces and the size of each piece, um, where we're actually receiving a message from. Then also the tag of that message. Um, and then also, um, the communicator, and we also have this variable here which is MPI status, which just tells us if that receiver has worked properly.
+
+SPEAKER 1
+So, um, the status here is a particular object in
+
+SPEAKER 0
+MPI, it's an MPI status object. Um, so what I'll do is first I'll create that impasse status object, several of the um NPI commands require one of these. It's a particular class of objects, so it's just an
+
+SPEAKER 1
+NPI status, and we just call it status.
+
+SPEAKER 0
+So this is an object called status of type NPI
+
+SPEAKER 1
+status.
+
+SPEAKER 0
+OK, so this is what we're going to pass through to any commands that require it. Um, if everything works fine, you probably won't even need to look at what is inside that, that message, uh,
+
+SPEAKER 1
+status anyway. OK, so now let's look at the rest of the
+
+SPEAKER 0
+syntax, so we have.
+
+SPEAKER 1
+Here we're gonna store another piece, uh we're returning well, we expect to find one thing of like double.
+
+SPEAKER 0
+OK, so now the source is a little bit complicated, as is the tank, because we don't necessarily know the way I've written it here. Where Uh, these messages will be coming from, so what we also have to do is expect to receive. Uh, a message from every one of the other tasks. So actually what we wanna do here is we wanna
+
+SPEAKER 1
+actually add in a full loop, so that we can do that. So what we're gonna do is we're gonna loop over
+
+SPEAKER 0
+each of our neighbours.
+
+SPEAKER 1
+Um, and the first one being 1, because we're ranked 0, so we don't have to start at 0, so we'll start at rank 1, and then we'll go all the way up to, um, the total number, which is, Um 4, and we'll loop over uh, All of the
+
+SPEAKER 0
+neighbours. And we'll effectively call the resc an MPI receive for each of those different neighbours.
+
+SPEAKER 1
+So here I've basically looped over tasks 12, and 3,
+
+SPEAKER 0
+for instance, um, and for each one, I'm saying grab the other piece that you're sending me. So what we then do is here we ask, we basically say that the source is gonna come from the
+
+SPEAKER 1
+neighbour. That we asked, so if this is.
+
+SPEAKER 0
+Um, basically this means it will, first it will try and receive a message from rank 1, which rank 1
+
+SPEAKER 1
+should have sent here, and then it will try and
+
+SPEAKER 0
+receive a message from rank 2, which rank 2 should have sent here, and it'll receive a message from rank
+
+SPEAKER 1
+3, which rank 3 would have should have sent here.
+
+SPEAKER 0
+Uh, and then we've assigned a tag to those, which is basically 100 plus the value of the neighbour, to
+
+SPEAKER 1
+line up with the value of the, um, tag when
+
+SPEAKER 0
+it was sent. OK, so this is now a bunch of send and receive, so what happens is the way the code works is that there's, Each task 0 receives 3 times, and each of the other tasks, all that does is just send. So now we should have um task zero receiving a bunch of these other pieces, and the last thing we're gonna want to do is just add that to our
+
+SPEAKER 1
+running results. So here we do this, and then we go like this, and so we add the other piece to our
+
+SPEAKER 0
+running total for the result. So let's have a look at what actually happens when we run this, I'm gonna add, um, I'm gonna not check the value of the integral yet, but first what
+
+SPEAKER 1
+I'm gonna do is I'm actually just going to um,
+
+SPEAKER 0
+Yeah, Process 0 to actually just print what it's doing.
+
+SPEAKER 1
+Um, Here, so. I didn't say receiving. So task. Versus 0. Receiving from. Versus Yeah And then let's also write down. Um The values that it's receiving and what it thinks the running total is, so let's say task zero here,
+
+SPEAKER 0
+so receiving from neighbour.
+
+SPEAKER 1
+And then we'll also ask it to print out the piece it's received and the running total. OK, so let's see if this works, um, or if I've made some mistakes in the code.
+
+SPEAKER 0
+Uh, oh yes, OK, well, I made a typo, so this is MPIcom world, not MPI com Word, um.
+
+SPEAKER 1
+Uh, OK, that looks like it's worked, so let's give
+
+SPEAKER 0
+this a whirl and see what happens. Here we go, so. Uh, you'll see that each of the four processes gets initialised as normal, and then what happens is process zero receives from each of the processes in order, because we've told it that it has to receive from neighbour 1 1st before it can receive from neighbour 2, so it always receives in order. Uh, and then it takes the piece and it adds it to the running total such that by the end it has the value here, which is much closer to the truth. So just exactly how close is it? Well, let's have a look. So what I can do is I can take these.
+
+SPEAKER 1
+And uh I'm commenting them now and replace this. Uh, actually, let's move this inside, so.
+
+SPEAKER 0
+Again, only Process Zero will print this out now, so
+
+SPEAKER 1
+we don't get 4 copies of the print statement, we just get. Uh, one copy of the print statement, and then we'll ask Process Zero to now tell us what it thinks the result was.
+
+SPEAKER 0
+Um, and how long it took.
+
+SPEAKER 1
+OK, so let's do that, so let's make this.
+
+SPEAKER 0
+Uh, here we go, so now we can see that the integral is now much closer to the original and the error, uh, is much, much smaller than it was, but the fraction of the time taken is still much smaller than the serial version of the code.
+
+SPEAKER 1
+So for comparison, let's have a look at the serial
+
+SPEAKER 0
+version of the code. You can see that the two integrals are very similar, but now it's taken only a fraction of the time, um. It should be around 1/4 of the time, um, there is some variation in my timing loop here, but you can see that typically it takes to run the MPI code with 4 processors, it takes around 1 quarter of
+
+SPEAKER 1
+the time. If I was to run this on 2 processors, you
+
+SPEAKER 0
+can see it takes around half the time, so that's
+
+SPEAKER 1
+exactly what we expect, we're splitting the computation across two different processes, and we're getting the integration correct now, but
+
+SPEAKER 0
+it's taking basically the total, the whatever it took for the serial amount of time divided by the number of
+
+SPEAKER 1
+processes and splitting it over.
+
+SPEAKER 0
+So there eventually we've now written our first functioning MPI programme. OK, so we've looked at um some basic commands here, MPI uh com size, MPI rank, uh, MPI send and receive. Um, but this isn't everything, and in particular, one of the things that we've got now is that we've got a scenario where, um, the task zero effectively is computing integral and doing a lot of work, task one is doing, and 2 and 3 are doing a portion of the, of the work and then passing it to zero. But what if we wanted our code. To Or what if the uh rest of our code relied on all the processors also knowing the value of
+
+SPEAKER 1
+the integral. So imagine we have some portion of the code here
+
+SPEAKER 0
+where it's like, now do other things.
+
+SPEAKER 1
+With the value of the integral.
+
+SPEAKER 0
+So the issue here is that now uh we've done something rather stupid, which is that firstly we've allocated, um, a variable called result inside an if statement, so if
+
+SPEAKER 1
+I was to just do something like this, um, and go. Uh, let's remove these print statements now, um. We don't need this. Yeah Let's come at these for now. And So here, so then we can say I'm. Process Um And I think the integral. I This So now what will happen is if we,
+
+SPEAKER 0
+so we've stored. For in my rank we've stored something in result. Uh, which should be being added to, so by the end of the computation the result should contain the correct integral, and we saw that it did, but now if we go outside the for loop and we say I'm
+
+SPEAKER 1
+process blah and I think integral is this, what will
+
+SPEAKER 0
+happen is the entire thing will break, both because neighbour and results are unidentified, and aside the if statement. Um, but that's even in even process zero, they're identified outside the statement, but actually the other issue is that for processes 12, and 3, they're actually not identified at all. So because we've put this inside an if statement, they're only declared for rank 0. And they're never declared for process one. So what we can do instead is we can declare
+
+SPEAKER 1
+this variable for all processes, so let's move this outside
+
+SPEAKER 0
+here. OK, so now we'll um Move this outside here, let's
+
+SPEAKER 1
+er. A sign like that, so now each one is um,
+
+SPEAKER 0
+this, this was actually a typo in the first place
+
+SPEAKER 1
+issue in my rank anyway, so let's now type this, so here I've put my rank, and now result is
+
+SPEAKER 0
+now determined defined, and I've said it's equal to integral, but for process zero it gets updated, so let's have a look at what that says. So here I've run it for 2 processes, uh, let's
+
+SPEAKER 1
+run it for 4 just so it allows for greater.
+
+SPEAKER 0
+Um, variation between the different processes, and so here you can see the process zero gets the integral correct, 0.705, but processors 12, and three are still wrong, they have their, their own, still only have their own portion of the computation. So what are we gonna do about that? So this is where some of the other MPI commands come in, so what we can do is now we can say, well, if the other. Um, processors also need to know the value of the integral, we can ask Process Zero to broadcast that result back to all the other processors. So let's have a look at that, so let's do uh MPI broadcast, so Bcast, here we go. So MPI broadcasts, so what this does is it broadcasts a message from some process, a process with ranked routes to all the other processes. So Here the root process is going to be. Um Versus 0, because that's the one that has the right answer. Um, and just like a send and a receive, the actual things they're sending are quite simple.
+
+SPEAKER 1
+So, uh, uh, so we have here, we're actually gonna
+
+SPEAKER 0
+be broadcasting this value of results here. Here we have, um, again, we're sending one number, and
+
+SPEAKER 1
+it's a double, so we'll go MPI double.
+
+SPEAKER 0
+The broadcast is effectively coming from Process 0, so ranked 0 is the only one with the correct value at
+
+SPEAKER 1
+the minute, so that's the one doing the broadcasting. And then this is.
+
+SPEAKER 0
+Uh, all the communicators within, uh, oh sorry, all the tasks within the NPI Commonwealth communicator.
+
+SPEAKER 1
+So now let's see what happens if we do that. And we'll keep this here, but now I will add another print statement and say, so beforehand I was processed
+
+SPEAKER 0
+blah, and I thought the integral was this.
+
+SPEAKER 1
+And now, I think the integral is this, and after.
+
+SPEAKER 0
+Broadcasting Have a different answer, so let's have a look, so this made correctly as well, so let's see what
+
+SPEAKER 1
+happens when we try and run this.
+
+SPEAKER 0
+Here we go, so this has worked nicely, so, uh, we start off with a code which still has 4 tasks and each of them, one of them computes only a fraction of the code. Um, and now when we compute the integral, we say that I'm price is 0, and I think the integral is this, which is the correct answer, but the other 3. Processors will have the wrong answer, but then after the broadcast, all four of those processes have the correct answer, so if we're now using this value, this variable to do further computation, each task would be able to continue um exactly the way it would have, as if each task had computed the full integral. So this is a pretty standard MPI, um, sort of workflow where you will split up a task so that each portion, um, of the total communicator only works out a fraction of it. You'll then do some sends and receives, such that some of the processors or one of the processors can, uh, knows what the total is or knows what the, the full value is or the result of the full computation, and then that process will then broadcast. Um, the full result back to the other tasks and. You can still see here that, so for instance task zero is still doing a little bit more work than all the others, so the actual time it takes will be limited by the time it takes for task zero to finish, um, and then there is some overhead as well, for instance, due to the fact that we have to broadcast, but generally this is pretty quick, so, um, This is a neat way of splitting up a computation. So One thing we can still do though is we can actually go a little bit further and we can try and bundle this up into something which is a little bit neater, so at the minute we have some code where, Rank 0's doing a little bit of work in an if statement and then ranks 12 and 3 are doing some other, some other work in a different part of the if statement, and then the result has to be broadcast from rank 0 to all the other tasks. Conveniently, MPI provides some other commands which allow us to do all of that. With only a single command or with a fewer number of commands. So one of those is called MPI reduce, so let's have a look at MPI reduce. So MPI reduce, um, effectively reduces, as it says here, values of all processes within the group. So what this effectively does is. Um Performs an operation on, Uh, set of Commands, oh sorry, on a set of variables, um of the same type and the same count across all the various tasks in the communicator, and then it passes the results back
+
+SPEAKER 1
+to, um, The roots process here.
+
+SPEAKER 0
+So, what this will allow us to do is effectively remove or condense this set of send and receives, so
+
+SPEAKER 1
+I'm going to comment this out here. And I'll delete it in a second.
+
+SPEAKER 0
+But conveniently what MPI reduce allows us to do is change this whole set of, Uh, send and receives down to a single command. So the syntax for MPI reduce is here, so let's
+
+SPEAKER 1
+copy that across.
+
+SPEAKER 0
+So, if you have a Looked at the Open MP example, you'll see that there's effectively when, There's there's some common instances in Open MP where you'll have for instance a for loop you're trying to paralyse and within that for loop you're just trying to sum up a bunch
+
+SPEAKER 1
+of variable values, and OpenMP provides a shortcut for that
+
+SPEAKER 0
+which is this reduction operator. Um MPI also does that, so MPI rather than loop looping over all the parts of the computation and sending one at a time, um, if you're effectively trying to do a simple thing like plus equals, On a set of values across all processes, you can use MPI reduced. So MPI reduce effectively asks for what are you sending, so what are you trying to sum over in our
+
+SPEAKER 1
+case? And we know what that is, each task has a unique value integral that we're trying to sum over.
+
+SPEAKER 0
+Then we also have what we call the receive buffer, so this is where you're going to store the results of whatever MPI is doing to the values of integral. So here we've allocated on each processor something called results. And um, What we're doing is we're basically just summing
+
+SPEAKER 1
+the value of integral and we want to put it into the value of results, so I'm gonna remove this here, so we've allocated a result but let's not actually
+
+SPEAKER 0
+allocate anything to it. Um, the actual integral itself, it still only has one number, so the count is one. It's still a double, so the NPI data type is still double. Um, but the important part of MPI reduce is this thing called MPI op. So MPI op is effectively what operation do we want to perform on these, so the reduce operation. There's a few different examples, I don't know if they're all listed here on the MRR or in fact they are. Um, and so, some classic examples of what you might want to do would be to sum. All the values of integral and store them in a new variable called result. You could also ask, of all the integrals, all the variables integral, what is the maximum across all the processes, what is the minimum across all the processes, or what is their product. OK, you can also do subtraction, the way you do subtraction is you just pass in a sum over the negative variable, so you take negative of the integral and
+
+SPEAKER 1
+then you, Do the sum of the negatives, and the
+
+SPEAKER 0
+same with division, you can also um, To the product
+
+SPEAKER 1
+of one overs as well, so MPI does not actually
+
+SPEAKER 0
+provide, uh, subtractions or divisions necessarily, but you can uh,
+
+SPEAKER 1
+Great, there yourself, um, effectively and there's also a bunch
+
+SPEAKER 0
+of logical um operations as well. OK, so what we are interested in here is summing those, so we actually want MPI sum as our operator, so we go to here and we do MPI sum. We want the results to be returned to task zero, which was the task we identified above as being sort of the master or main task, and we're summing across all the tasks in the NPI Commonwealth Communicator.
+
+SPEAKER 1
+Uh OK, good, so actually let's keep this here first as integral so that the print statement down here works.
+
+SPEAKER 0
+Um, so now what we've done is we've attempted to remove this if statement here and replace it with a
+
+SPEAKER 1
+single line here, which is just this reduction operation. So let's see if this works. So the make has compiled properly, so there seems to
+
+SPEAKER 0
+be no errors there, so what happens now when we
+
+SPEAKER 1
+run this?
+
+SPEAKER 0
+Uh, here we go, so we see that exactly the same thing has happened, so we've successfully uh replaced this if statement here, which manually effective, you know, told we were manually telling MPI how to split up the computation. Um, across the, across the tasks, but now we can just replace it with a single MPR reduce command, and the answer is the same, we have the processor zero, still knows the correct answer because we've told it that the MPR reducer that the root is processor zero. And the result in the other three is effectively um just their portion of the integral because they haven't been told what the full result is, but once we've broadcast, we now have um. Uh, the correct answer on all the tasks. So that's worked very nicely. We can go one step further still and we can ask, well how about if we can replace the broadcast, so is there a command that we can use to reduce and then make it so that each task knows the reduction as well, and the answer is yes. So MPI provides a convenience. Operation for that. Um, which is called MPI, uh, all reduce, so let
+
+SPEAKER 1
+me see if I can find that, uh, or is it reduce all? Mm Or reduce, here we go, MPI or reduce, so
+
+SPEAKER 0
+MPI or reduce is exactly the same as reduce, but it's basically reduce, uh, combined with the broadcast, so it combines the values from all the processes and then distributes the result back to all the processors. The syntax is almost identical to reduce, you can see that it has descend. Arguments, so this is the thing that it's sending, and this is where the results are being stored, it still has the count and the data type and the operation, but the one thing it doesn't have is it doesn't have a route, um, Process, and that's because effectively we're not saying this is going back to process zero, this is just being broadcast to all processes automatically, so the
+
+SPEAKER 1
+only thing we have to do is change this, we
+
+SPEAKER 0
+can change this to all reduce, and then we no longer need the broadcast because that's being done by default.
+
+SPEAKER 1
+And if we do that. And try and make this, let's see if this works. Yep, it's compiled properly.
+
+SPEAKER 0
+And now it's worked, so we see that the uh MPI oil juice has now effectively summed up that. Um, integral across all four processes and then broadcast that to the, uh, different, uh, command, uh, processes that are
+
+SPEAKER 1
+around. So we've now successfully converted our serial, uh, implementation of
+
+SPEAKER 0
+the, uh, numerical integration into something which is significantly faster using NPI. So, to wrap up this bit of code, I'm gonna remove this, I'm gonna remove this.
+
+SPEAKER 1
+And I'm gonna remove this, so now we can see
+
+SPEAKER 0
+that the amount of code we've actually had to add here. In order to get the computation correct, it's pretty small, so we've just had to carefully specify which portions of the overall task, uh, or overall computation each task is doing. Um, and we've had to make sure that we only form that portion of the task, uh, of the overall computation on that task, sorry, so we have, um, changed,
+
+SPEAKER 1
+for instance, the total amount of computation each one's doing
+
+SPEAKER 0
+and where it starts that computation. And then we've had to make sure that each. Um, of the tasks knows the full result at the end, and that we sum up the results from the
+
+SPEAKER 1
+different tasks, so that's the numerical integration done, so if
+
+SPEAKER 0
+we go back to what we were printing out originally,
+
+SPEAKER 1
+Um, and Print this out, so we. Um, we'll keep These here and then we'll just add the process number here.
+
+SPEAKER 0
+Then we should find that each process knows the total, uh, result of the integration. Uh, but that the overall computation is now significantly faster.
+
+SPEAKER 1
+So if we just do that. And we have the result here. Oh, no, no, no, we don't. Uh, oh, of course, OK, so here I was still printing out integral, so let me give that a go, so here we should make the available into results because
+
+SPEAKER 0
+that's where we saw the global, um, total answer, whereas integral contains just each processor fraction of the answer. And then, yeah, they're good, so we can see that, again, just like, uh, is always the case with parallel programming, there's no necessary reason why they're all printed out in the right order. Um, but we can see that on each processor, the integral is effectively.
+
+SPEAKER 1
+The same answer with the same error, and, but each
+
+SPEAKER 0
+task reports only a fraction of the time taken. OK, so there are a few other commands you might want to use in NPI. I'm not gonna go over them in detail now for the purposes of this numerical integration example, um, but just to look briefly at some of the ones here, um. Something that you may come across in your um, Uh, coding, maybe MPI barrier. So MPI barrier just forces everything to reach that point before it continues. Um, it's the same as a barrier in many other
+
+SPEAKER 1
+programming languages, um, and all it takes is just a
+
+SPEAKER 0
+communicator. So in our example, if we wanted to add that in, we would just say we wanted to add in a barrier right at the beginning. Um Say here we would just add this and then
+
+SPEAKER 1
+we would change this to MP.comworld. And so that forces each process to reach the barrier
+
+SPEAKER 0
+and effectively send the flag saying it's reached that point before it continues. Um And if you were to use a different communicator here, that barrier would only apply to uh the tasks
+
+SPEAKER 1
+inside that communicator. So if you were to use something other than the MPI Comm world, it would not necessarily apply to everything in MPI.comworld.
+
+SPEAKER 0
+Something else that you may find useful is MPI uh scatter, so MPI scatter um in this sort of exercise would have been very similar to the MPI Gather. That we um. Sorry, the NPI broadcast that we. Um, used, so this effectively sends data from one task to all other tasks. Um, We used MPI broadcast to share our results, but we could have easily used MPI scatter, so MPI scatter just takes whatever's in this buffer here, we're gonna, that our series is gonna send. Um, and you tell again the size of the buffer and the type, and then each other task will receive what it has been sent, um, to, The received buffer, so what we could have done is the broadcast, is we could have said, Uh, here we're gonna do an
+
+SPEAKER 1
+NPI scatter instead, and here we're gonna scatter the value of integral, which is a size one. We're and double. Yeah, I'm sorry, result results. And then we'll store it back in the original thing we put Integral, so this is now being stored inside
+
+SPEAKER 0
+integral, again it's saving one thing, uh type double. Um, the scatter is coming from class zero.
+
+SPEAKER 1
+And NPR Commworld. Is the Um, Result.
+
+SPEAKER 0
+So, So that's er what we could have done there. Um, but the benefit of MPI scatter is that, um, not only does it work for single messages, but it also allows you to split up messages as well. So for instance, what we could have done instead is say we used, we had this F, um, array here, and we actually had F, this full F array which contains, uh, 250,000 numbers on task zero, we actually could have. Split those all up into in in in across the different tasks, so if you pass in an array for instance here, what that will do is that will split up into n, equal parts and then scatter it across the, the other tasks. So here we go, so here's an example of that, so uh. Basically the root sends a message that NPI sends, and that message is split into n equal segments.
+
+SPEAKER 1
+Um, so that's one thing you can do there as
+
+SPEAKER 0
+well. Uh, the opposite of that is MPI Gather. So if you wanted to do the opposite and say that task zero needs to receive things from all the other tasks, um, then you could use an MPI Gather. So we could have used MPI Gather instead of that MPI send and MPI receive in a for loop.
+
+SPEAKER 1
+Um, example, NPI Gather.
+
+SPEAKER 0
+Effectively, um, It's, it's basically like doing an MPI send and then receive inside the volume, so MPI Gather just
+
+SPEAKER 1
+replaces that, but what we did in the send is
+
+SPEAKER 0
+we'd used this reduced command. The reason you might want to use MPI, um, Gather is for instance if you're not gonna do a simple operation on, um, the various, uh, variables, we used MPI reduce because we were doing a sum over all those variables, but if you were doing something more complicated, Um, and you just needed to know the number of, um, basically some variable from each task and you wanted to store the value of that variable in a new array which had the same length as the number of total number of tasks, for instance, then you might use NPI Gather to do that. And then the last one I'm going to mention um because it's can be useful, um, particularly when you're trying to really paralyse a programme, is MPI all to all, so I've used this before as well, so MPI all to all. Um It's kind of like a super um send receive. So what this does is effectively. Is the same as this little code segment written here, so if you've got 10 different tasks, and each of them is sending and each of them is receiving, From the other. Then MPI all to all allows you to basically in one line do all of this, so it basically allows you to, each process to send the same amount of data to each other and then receive that amount of data. So say for instance I had um, A list of numbers that was unique to um, each processor, and I wanted to split that list up, um and send a portion of it to each other processor so that they could all be added, then you might want to use MPI all to all there. So this is very useful um when. You, it's when you want every process to have information that every other process has, and you don't necessarily want
+
+SPEAKER 1
+any process to have this role as like the master process.
+
+SPEAKER 0
+So that's not as useful in this numerical integration example, but that's another command that you may want to use
+
+SPEAKER 1
+um when you're thinking about your project.
+
+SPEAKER 0
+OK, so to wrap up, uh, one last thing I thought would be useful would be to have a look at how to submit this, um, sort of code to uh Getafix. So firstly, let's see if I can log on to Getafix. OK, so what I'm gonna do is I'm going to uh first quickly correct this er programme so that it
+
+SPEAKER 1
+doesn't have this MPI scatter.
+
+SPEAKER 0
+Um In there and then I'm going to uh move this across to uh get a fix, so let me
+
+SPEAKER 1
+just bring up a new terminal, um actually I can use this one, so let's use this one, so. Um, what I wanna do is I want to, um,
+
+SPEAKER 0
+copy across the MPI and the serial code and the MIG file. Um To get a fix, so I'm going to try
+
+SPEAKER 1
+uh. To my gets uh directory, where I conveniently have already created a directory. And So this, uh, I thought I created archery, uh. do. Uh, yes, yes, I did, but it's in the wrong. Uh my name's again.
+
+SPEAKER 0
+There we go, so, uh, so I've copied across that code, let's also copy across the make file, so.
+
+SPEAKER 1
+Yeah So, so I can compile that code on there.
+
+SPEAKER 0
+And let's actually um just bring up a terminal which is actually to to get it fixed so that I
+
+SPEAKER 1
+can see what I'm doing on there as well. So if I just do. And SSH into. Uh, can I fix. On this other terminal down here. Uh, then here I have SSH into Gotafix and I'm
+
+SPEAKER 0
+inside the KOSC 3500 directory, um, where we see some
+
+SPEAKER 1
+stuff, some stuff that I pre-arranged.
+
+SPEAKER 0
+So, OK, so we should be able to compile those same codes, uh, here, however, Um, if we do that, we'll see that we have this issue where we haven't been able to find the make file, uh, command, or sorry, the compile, compiler for, uh, MPI on Getta Fix. So the way we get around this is first we need to load the, um, modules that we will need, so the first I will load is, uh, this.
+
+SPEAKER 1
+Um, GCC compilers, so, uh, I think the one I typically use is this. Oops.
+
+SPEAKER 0
+Um, so I'm gonna load the GCC compilers as well,
+
+SPEAKER 1
+so this is G, um. Thing, so then I'm also gonna load er MPI so
+
+SPEAKER 0
+let's go module load, open MPI.
+
+SPEAKER 1
+Uh, and we'll choose Open MPI 3, which is. And nice up to date one, so here I'm doing a module load open MPI3 Ethernet, so this uses Ethernet connection, um, and so these are the same modules that Ian loaded in his lecture. And so now, uh, let me jump to the make
+
+SPEAKER 0
+file, so, Um, in my make file I was specifying the paths that I needed for my laptop, but actually for Getafix, once you've loaded the modules, it should be
+
+SPEAKER 1
+as simple as just specifying that we're using MPIC plus plus.
+
+SPEAKER 0
+Um, the the library paths should be included as part
+
+SPEAKER 1
+of, uh, the module load, as should the include.
+
+SPEAKER 0
+So what I've done is I've just removed all the prefactors that I added here.
+
+SPEAKER 1
+Um, and I'm letting get a fix, um, tell me
+
+SPEAKER 0
+where to find all of those things.
+
+SPEAKER 1
+So now if I try making the codes, We'll see that Um, it works, so the code, um, has compiled as normal, there's a few warnings, uh, slightly different from
+
+SPEAKER 0
+what was being warned about on my laptop because we're
+
+SPEAKER 1
+using different versions of the compilers, um, but those warnings all just effectively, uh, relate to unused variables. So now if I try and run the code, I can run the serial version of the code as before, and I can also, again, run the MPI version of the code, again, uh, using, This, so one thing to
+
+SPEAKER 0
+be aware of is if you're testing MPI codes on Getafix, do be careful about running stuff on the login mode, uh other people are trying to use this as well, so you don't wanna set codes running um. On the login node er if you can avoid it, but it is er fine for just quick debugging and
+
+SPEAKER 1
+checking your code, so if I do this, you'll see
+
+SPEAKER 0
+that I do get some warnings, er these are the same warnings that er Ian was showing in his lectures, um, but ultimately they just um relate to the fact that MPI, Um, doesn't use, Uh, high performance networks, um,
+
+SPEAKER 1
+because there are none, you get a fix, it uses
+
+SPEAKER 0
+Ethernet, uh, but nonetheless we can see that the code runs as expected and we still get the correct answer
+
+SPEAKER 1
+for the integral, and it still runs in half the time of the serial version of the code as well. Uh, and that will extend also if we bring it up 24. So the last thing I wanna cover, I'm gonna fix
+
+SPEAKER 0
+is how would I actually run this code if I didn't want to run it on a login node, but I did want to run it on a larger number
+
+SPEAKER 1
+of nodes or processes.
+
+SPEAKER 0
+So the way you can do that is with a shell script and by submitting the job actually to the queues. So if we look at Get a Fix, um, we
+
+SPEAKER 1
+can see that there's this queue, there's lots of people running jobs currently on there, and what we can do
+
+SPEAKER 0
+with our code is we can also submit a job,
+
+SPEAKER 1
+so in order to make this a bit clearer, I'm going to expand this a bit down here.
+
+SPEAKER 0
+And so here I've uh cheated and prearranged for a convenient script, so let's have a look at that.
+
+SPEAKER 1
+So here I have a script.
+
+SPEAKER 0
+That will submit this job, so what it does is it's um, Loads the modules, when it's run, so I think I was using just GU a minute ago so
+
+SPEAKER 1
+we'll use that, um, and then it runs the code
+
+SPEAKER 0
+exactly as if I'd run it on the command line,
+
+SPEAKER 1
+um, I had the timing argument here just so we
+
+SPEAKER 0
+could see the war time, um but the thing that's actually important are these Spatch commands, so here I've given my job a name, So I've called it MPI test, and the output of the job will be saved to this output called MPIt.out. What I'm telling the scheduler to allocate is 2 different nodes, and 8 tasks in total, so that means that one node will have 4 tasks and the other node will have 4 tasks. Tasks on different nodes do not share memory, so this is a good test of whether the MPI portion of the code is actually working because uh on my laptop there was always a chance that they were sharing memory,
+
+SPEAKER 1
+um, if I was using Open MP for instance that's
+
+SPEAKER 0
+what they would have done, but here there's absolute the hardware is different so there's absolutely nowhere they're sharing memory,
+
+SPEAKER 1
+and I've also specified a maximum time for this code, we know it's very fast so I just specified one minute. And so, if I now try and run this, Um, you should be able to submit this to the queue with uh S patch, so here I'm running S patch submit MPI.S. So there we go, it's submitted the job to get a Fix, and if I ask, Um If
+
+SPEAKER 0
+that's run, it looks like it has, or at least it ran and then finished or it ran and then
+
+SPEAKER 1
+broke, so if we now look at. Um, This code here, so this was just um, And so it looks like actually. The code may have not worked. So what I'm gonna do is I'm gonna actually just remove. Uh, this and an estimate your job and see what happens. So click this. And we'll see yes it ran, it's finished, so now if I look here, there is now yes, there's this
+
+SPEAKER 0
+file here called MPI tester out, so if I have
+
+SPEAKER 1
+a look in this file, Uh, we can see that
+
+SPEAKER 0
+everything that was being printed to the screen has now been printed to this file. We still get the same warning. Um, but now we have 8 processors running. They are splitting the job equally amongst those 8 processors, and they're each computing 1/8 of the integral, and then printing out the integral, and so they all are getting the right integral, and it's taking only 1/8 of the
+
+SPEAKER 1
+time that it took for the serial code. So if we wanted to bump that up, we could.
+
+SPEAKER 0
+So if we were to go back into, The code and or the STEM script and say now what happens if we run it on 32. Processes, this is a complete overkill for this kind of
+
+SPEAKER 1
+example, um, but let's bump it up to 4 nodes,
+
+SPEAKER 0
+each with 832 tasks, let's say, Um, then, Try running
+
+SPEAKER 1
+this and uh, If we're lucky, it will, um.
+
+SPEAKER 0
+Run, but it's as simple as just changing the number of nodes or the number of tasks. If we don't care about the actual specifications of nodes, we could even, um, just remove this line entirely, so
+
+SPEAKER 1
+uh we just ask for 32 tasks in total, it doesn't matter where they are, um, Then we can submit that job and if get a Fix is not too
+
+SPEAKER 0
+busy, we should see that that runs very quickly as
+
+SPEAKER 1
+well. Uh, if it is busy, then typically you'd have to wait for this to work. So let's have a look, it looks like it may have run. So we see now, yes, here we go, so now
+
+SPEAKER 0
+we've run it on 32 tasks, each one has only computed 1 30 seconds of the total integral. But you can see that the fraction of the time it takes now is absolutely tiny compared to the original. So the original was taking about 1200 microseconds, and now it's taking 42, which is significantly faster. So this is a really powerful way of paralysing your
+
+SPEAKER 1
+codes.
+
+SPEAKER 0
+Um, and so that's, uh, all I wanted to cover today in this tutorial. So, uh, please feel free to shoot me a message if you have any questions, and otherwise, uh, best of luck getting MR running yourselves.
+
+SPEAKER 1
+Thanks.
