@@ -1,7 +1,7 @@
 # Commands
 
-Every command used to build, test, run and benchmark the pricer, locally and
-on rangpur. Commands are run from `project/`. Section 5 is the five minute
+This file lists every command used to build, test, run and benchmark the
+pricer, locally and on rangpur. Commands are run from `project/`. Section 5 is the five minute
 live demo for the interview.
 
 ## 1. Local build and tests
@@ -89,8 +89,8 @@ price,delta,gamma,vega,ns,nv,nt,solver,seconds,cell_updates_per_sec,threads,rank
 `boundary_seconds` is the part of `seconds` the omp and mpi rungs spent on
 the serial boundary work.
 
-`exchange_seconds` is the part of `seconds` the `mpi` rung spent swapping halo
-rows on rank 0. It is 0 for every other rung.
+`exchange_seconds` is the part of `seconds` that rank 0 of the `mpi` rung
+spent on the edge row exchange. It is 0 for every other rung.
 
 The stability and Feller line and any off-node warning go to stderr, so
 stdout stays one clean CSV line.
@@ -107,9 +107,9 @@ OMP_NUM_THREADS=24 OMP_PLACES=cores OMP_PROC_BIND=close ./heston --config config
 
 | Variable | Meaning |
 |---|---|
-| `OMP_NUM_THREADS=N` | team size. Unset, the runtime uses every CPU the process is allowed, which under slurm is `--cpus-per-task` |
+| `OMP_NUM_THREADS=N` | team size. When it is unset, the runtime uses every CPU the process may run on, which under slurm is `--cpus-per-task` |
 | `OMP_PLACES=cores` | a place is one physical core, so two threads never share one core's hyper-threads |
-| `OMP_PROC_BIND=close` | threads go on neighbouring cores, filling socket 0 first |
+| `OMP_PROC_BIND=close` | threads go on consecutive places in the place list. On the r730 nodes the cores are numbered even on socket 0 and odd on socket 1, so consecutive threads alternate sockets (RESULTS M2.2) |
 | `OMP_PROC_BIND=spread` | threads are spread evenly across both sockets |
 | `OMP_PROC_BIND=false` | the operating system may move threads between cores |
 | `OMP_DISPLAY_ENV=true` | the runtime prints the settings it actually used to stderr at start up |
@@ -180,12 +180,13 @@ make fetch          # rsync results and slurm-*.out back into results/
 
 `slurm/debug.sh` asks for 8 cores, builds from clean, runs one smoke solve
 per rung (`omp` on 8 threads, `mpi` as 2 ranks of 4 threads), runs
-`make test`, `make test-mpi` and `make avx-check`, and counts AVX-512 (`zmm`) instructions in
-the binary, which must be 0, and AVX2 (`ymm`) instructions in
-`stencil_avx.o`, which must not be. It does not pin a node, so its timings
-are not benchmarks.
+`make test`, `make test-mpi` and `make avx-check`, and counts AVX-512
+(`zmm`) instructions in the binary, which must be 0, and AVX2 (`ymm`) instructions in
+`stencil_avx.o`, which must not be. It does not request a specific node, so
+its timings are not benchmarks.
 
-To check the AVX2 instructions by hand after a build on rangpur:
+These two commands check the AVX2 instructions by hand after a build on
+rangpur.
 
 ```bash
 objdump -d heston | grep -c zmm             # must print 0
@@ -200,9 +201,9 @@ per node), 3 ranks and 4 ranks, then prints the host of each rank.
 ssh rangpur 'export PATH=/opt/slurm/bin:$PATH; cd cosc3500/project && sbatch slurm/debug_mpi.sh'
 ```
 
-`sbatch` and `squeue` live in `/opt/slurm/bin`, which a non-interactive ssh
-does not put on `PATH`. The Makefile targets add it. To submit one script by
-hand:
+`sbatch` and `squeue` are in `/opt/slurm/bin`, which a non-interactive ssh
+does not put on `PATH`. The Makefile targets add it. This command submits
+one script by hand.
 
 ```bash
 ssh rangpur 'export PATH=/opt/slurm/bin:$PATH; cd cosc3500/project && sbatch slurm/debug.sh'
@@ -226,7 +227,7 @@ own job. Benchmark numbers only ever come from a compute node through
 Every sweep is its own job on an exclusive r730 node, because the QOS caps a
 job at 15 minutes. Each one sources `slurm/bench_common.sh`, builds from
 clean, runs `make test`, `make test-mpi` and `make avx-check`, and refuses to
-time anything if a test fails. Results land in
+time anything if a test fails. Results are written to
 `results/bench_<sweep>_<jobid>.csv` with a provenance header, and stderr in
 the matching `.err`.
 
@@ -248,7 +249,7 @@ make fetch
 | `bench_m2_size.sh` | r730-2 | serial, simd, omp on 24 threads, 512 by 128 up to 8192 by 1024 |
 | `bench_m2_exp_a.sh` | r730-2 | E4 persistent region, E5 schedule, E8 parallel boundaries |
 | `bench_m2_exp_c.sh` | r730-2 | E11 page regime, pinned against glibc's default, on 24 threads and serial |
-| `bench_m2_exp_float.sh` | r730-2 | E3 float sheets against double, on 1 and 24 threads, and the float error on the reference grid |
+| `bench_m2_exp_float.sh` | r730-2 | E3 float buffers against double, on 1 and 24 threads, and the float error on the reference grid |
 | `bench_m2_denormal.sh` | r730-2 | E12, every rung with and without flushing denormals to zero |
 | `bench_m2_optlevels.sh` | r730-2 | baseline and serial built at -O0 to -O3, one thread, each level checked for the -O2 answer first |
 | `profile_m2.sh` | r730-2 | gprof flat profiles of baseline, serial and simd, written to `results/profile_<solver>_<jobid>.txt` |
@@ -278,9 +279,9 @@ arch -arm64 .venv/bin/python -m pip install -r scripts/requirements.txt
 
 | Target | Produces |
 |---|---|
-| `make demo-anim` | `results/demo_timevalue.mp4`, `demo_surface.mp4`, the weather map |
+| `make demo-anim` | `results/demo_timevalue.mp4`, `demo_surface.mp4`, the value map |
 | `make collapse-anim` | `results/bs_collapse.mp4`, `xi_smile.mp4`, Heston collapsing onto Black-Scholes |
-| `make mc-check` | a Monte Carlo third opinion on the price |
+| `make mc-check` | a Monte Carlo price, a third check alongside the PDE and Fourier prices |
 | `make convergence` | `results/convergence.png`, the grid refinement study |
 | `make payoff` | `results/payoff.png` |
 | `make m2-figures` | F1 to F14 and `summary.txt` in `results/m2/`, drawn from the final sweep CSVs the Makefile names by job id, and the grid and Black-Scholes figures from `results/collapse_work/dump` |
@@ -288,8 +289,9 @@ arch -arm64 .venv/bin/python -m pip install -r scripts/requirements.txt
 
 ## 5. Interview demo runbook
 
-About five minutes. Connect to the UQ VPN and open the `rangpur` ssh
-socket before the interview starts, so nothing waits on a password.
+The demo takes about five minutes. Connect to the UQ VPN and open the shared
+`rangpur` ssh connection before the interview starts, so no command has to
+wait for a password.
 
 Start the compute node job first, because it queues and then takes a few
 minutes. It builds from clean on a compute node, runs every test and the
@@ -309,7 +311,7 @@ make clean && make && make test
 ```
 
 Run each rung on the same grid. The price, delta, gamma and vega columns
-are the same in every line, and the `seconds` column shrinks. On the Mac
+are the same in every line, and the `seconds` column decreases. On the Mac
 `simd` prints a warning and runs the scalar row, because the Mac has no AVX2.
 
 ```bash
@@ -339,7 +341,7 @@ grep -E 'PASS|FAIL|zmm' results/logs/slurm-<jobid>.out
 If the queue is slow, `results/logs/slurm-651295.out` is the full log of
 the ladder job, with the build, every test and the AVX2 check on r730-2.
 
-Things to have open in the editor, in this order. `src/stencil.cpp`
-(`update_cells_scalar`), `src/stencil_avx.cpp` (the FMA lines),
-`src/solver_omp.cpp` (the pragma), `src/solver_mpi.cpp`
-(`exchange_edge_rows`), and `results/m2/f1_ladder.png`.
+Have these files open in the editor, in this order. They are
+`src/stencil.cpp` (`update_cells_scalar`), `src/stencil_avx.cpp` (the FMA
+lines), `src/solver_omp.cpp` (the pragma), `src/solver_mpi.cpp`
+(`exchange_edge_rows`) and `results/m2/f1_ladder.png`.

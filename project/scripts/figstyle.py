@@ -54,6 +54,27 @@ def apply():
     })
 
 
+def apply_slide():
+    """The shared look at slide size, for figures drawn at the size they appear in the deck.
+
+    A figure drawn at 12 inches and shrunk into a 5.5 inch slot loses half its
+    point size, which made the first Milestone 2 deck unreadable. The slide
+    figures are drawn at their slot size instead, so these sizes are close to
+    the sizes on the slide.
+    """
+    apply()
+    matplotlib.rcParams.update({
+        "font.family": ["Helvetica Neue", "Arial", "DejaVu Sans"],
+        "font.size": 10.5,
+        "axes.titlesize": 11,
+        "axes.labelsize": 10,
+        "xtick.labelsize": 9.5,
+        "ytick.labelsize": 9.5,
+        "legend.fontsize": 9,
+        "lines.markersize": 5,
+    })
+
+
 def finish_axes(*axes):
     """Drop the top and right spines. The rcParams cannot express this."""
     for ax in axes:

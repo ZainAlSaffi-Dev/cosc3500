@@ -117,7 +117,7 @@ The implementation ladder climbs that structure one rung at a time:
 
 **OpenMP.** Each thread takes a band of rows of today's sheet. Because every thread only reads the shared read-only later sheet and writes its own disjoint cells, no locks are needed — just one barrier per timestep before the buffer swap. Evidence: strong scaling and parallel efficiency versus thread count.
 
-**CUDA (optional).** One GPU thread per cell, with both sheets resident on the device so nothing crosses the PCIe bus inside the time loop. Evidence: CPU/GPU crossover point by grid size. MPI slab decomposition with halo exchange is a further optional extension.
+**CUDA (optional).** One GPU thread per cell, with both sheets resident on the device so nothing crosses the PCIe bus inside the time loop. Evidence: CPU/GPU crossover point by grid size. MPI slab decomposition with edge row exchange is a further optional extension.
 
 At every rung the same discipline applies: prove the output matches the serial reference first, then measure.
 

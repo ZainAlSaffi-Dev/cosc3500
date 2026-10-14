@@ -8,7 +8,7 @@ ready for the interview.
 
 **Start here.** If you only have one evening, read these sections in order.
 
-1. §6 explains the grid as a stack of spreadsheets, with pictures.
+1. §6 explains the grid as one table of values per time level, with pictures.
 2. §7 explains finite differences, with the solver's first step worked by hand.
 3. §11 explains why there are two buffers, and shows the bug you get with one.
 
@@ -55,11 +55,11 @@ put  payoff at expiry:  max(K − S, 0)
 ```
 
 This block gives what each option pays on the expiry date. We need it because
-it fills the very first sheet of the grid (`Grid::init_payoff`), and every
-earlier sheet is computed from that one.
+it fills the grid at expiry (`Grid::init_payoff`), and the grid at every
+earlier time is computed from that one.
 
 The `max(...)` gives the payoff a hockey-stick shape, flat at zero and then
-rising in a straight line. You can see it on the expiry sheet.
+rising in a straight line. You can see it in the grid at expiry.
 
 ### 2. What does pricing an option mean?
 
@@ -93,8 +93,8 @@ between neighbouring cells.
 and volatility is `sqrt(v)`.
 
 The classic **Black-Scholes** model assumes volatility is a *fixed constant*.
-That gives a closed-form formula, but it is wrong about the real world, where
-markets alternate between calm and panic. Volatility *moves*.
+That gives a closed-form formula, but real markets alternate between calm and
+volatile periods, so volatility *changes over time*.
 
 The **Heston model** fixes this by making variance a random process of its
 own. It is described by two coupled equations.
@@ -109,8 +109,9 @@ This block is the Heston model itself, one random equation for the stock and
 one for its variance. We write it down because the PDE in §5 comes from it,
 but the C++ never uses these equations directly (§5b explains why).
 
-In words, the stock drifts and jiggles, and the *size of the jiggle* (`v`) is
-itself pulled toward a long-run level while being randomly kicked.
+In words, the stock price drifts and moves randomly, and the *size of those
+random moves* (`v`) is pulled toward a long-run level while it also moves
+randomly.
 
 These are the five Heston parameters. Memorise one line for each.
 
@@ -119,7 +120,7 @@ These are the five Heston parameters. Memorise one line for each.
 | `v0` | today's variance, the starting point | 0.04 (20% volatility) |
 | `kappa` | how fast variance is pulled back to normal | 1.5 |
 | `theta` | the long-run normal variance level | 0.04 |
-| `xi` | vol-of-vol, how hard variance gets kicked around | 0.35 |
+| `xi` | vol-of-vol, how large the random moves in the variance are | 0.35 |
 | `rho` | correlation between stock moves and variance moves | −0.70 |
 
 Why is `rho` negative? It is a well-known market fact that **crashes and
@@ -158,7 +159,8 @@ This block is the equation the code actually solves. We solve this instead of
 the random equations because it has no randomness left in it, so a grid and
 plain arithmetic can handle it.
 
-Each term becomes one named variable in `update_row_scalar` in `stencil.cpp`.
+Each term becomes one named variable in `update_cells_scalar` in `stencil.cpp`,
+which `update_row_scalar` calls for the whole row.
 Keep this table next to you when reading the code.
 
 | PDE term | Variable in the code | Coefficient built once in `StencilConstants` |
@@ -196,21 +198,21 @@ strike `K` is nowhere in them. If you are used to the Black-Scholes formula,
 where `S` and `K` sit side by side, this is confusing. The answer is that
 pricing always has two separate ingredients.
 
-1. **The model** describes how the share price behaves. That is what the two
-   random equations, and the PDE they become, describe. They apply to *any*
+1. **The model** describes how the share price behaves. The two random
+   equations, and the PDE they become, describe the model. They apply to *any*
    contract on this share and know nothing about yours.
 2. **The contract** describes what you are owed at expiry. That is the payoff
    `max(S−K, 0)` for a call. It is the *terminal condition*, the values the
    grid is filled with at `t = T` before the solver steps backwards (the
    first row of the table in §9).
 
-So the strike is in the program, but it lives in `init_payoff` and the
-boundary values, not in the update stencil. The Black-Scholes *formula* feels
-different only because it is the special case where both ingredients can be
-merged into one closed expression. Heston does not build on that formula. It
-relaxes one of its assumptions (constant volatility) and contains
-Black-Scholes as the `xi = 0` special case, which is exactly what the
-collapse test uses.
+So the strike is in the program. It is used in `init_payoff` and in the
+boundary values, and it does not appear in the update stencil. The
+Black-Scholes *formula* feels different only because it is the special case
+where both ingredients can be merged into one closed expression. Heston does
+not build on that formula. It relaxes one of its assumptions (constant
+volatility) and contains Black-Scholes as the `xi = 0` special case, and the
+collapse test uses that special case.
 
 Quiz yourself. If the same model prices a put instead of a call, what changes
 in the program? Only the payoff and the `S` boundary values change. The PDE,
@@ -221,14 +223,15 @@ the stencil and every optimisation stay the same.
 Search the C++ for a random number generator and you will find **nothing**.
 There is no `<random>`, no `rand()`, no `mt19937` and not one seed. The model
 is defined by two *random* equations, and the code that solves it is
-completely deterministic. That is not a bug. It is the whole point of the PDE
-route, and you need to be able to say why in one breath.
+completely deterministic, because the PDE route solves directly for the
+average over all random paths. You need to be able to say why in one
+sentence.
 
 **The one-sentence answer.** We never simulate the randomness because we
 solved for its *average* in advance, since the PDE is the equation that the
 average over all random paths satisfies.
 
-**The theorem behind it is Feynman–Kac.** The fair price is, by definition,
+**The theorem behind it is Feynman-Kac.** The fair price is, by definition,
 an average over random futures.
 
 ```text
@@ -237,17 +240,17 @@ V(S, v, t) = E^Q[ e^(−r(T−t)) · payoff(S_T)  |  S_t = S, v_t = v ]
 
 This block is the definition of the fair price, the average discounted payoff
 over every random future that starts from today's state. It matters because
-Feynman–Kac turns this average into the PDE, and that is the reason we can
+Feynman-Kac turns this average into the PDE, and that is the reason we can
 solve an equation instead of simulating paths.
 
-Feynman–Kac says that this average, viewed as a function of today's state
+Feynman-Kac says that this average, viewed as a function of today's state
 `(S, v, t)`, satisfies exactly the PDE in §5. So there are two valid ways to
 get the number.
 
 | Route | What it does | Cost |
 |---|---|---|
 | Monte Carlo | draws millions of random paths and averages the payoffs | the error shrinks like 1/√N, which is slow |
-| **PDE (ours)** | solves the equation the average obeys | the error shrinks with the grid spacing, which is fast, and it gives every `(S, v)` at once |
+| **PDE (ours)** | solves the equation the average obeys | the error shrinks with the grid spacing, which is fast, and one solve gives the value at every `(S, v)` |
 
 **The intuition behind the squaring, which is the version the video uses.**
 Over one small step the noise shocks `S` up or down by an amount of size
@@ -257,12 +260,12 @@ the down shock loses. The first term of the Taylor expansion that survives is
 `½·(shock size)²·V_SS`, and squaring the shock size `sqrt(v)·S` gives exactly
 `½·v·S²·V_SS`. This is the plain-English version of the quadratic variation
 entries in the table below. `dW` itself never appears in the formula. It gets
-averaged out, and the curvature term is what the averaging leaves behind.
+averaged out, and the averaging leaves the curvature term behind.
 
 **Where each piece of noise ended up.** This is the part worth memorising,
 because you can point at the code and name the term.
 
-| In the SDE | In the PDE (`update_row_scalar` in `stencil.cpp`) | Why |
+| In the SDE | In the PDE (`update_cells_scalar` in `stencil.cpp`) | Why |
 |---|---|---|
 | `sqrt(v)·S·dW1` | `0.5 · v · S² · V_SS` | quadratic variation of S, where the diffusion coefficient gets **squared**, so `sqrt(v)² = v` |
 | `xi·sqrt(v)·dW2` | `0.5 · xi² · v · V_vv` | the same, for variance |
@@ -286,8 +289,8 @@ Two details are worth knowing before someone asks.
   `kappa` and `theta` estimated from historical data, you would be mixing the
   real-world and risk-neutral measures.
 
-**How we checked all this rather than asserting it.** We ran
-`scripts/monte_carlo_check.py` on 2026-08-09 on `config/demo.cfg`.
+**How we checked all this.** We ran `scripts/monte_carlo_check.py` on
+2026-08-09 on `config/demo.cfg`.
 
 ```text
 PDE (deterministic grid)          196.1054
@@ -298,30 +301,30 @@ sample corr(z1, z2) = −0.6991     (target rho = −0.7000)
 ```
 
 This block is the output of `scripts/monte_carlo_check.py`. We ran it because
-three methods that share no code landing on the same number is the evidence
-that the deterministic grid really computes the random average.
+three methods that share no code and agree on the same number are the
+evidence that the deterministic grid really computes the random average.
 
 The Monte Carlo *does* use a random number generator. It correlates its two
-random increments with the Cholesky factor
-`z2 = rho·z1 + sqrt(1−rho²)·z_indep`, and it lands on the grid's answer. That
-is the evidence that the deterministic grid really computes an average over
-random paths.
+random increments with the Cholesky factor `z2 = rho·z1 +
+sqrt(1−rho²)·z_indep`, and its price agrees with the grid's answer within its
+standard error. This agreement shows that the deterministic grid really
+computes an average over random paths.
 
 **Self-test.** Where is `dW1` in the code? Why is the coefficient `v` and not
 `sqrt(v)`? Why does the cross term have no ½? What would break if you fed in
 real-world `kappa` and `theta`?
 
-### 6. The spreadsheet picture (how we actually solve it)
+### 6. The grid picture (how we actually solve it)
 
-We never solve the PDE with algebra. Instead we fill in a stack of
-spreadsheets with numbers. This section goes through it step by step, using
-the small test grid so the numbers are real.
+We never solve the PDE with algebra. Instead we fill a table of numbers once
+for every time level. This section goes through it in order, using the small
+test grid so the numbers are real.
 
-#### 6.1 What one sheet is
+#### 6.1 What the grid at one time level is
 
-One sheet is a table of option values at one moment in time. The code calls
-each sheet a buffer (`current` and `next`), because only two are kept and
-they are reused every step.
+The grid at one time level is a table of option values at one moment in
+time. The code stores it in a buffer. It keeps only two buffers (`current`
+and `next`) and reuses them every step.
 
 - Each column is a possible stock price. On the test grid the columns are
   50 apart, so column 0 is S = 0, column 104 is S = 5200 and column 105 is
@@ -334,7 +337,7 @@ they are reused every step.
   that row's v.
 
 ```text
-  part of a sheet          S = 5200    S = 5250    S = 5300
+  part of the grid         S = 5200    S = 5250    S = 5300
                          (col 104)   (col 105)   (col 106)
   v = 0.06  (row 3)         ...         ...         ...
   v = 0.04  (row 2)         ...         ...         ...
@@ -345,7 +348,8 @@ This picture shows how to read a cell. The cell in row 2, column 104 is the
 option's value in the scenario where the stock is at 5200 and the variance is
 0.04, which happens to be today's market.
 
-Here is the whole sheet with each cell marked by the function that writes it.
+Here is the whole grid at one time level, with each cell marked by the
+function that writes it.
 
 ```text
   var_j (variance v, rows)
@@ -366,59 +370,60 @@ nv-1|  T  T  T  T  T  T  T  T  T  T  T  T     top row, copy of the row below
   T  copy of the row below          copy_top_row
 ```
 
-This picture is one sheet, which is one moment in time. We draw it because
-every rung of the M2 ladder splits up exactly this rectangle. OpenMP hands
-rows to threads and MPI hands blocks of rows to processes.
+This picture is the grid at one time level. We draw it because every rung of
+the M2 ladder splits up exactly this rectangle. OpenMP hands rows to threads
+and MPI hands blocks of rows to processes.
 
-#### 6.2 One sheet per moment, filled backwards
+#### 6.2 One grid per time level, filled backwards
 
-There is one sheet per moment in time. We only know the values on the expiry
-sheet, so we start there and work backwards towards today.
+There is one grid of values per time level. We only know the values at
+expiry, so we start there and work backwards towards today.
 
 ```text
-   sheet 0           sheet 1            sheet 2               sheet nt
+   step 0            step 1             step 2                step nt
    t = T (expiry)    t = T - dt         t = T - 2dt           t = 0 (today)
   +-----------+     +-----------+      +-----------+         +-----------+
   |  payoff   | --> | computed  | -->  | computed  | --> ... | read the  |
   |  (known)  |     | from      |      | from      |         | price at *|
-  |           |     | sheet 0   |      | sheet 1   |         |           |
+  |           |     | step 0    |      | step 1    |         |           |
   +-----------+     +-----------+      +-----------+         +-----------+
 ```
 
-Each arrow is one timestep. A sheet is computed only from the sheet directly
-to its left. Sheet 1 reads only sheet 0, sheet 2 reads only sheet 1, and so
-on. After sheet 1 is finished, sheet 0 is never read again. Only two sheets
-exist in memory at any moment (§11).
+Each arrow is one timestep. The grid at each step is computed only from the
+grid directly to its left. Step 1 reads only step 0, step 2 reads only step 1,
+and so on. After step 1 is finished, step 0 is never read again, so only two
+buffers exist in memory at any moment (§11).
 
-#### 6.3 Building sheet 1 from the expiry sheet, step by step
+#### 6.3 Building the grid at step 1 from the expiry grid
 
-The interactive [Stencil Stepper](https://claude.ai/artifact/AQ6V5ph6Uoyjs4hSszAR5F)
-runs these same steps on the real test grid. You can click any cell to see
-its nine inputs, weights and products, and animate a timestep cell by cell.
+The interactive
+[Stencil Stepper](https://claude.ai/artifact/AQ6V5ph6Uoyjs4hSszAR5F) runs
+these same steps on the real test grid. You can click any cell to see its nine
+inputs, weights and products, and animate a timestep cell by cell.
 
-**Step 1. Fill sheet 0 with the payoff.** At expiry there is no uncertainty
-left, so each cell is just `max(S − K, 0)`. The payoff does not depend on the
-variance, so every row of sheet 0 is the same.
+**Step 1. Fill the expiry grid (step 0) with the payoff.** At expiry there is
+no uncertainty left, so each cell is just `max(S − K, 0)`. The payoff does not
+depend on the variance, so every row of the expiry grid is the same.
 
 ```text
-  sheet 0 (expiry)          S = 5200    S = 5250    S = 5300
+  step 0 (expiry)           S = 5200    S = 5250    S = 5300
   v = 0.06                     0           0           50
   v = 0.04                     0           0           50
   v = 0.02                     0           0           50
 ```
 
-**Step 2. Pick a cell of sheet 1 to fill.** Take row 2, column 105, which is
-S = 5250 (the strike) and v = 0.04.
+**Step 2. Pick a cell of the step 1 grid to fill.** Take row 2, column 105,
+which is S = 5250 (the strike) and v = 0.04.
 
-**Step 3. Look up the same position and its eight neighbours in sheet 0.**
-These are the nine numbers in the table above. In the first timestep every
-value we read comes from the expiry sheet, because that is the only finished
-sheet.
+**Step 3. Look up the same position and its eight neighbours in the expiry
+grid.** These are the nine numbers in the table above. In the first timestep
+every value we read comes from the expiry grid, because that is the only
+finished time level.
 
 **Step 4. Multiply each of the nine numbers by its own weight and add them
-up.** This is the nine-point update. It is *not* a plain average of the nine
-cells. Each neighbour gets a different weight, and for this cell the weights
-are these.
+up.** This is the nine-point update. Each of the nine cells gets its own
+weight, so the result is a weighted sum, and for this cell the weights are
+these.
 
 ```text
   weights for the cell at S = 5250, v = 0.04 on the test grid
@@ -429,8 +434,8 @@ are these.
   v = 0.02      −0.000057     +0.000027     +0.000057
 ```
 
-So the formula for this one cell is like a spreadsheet formula that points at
-the previous sheet.
+So the new value of this one cell is a weighted sum of nine values from the
+previous time level.
 
 ```text
   new value = 0.997976 × centre
@@ -440,9 +445,9 @@ the previous sheet.
             + 0.000057 × south_east − 0.000057 × south_west
 ```
 
-Only the east column of sheet 0 is non-zero (50 on each of the three rows),
-so only three terms survive. The two east corners cancel each other, which
-leaves the east cell.
+Only the east column of the expiry grid is non-zero (50 on each of the three
+rows), so only three terms survive. The two east corners cancel each other,
+which leaves the east cell.
 
 ```text
   new value = 0.000991875 × 50 = 0.04959
@@ -451,16 +456,16 @@ leaves the east cell.
 The solver's own output for this cell after one step is `0.04959375`, so this
 matches.
 
-**Step 5. Do the same for every other cell of sheet 1.** Every cell has its
-own set of nine weights, because the weights depend on that cell's S and v. A
-cell with a higher stock price or higher variance gives more weight to its
-neighbours.
+**Step 5. Do the same for every other cell of the step 1 grid.** Every cell
+has its own set of nine weights, because the weights depend on that cell's S
+and v. A cell with a higher stock price or higher variance gives more weight
+to its neighbours.
 
-**Step 6. Move on.** Sheet 2 is built from sheet 1 in exactly the same way,
-then sheet 3 from sheet 2, and so on for all the timesteps until we reach
-today's sheet.
+**Step 6. Repeat for every timestep.** The grid at step 2 is built from step 1
+in exactly the same way, then step 3 from step 2, and so on for all the
+timesteps until we reach the grid for today.
 
-**Step 7. Read off the answer.** The price is the value in today's sheet at
+**Step 7. Read off the answer.** The price is the value in today's grid at
 S = 5200 and v = 0.04. The neighbouring cells give the Greeks.
 
 #### 6.4 How to think about the weights
@@ -469,35 +474,35 @@ Look at the weights again and three things stand out.
 
 - **The centre weight is almost 1.** Over one tiny timestep a cell mostly
   keeps its own old value.
-- **The neighbours get very small weights.** Each step nudges a cell a little
-  towards its neighbours. That nudge is the spreading out (diffusion) and
-  shifting (drift) that the PDE describes.
+- **The neighbours get very small weights.** Each step moves a cell's value a
+  little towards its neighbours' values. That change is the spreading out
+  (diffusion) and shifting (drift) that the PDE describes.
 - **The weights add up to slightly less than 1.** They add up to exactly
   `1 − r·dt`, which is 0.9999998 here. If all nine cells held the same
   number, the new value would be that number times `1 − r·dt`, which is one
   timestep of discounting.
 
 So the update is close to a weighted average with tiny, uneven weights,
-followed by a little discounting. It is not an equal average of nine cells,
-and some weights are negative. The four corner weights come from the cross
-term, and their signs depend on the correlation `rho`.
+followed by a little discounting, and some of the weights are negative. The
+four corner weights come from the cross term, and their signs depend on the
+correlation `rho`.
 
 The code never stores these nine weights. It computes the five derivatives
 and the five PDE terms instead, which is the same arithmetic grouped
 differently (§7.4 does the same cell that way). §7.5 shows where the weights
-come from and why the centre weight being positive is what keeps the solver
-stable.
+come from, and why the solver is stable only while the centre weight stays
+positive.
 
 #### 6.5 Why nine cells?
 
 The left and right neighbours are slightly lower and higher stock prices, and
-they give the S derivatives. The cells above and below are calmer and wilder
+they give the S derivatives. The cells above and below are lower and higher
 variance levels, and they give the v derivatives. **The diagonal cells give
 the cross term**, which comes from the correlation between the two. Without a
-cross term this would be a five-point stencil like the heat equation. Heston's
-correlation is what brings in the diagonals.
+cross term this would be a five-point stencil like the heat equation's, and
+the correlation in Heston adds the four diagonal cells.
 
-#### 6.6 The Milestone 1 animations of the sheets
+#### 6.6 The Milestone 1 animations of the grid
 
 These notes describe the four clips made for Milestone 1 (rendered
 2026-08-09) and why they look the way they do.
@@ -507,34 +512,35 @@ These notes describe the four clips made for Milestone 1 (rendered
   because the low-value half of a light-to-dark ramp disappears into a white
   background. On a dark background with black, red and yellow, cold areas
   recede and hot areas stand out.
-- `weather_map_timevalue.mp4` is the clip that actually shows the heat
-  spreading. Raw V spends the whole colour range on the straight deep
-  in-the-money ramp (up to about $15,750), while the PDE's real work happens
-  in a band of about $400 near the strike. Subtracting the expiry payoff
-  (time value = V − payoff) removes the ramp. What remains is a flame shape
-  anchored at K = 5250. It widens as variance grows and pinches to a point at
-  v = 0, where diffusion dies (every diffusion term has a factor v) and only
-  drift survives. Time value is the thing that diffuses, and this clip is the
-  spreadsheet picture made visible.
+- `weather_map_timevalue.mp4` is the clip that shows the diffusion. Raw V
+  spends the whole colour range on the straight deep in-the-money ramp (up
+  to about $15,750), while the PDE changes values only within about $400 of
+  the strike. Subtracting the expiry payoff (time value = V − payoff) removes
+  the ramp. What remains is a region of time value centred on K = 5250. It
+  widens as variance grows and narrows to a point at v = 0, where diffusion
+  vanishes (every diffusion term has a factor v) and only drift remains.
+  Time value is the quantity that diffuses, and this clip shows the grid
+  picture of §6 directly.
 - `surface.mp4` and `surface_timevalue.mp4` show the same data as a 3-D
   surface with a slow camera drift. You can see the kinked payoff ramp
   smoothing out, and the time-value surface growing out of the flat expiry
-  sheet, frame by frame.
+  grid, frame by frame.
 - The clips use one fixed colour scale across all frames, so the animation
-  does not appear to pulse. A 98th-percentile cap stops the late high-v glow
-  from squashing the early detail. NaN cells are magenta on dark backgrounds
-  and black on white ones, so broken cells are easy to see.
+  does not appear to pulse. A 98th-percentile cap stops the large late values
+  at high v from compressing the colour range of the early frames. NaN cells
+  are magenta on dark backgrounds and black on white ones, so broken cells are
+  easy to see.
 - The framing was changed after feedback to suit a marker. Headlines count
   calendar time ("46 of 91 days before expiry"), with the raw solver step on
   a smaller second line. Every flat frame has a dashed line at the strike, a
   ring on today's market point (S = 5200, v = 0.04) labelled "the price we
-  quote", and a one-line caption saying what the sheet is and which direction
-  the solver moves. The smooth run dumps every 100 steps (200 frames) so the
-  motion looks like flow rather than a slideshow. One bug was fixed on the
+  quote", and a one-line caption saying what the frame shows and which
+  direction the solver moves. The smooth run dumps every 100 steps (200
+  frames) so the motion looks continuous. One bug was fixed on the
   way. The step total must be read from the full dump list before
   `--max-frames` cuts it short, or every title shows the wrong fraction.
 
-**The clips were measurably motionless, and this is what fixed it
+**The clips were measurably motionless, and three changes fixed that
 (2026-08-09).** The feedback was that it was hard to see anything change.
 That turned out to be literally true. These were measured on
 `results/smooth` with the default render (raw V, linear scale).
@@ -554,20 +560,20 @@ Three scale mismatches stacked up, and each one has a fix.
    leaves the first half of the clip black. `--cap 99.9` replaced the old
    98th-percentile cap, which had clipped the final frame flat.
 2. **The viewport was wrong.** With `s_max = 4K` and `v_max = 1.0`, the
-   smoothing band around the payoff is about 5% of the S axis, and the
-   reachable variance band is 12.8% of the v axis. `v_max = 1.0` sits **32.7
+   smoothed region around the payoff is about 5% of the S axis, and the
+   reachable variance range is 12.8% of the v axis. `v_max = 1.0` sits **32.7
    standard deviations** above where the variance process actually goes. The
    fix is `--zoom`, which crops to ±3 CIR standard deviations of `v` and the
-   matching lognormal spread in `S`. It uses the exact CIR variance formula
-   rather than a guess.
+   matching lognormal spread in `S`. It uses the exact CIR variance
+   formula.
 3. **The time sampling was wrong.** Diffusion widths grow like `sqrt(tau)`,
    so evenly spaced frames put most of the motion at the start. 75% of an
-   evenly spaced clip lives in the second half of the `sqrt(tau)`
+   evenly spaced clip falls in the second half of the `sqrt(tau)`
    progression. The fix is `--warp sqrt` and fewer frames overall. Fewer
    frames was the largest single win. At 200 frames the median frame's
    visibly moving area is 0.00%, and at 128 frames it is 10.5%.
 
-Two additions make the motion obvious rather than just visible. `--envelope`
+Two additions make the motion easy to see. `--envelope`
 draws the ±1σ cone `S = K·exp(±sqrt(v·tau))`, the set of scenarios whose
 outcome is still in doubt, and it visibly opens wider every frame.
 `--price-trace` puts a live dollar readout and a growing curve of the quoted
@@ -576,9 +582,9 @@ price in the corner, so numbers move even where pixels don't.
 On `results/demo` the result is that **about 10% of pixels change visibly
 every frame, up from 0.00%.**
 
-**The deeper fix was the grid, not the renderer, and it became
+**The deeper fix was a change to the grid itself, which became
 `config/demo.cfg`.** Cropping in the renderer showed that the smoke grid had
-only **9 variance rows** inside the reachable band, so the zoomed frame was
+only **9 variance rows** inside the reachable range, so the zoomed frame was
 blocky. The better fix is to stop spending nodes on variance levels the
 market cannot reach. Holding `dv` fixed at 0.002 and `ns = 421`, `v_max = 0.4`
 gives 195.8869 and `v_max = 0.2` gives 195.8876, a **0.0004%** difference.
@@ -587,8 +593,9 @@ variance levels that never matter. Combined with node alignment (spot on stock
 node 130, `v0` on variance node 20), `demo.cfg` reaches **196.105 in
 2.84 s**, against the P4 Richardson estimate of about 196.16. That is better
 than the P4 ladder's 421×101×56000 rung, which needed 4.92 s to reach
-195.925. Putting the nodes where the action is beat using more of them. This
-is an HPC point, not a plotting one, and it belongs in the video.
+195.925. Placing the nodes where the variance actually goes gave a better
+price with fewer nodes. This is an HPC result about where to spend the
+arithmetic, and it belongs in the video.
 
 **The two Heston-becomes-Black-Scholes animations (2026-08-09).** Both answer
 the same question visually, and they complement each other.
@@ -604,12 +611,11 @@ the same question visually, and they complement each other.
   `ds` cuts it to $0.0099, a 3.78× ratio, which is clean second order. The
   refined quoted price is **202.808075 against the closed-form 202.8079942,
   a relative error of 4.0e−07**. This is the best single validation number
-  the project has. `v0` must land exactly on a variance node or the collapse
-  is only approximate, so the script stops with an error rather than animate
-  the wrong row.
+  the project has. `v0` must sit exactly on a variance node or the collapse
+  is only approximate, so the script stops with an error when it does not.
 - `results/xi_smile.mp4` comes from `scripts/xi_sweep_smile.py`. It makes 30
   solver runs, sweeping `xi` from 0.35 down to 0, and converts each final
-  sheet into **Black-Scholes implied volatility per strike**. At `xi = 0.35`
+  grid into **Black-Scholes implied volatility per strike**. At `xi = 0.35`
   you get a skewed smile spanning **12.58 vol points**. At `xi = 0` it
   collapses to a flat line at 20.0%, with a remaining spread of **0.076 vol
   points**. That spread is the numerical noise floor of the whole pipeline,
@@ -667,8 +673,8 @@ curvature  = (east − 2 × centre + west) / 50²     = (50 − 0 + 0) / 2500 = 
 This block works both formulas on real numbers, and it shows why the
 payoff's kink matters. The payoff is a straight line everywhere except at the
 strike, so the curvature is zero everywhere except at the strike. The
-curvature term is what makes value spread out, so time value appears at the
-strike first.
+curvature term spreads value out, so time value appears at the strike
+first.
 
 #### 7.2 The nine cells in two directions
 
@@ -698,7 +704,7 @@ apart. Each derivative uses a different subset of the nine cells.
 | `d2V_dv2` | (north − 2·centre + south) / dv² | south, centre, north | curvature in v |
 | `d2V_dS_dv` | (NE − NW − SE + SW) / (4·ds·dv) | the four corners | the cross term |
 
-The cross derivative is the only one that touches the corners. It is the S
+The cross derivative is the only one that reads the corners. It is the S
 slope on the row above minus the S slope on the row below, divided by the
 distance between those rows.
 
@@ -723,8 +729,8 @@ double change = stock_diffusion_term + cross_term + variance_diffusion_term + st
 out_row[stock_i] = centre + dt * change;
 ```
 
-This block is the update for one cell, copied from `update_row_scalar`. We do
-it this way because it uses only values from the current sheet, so every cell
+This block is the update for one cell, copied from `update_cells_scalar`. We do
+it this way because it uses only values from the current buffer, so every cell
 can be computed on its own, in any order. The OpenMP and MPI rungs rely on
 that.
 
@@ -733,8 +739,8 @@ that.
 The test grid is 421 × 51 cells with 56000 timesteps. That gives `ds = 50`,
 `dv = 0.02` and `dt = 0.25 / 56000 = 4.464e-6`. We update the cell at
 `stock_i = 105`, `var_j = 2`, which is S = 5250 (the strike) and v = 0.04.
-The current sheet is the expiry sheet, filled with the payoff, so these are
-the nine values the stencil reads.
+The current buffer holds the expiry grid, filled with the payoff, so these
+are the nine values the stencil reads.
 
 ```text
               S = 5200    S = 5250    S = 5300
@@ -794,11 +800,11 @@ variance terms start contributing.
 
 #### 7.5 The same step as nine weights
 
-§6.3 described the update as nine weights times nine cells. The weights are
-not a separate formula. They are the same update the code does, with the
-arithmetic regrouped by cell. Each derivative formula is already a mix of
-cells, the PDE mixes the derivatives together, and adding up how much of each
-cell ends up in the total gives that cell's weight.
+§6.3 described the update as nine weights times nine cells. The weights come
+from the same update the code does, with the arithmetic regrouped by cell.
+Each derivative formula is already a mix of cells, the PDE mixes the
+derivatives together, and adding up how much of each cell ends up in the
+total gives that cell's weight.
 
 **Step 1. Write down the update.** To keep it short, call the five PDE
 coefficients A = 0.5·v·S², B = (r − q)·S, C = 0.5·ξ²·v, D = κ(θ − v) and
@@ -813,9 +819,9 @@ new = centre + dt × ( A·d2V_dS2 + B·dV_dS + C·d2V_dv2 + D·dV_dv + X·d2V_dS
 centre and 1/ds² of west. The §7.2 table gives the recipe for each of the
 five.
 
-**Step 3. Multiply each recipe by its coefficient and write down what lands
-on each cell.** These are the numbers for the worked example cell (S = 5250,
-v = 0.04, ds = 50, dv = 0.02). D is 0 here because v equals θ.
+**Step 3. Multiply each recipe by its coefficient and write down the amount
+each cell receives.** These are the numbers for the worked example cell (S =
+5250, v = 0.04, ds = 50, dv = 0.02). D is 0 here because v equals θ.
 
 | Term | west | centre | east | north | south | NE and SW | NW and SE |
 |---|---|---|---|---|---|---|---|
@@ -860,8 +866,8 @@ weight on centre      = 1 − dt × ( 2·A / ds²  +  2·C / dv²  +  r )
 ```
 
 This block is the update rearranged so each cell has one weight. We show it
-because it explains the spreadsheet picture, and the centre weight is the key
-to stability.
+because it explains the weights in §6.3, and because the centre weight
+decides whether the scheme is stable.
 
 **Why the weights add up to `1 − r·dt`.** The drift terms (B and D) and the
 cross term (X) each add the same amount to one cell as they take from
@@ -910,15 +916,15 @@ uses the one-sided difference for `dV_dv`, and the diffusion terms drop out
 because they all have a factor of v. The top row copies the row below, so the
 value stops changing with v there. §9 explains each one.
 
-### 8. Explicit scheme and the stability catch
+### 8. Explicit scheme and its stability limit
 
-Our scheme is **explicit**, which means the new sheet is computed *directly*
-from the old sheet, with no equation solving inside a step. It is simple,
-fast per step, and easy to parallelise.
+Our scheme is **explicit**, which means the grid at the new time level is
+computed *directly* from the old one, with no equation solving inside a step.
+It is simple, fast per step, and easy to parallelise.
 
 The cost is **conditional stability**. If the timestep `dt` is too large
 compared with the cell spacing, errors don't die out. They *grow*,
-oscillating from cell to cell, and the sheet turns into a checkerboard of
+oscillating from cell to cell, and the grid turns into a checkerboard of
 meaningless numbers. As a rule of thumb, `dt` must scale like the *square* of
 the spacing (`dt ∝ ds²`), so doubling the grid resolution needs about 4× more
 timesteps. §7.5 shows where this comes from.
@@ -927,10 +933,9 @@ It blows up first where the diffusion coefficients are biggest, which is the
 **high-S, high-v corner**, because both coefficients grow with S and v. Our
 instability animation shows exactly this.
 
-This is not something to hide. *Measuring* the stability boundary is one of
-our deliverables. The alternative, implicit or ADI schemes, is stable for any
-`dt` but has to solve linear systems every step. That is out of scope and
-noted as an extension.
+*Measuring* the stability boundary is one of our deliverables. The
+alternative, implicit or ADI schemes, is stable for any `dt` but has to solve
+linear systems every step. That is out of scope and noted as an extension.
 
 **The measured boundary (P5, 2026-08-09, smoke grid 256×64, T = 0.25).** The
 solver prints dt_stable ≈ 1.526e-5. We bracketed the real limit by sweeping
@@ -942,12 +947,12 @@ nt.
 - nt = 14900 (1.100×) ends at 2.8e+69, caught in the middle of blowing up.
 - nt = 14600 (1.122×) ends in NaN.
 
-So the *real* cliff sits about 9% above the printed estimate. The estimate is
-cautious because it uses the single worst cell's coefficients (the far
-corner), while an unstable mode spreads over a *region*, so its growth rate
-averages in neighbouring cells with smaller coefficients. A safety bound that
-errs on the safe side is what you want, and it is worth saying so in the
-video. The `unstable.cfg` config runs at 4× the bound. The checkerboard
+So the real stability limit is about 9% above the printed estimate. The
+estimate is cautious because it uses the single worst cell's coefficients (the
+far corner), while an unstable mode spreads over a *region*, so its growth
+rate averages in neighbouring cells with smaller coefficients. A bound that
+errs on the safe side is the right kind of estimate, and it is worth saying so
+in the video. The `unstable.cfg` config runs at 4× the bound. The checkerboard
 starts at the high-S, high-v corner and overflows to NaN by about step 450 of
 4096. `weather_map.py --diverging` films it, with red and blue showing the
 plus and minus oscillation and black showing overflowed cells.
@@ -960,20 +965,21 @@ total.
 | Edge | Story | Condition | Type |
 |---|---|---|---|
 | `t = T` | at expiry there is no uncertainty left | payoff `max(±(S−K), 0)` | terminal (exact) |
-| `S = 0` | a dead stock stays dead, since drift and diffusion are both ∝ S | call 0, put `K·e^(−rτ)` | Dirichlet (exact) |
+| `S = 0` | a stock worth zero stays at zero, since drift and diffusion are both ∝ S | call 0, put `K·e^(−rτ)` | Dirichlet (exact) |
 | `S = Smax` | deep in or out of the money, so the option behaves like the stock or like nothing | call `S·e^(−qτ) − K·e^(−rτ)`, put 0 | Dirichlet (approximate) |
 | `v = 0` | a calm market, but mean reversion pushes v back up | **solve the reduced PDE** on that row | degenerate (exact) |
-| `v = vmax` | panic is saturated, so more volatility barely adds value | `∂V/∂v = 0` | Neumann (approximate) |
+| `v = vmax` | at very high variance, more volatility barely adds value | `∂V/∂v = 0` | Neumann (approximate) |
 
-**The v = 0 boundary is the interview trap, so be ready.** This is the full
-story.
+**The v = 0 boundary is the most likely interview question, so be ready.**
+This is the full story.
 
 1. Every diffusion term has a factor `v`, so at `v = 0` they all vanish. The
-   PDE reduces by itself to pure transport,
-   `V_t + (r−q)·S·V_S + kappa·theta·V_v − r·V = 0`.
+   PDE reduces by itself to pure transport, `V_t + (r−q)·S·V_S +
+   kappa·theta·V_v − r·V = 0`.
 2. The variance drift there is `kappa·(theta − 0) = kappa·theta > 0`, which
    points **into** the grid. Information flows inward from the boundary, so
-   you don't *impose* a value. You *solve the reduced equation* on that row.
+   the code *solves the reduced equation* on that row, and imposing a value
+   there would over-determine the problem.
 3. The discretisation is a 4-point stencil. It uses a central difference in S
    and a **forward (one-sided) difference in v**, because a central
    difference would need a cell at negative variance, which doesn't exist.
@@ -991,13 +997,13 @@ non-uniform grid. We state it as a known limitation and did not build it.
 
 **Self-test.** Why does S = 0 give an *exact* condition but S = Smax only an
 approximate one? What happens to the PDE at v = 0, and what do we do about
-it? Why use a forward difference, not a central one, at v = 0? What is the
+it? Why use a forward difference at v = 0? What is the
 Feller condition, and do our parameters satisfy it?
 
 ### 10. How we know the answer is right (validation)
 
-We can't check against the market, because that would test the *model*, not
-the *code*. Instead we check against mathematical ground truths.
+A check against market prices would test the *model* and say nothing about
+the *code*, so we check against mathematical ground truths.
 
 1. **Black-Scholes collapse.** Set `xi = 0` and `v0 = theta`. Then the
    variance never moves, Heston *becomes* Black-Scholes, and Black-Scholes
@@ -1009,15 +1015,14 @@ the *code*. Instead we check against mathematical ground truths.
    them off.
 3. **Grid convergence.** When the spacings are halved, the answer must settle
    toward a fixed value at the expected rate (first order in dt). This shows
-   we converge to *the* solution, not to a stable wrong number.
+   the answer converges to the solution of the PDE itself.
 4. **Fourier reference (done 2026-08-09).** Heston has a semi-analytical
    price through its characteristic function. `scripts/monte_carlo_check.py`
    computes it (numpy only, using Albrecher's little Heston trap form) *and*
    runs a Monte Carlo that simulates the random equations directly. Any
-   disagreement can then be settled by a third opinion instead of argued
-   about.
+   disagreement between two methods can then be settled by the third.
 
-The iron rule is that **no version is benchmarked until it matches the
+The validation rule is that **no version is benchmarked until it matches the
 reference.** A fast wrong answer is worth nothing.
 
 **Tests 1 to 3 share a blind spot, which is why test 4 mattered.** Tests 1
@@ -1026,18 +1031,18 @@ and 2 compare the solver *against itself* at the same grid cell. At the time,
 interpolation. A shared offset in the quote point therefore cancels exactly
 in put-call parity, and appears identically on both sides of the
 Black-Scholes comparison, so both tests pass while the absolute price is
-wrong. That is exactly what happened on `config/smoke.cfg`. There
-`dv = 1/63 = 0.015873`, so `v0 = 0.04` snapped to node 3, which is
-**0.047619**. That is a 19% jump in variance, worth about +$16 at the
-reported vega. The stock snap was worth about −$6.6, so the net error was
-+$9.2, and smoke's quoted 205.32 was indeed **+4.67%** above the true
-196.1692. It was not instability and not discretisation error, because the
+wrong. That happened on `config/smoke.cfg`. There `dv = 1/63 = 0.015873`, so
+`v0 = 0.04` snapped to node 3, which is **0.047619**. That is a 19% increase
+in variance, worth about +$16 at the reported vega. The stock snap was worth
+about −$6.6, so the net error was +$9.2, and smoke's quoted 205.32 was indeed
+**+4.67%** above the true 196.1692. The cause was the readout, because the
 same run matched the semi-analytic price *evaluated at its own snapped node*
-to within $0.29. Node-aligned configs (the P4 ladder and `config/demo.cfg`)
-never had this problem, and on `demo.cfg` the three routes agree to 0.03%.
-The lesson to carry into Milestone 2 is that **a validation suite made only
-of self-consistency checks cannot see a systematic offset. One comparison
-against an external absolute reference can.**
+to within $0.29, which rules out instability and discretisation error.
+Node-aligned configs (the P4 ladder and `config/demo.cfg`) never had this
+problem, and on `demo.cfg` the three routes agree to 0.03%. **A validation
+suite made only of self-consistency checks cannot see a systematic offset,
+and one comparison against an external absolute reference can.** That rule
+carried into Milestone 2.
 
 **The fix (P7) was bilinear interpolation at the quote point.**
 `extract_result` no longer snaps. `Grid` gained `stock_position()` and
@@ -1045,7 +1050,7 @@ against an external absolute reference can.**
 how far across that cell the point sits. The price is a blend of the four
 surrounding cells, and each arm of the Greek stencils (east, west, north and
 south) is blended the *same* way. That way the reported delta really is the
-derivative of the reported price, not a derivative of some other surface.
+derivative of the reported price.
 
 Three details are worth being able to defend on camera.
 
@@ -1054,16 +1059,16 @@ Three details are worth being able to defend on camera.
   196.1054098, the four convergence rungs and both test grids. On an aligned
   grid the weight is exactly 0, and the blend is written so that
   `weight = 0` reduces to `1.0*V + 0.0 + 0.0 + 0.0`, which returns the node's
-  value unchanged. This was *checked*, not assumed. Every one of those numbers
-  is still identical to the last digit after the change. Anything else would
+  value unchanged. We checked this, and every one of those numbers is still
+  identical to the last digit after the change. Anything else would
   have meant the interpolation was wrong.
 - **The weight is snapped to 0 within 1e-9 of a node.** `0.04 / (0.2/100)`
   happens to come out as exactly 20.0 in IEEE double on these configs, but
-  relying on that would be relying on luck. A grid that landed on
-  19.999999999999996 would quietly interpolate between nodes 19 and 20 and
+  relying on that would be relying on luck. A grid whose position came out
+  as 19.999999999999996 would quietly interpolate between nodes 19 and 20 and
   break the bit-identical guarantee. The snap makes the guarantee part of the
   design.
-- **The cell index is clamped to `[1, n-3]`, not `[1, n-2]`.** The blend reads
+- **The cell index is clamped to `[1, n-3]`.** The blend reads
   `cell` and `cell+1`, and the gamma stencil reads one further out on each
   side. So `cell-1` and `cell+2` must both exist, which costs one more node of
   margin at each edge than the old nearest-node readout needed.
@@ -1071,12 +1076,12 @@ Three details are worth being able to defend on camera.
 The solver also **says when a config is off-node**. It prints one stderr line
 naming the offset in cells, with the same `[baseline]` or `[serial]` prefix as
 the Feller line. Node alignment is still the rule. The warning exists so that
-breaking it is a visible choice rather than a silent one.
+breaking it is always visible.
 
 The measured effect is that `smoke.cfg` went from 205.3242902 to
-**195.247466**. The remaining gap to 196.1692 is real discretisation error on
-a 256×64 grid (`dv = 1/63` is very coarse), not a readout offset, and the
-+4.67% snap error is gone.
+**195.247466**. The remaining gap to 196.1692 is discretisation error on a
+256×64 grid (`dv = 1/63` is very coarse), and the +4.67% snap error is
+gone.
 
 **Notes on how the two test programs work (P3).**
 
@@ -1092,7 +1097,7 @@ a 256×64 grid (`dv = 1/63` is very coarse), not a readout offset, and the
   spot and v0 *exactly* on nodes. `ns = 421` gives a spacing of 50, so 5200 is
   node 104 and the strike 5250 is node 105. `nv = 51` gives a spacing of 0.02,
   so v0 = 0.04 is node 2.
-- **Parity is near-exact on the grid, not just on paper.** The parity
+- **Parity is near-exact on the grid as well as on paper.** The parity
   portfolio (long a call, short a put) has payoff S − K, which is *linear* in
   S. Central differences are exact on linear functions, every boundary
   formula treats it exactly, and it does not depend on v. So the scheme
@@ -1101,23 +1106,23 @@ a 256×64 grid (`dv = 1/63` is very coarse), not a readout offset, and the
   dollars here. A tight dollar tolerance is therefore fair for parity, while
   the Black-Scholes test carries real discretisation error and needs a
   measured tolerance.
-- **Tolerances are measured, not guessed.** Each test was run once to record
-  its actual error, and the tolerance was then set just above it. On the
+- **Tolerances come from measurements.** Each test was run once to record its
+  actual error, and the tolerance was then set just above it. On the
   node-aligned 421×51 grid with nt = 56000 (2026-08-09), the Black-Scholes
   relative error was 1.16e-3 for the call and 1.12e-3 for the put, so the
   tolerance is 2.5e-3, about twice the measurement. The parity gap was 5.4e-6
   dollars, so the tolerance is 1e-4. That is 20× the measurement, which leaves
-  room for compiler floating-point differences on rangpur and is still about
-  5 orders of magnitude below the size of a bug. A real bug moves the answer
-  by dollars, so these margins catch regressions, not noise. The plan's
-  target of a relative error below 1e-3 is for the *reference-sized* grid,
-  with a spacing of about 10 rather than 50, and the P4 convergence study
-  demonstrates it.
+  room for compiler floating-point differences on rangpur and is still about 5
+  orders of magnitude below the size of a bug. A real bug moves the answer by
+  dollars, so these margins catch regressions and leave room for
+  floating-point noise. The plan's target of a relative error below 1e-3 is
+  for the *reference-sized* grid, with a spacing of about 10 against 50 here,
+  and the P4 convergence study demonstrates it.
 
 **The measured convergence (P4, redone 2026-08-10 because the earlier study
 was invalid, see below).** The ladder is node-aligned, dt drops by a quarter
 per rung, and the error is measured against the **semi-analytic Fourier price
-196.1692090** rather than against the study's own finest grid.
+196.1692090** (point 3 below says why).
 
 | Grid | dt | Price | Error vs analytic |
 |---|---|---|---|
@@ -1126,25 +1131,26 @@ per rung, and the error is measured against the **semi-analytic Fourier price
 | 1681×129 | 2.790e-7 | 196.155137 | 0.014072 |
 
 The successive error ratios are 20.9 and 1.81, so the observed order in dt is
-**2.19, then 0.43**. Read that carefully. The error falls fast and then
-*flattens onto a floor*, rather than converging at one clean rate. Quoting the
-mean (1.31) would describe a straight line that is not what the data does.
-The floor is consistent with the `v = 0` row being first-order accurate (it
-uses a one-sided difference) while the interior is second-order, so the error
-in the v direction stops shrinking as fast as everything else. Confirming
-that needs the fourth rung (3361×257, about 1.3 hours), which is in `LADDER`
-and has not been run.
+**2.19, then 0.43**. The error falls fast and then *flattens onto a floor*,
+so the data has no single clean rate. Quoting the mean (1.31) would describe
+a straight line that the data does not follow. RESULTS.md §7 reads the floor
+as error that this refinement does not reduce, from truncating the domain at
+`s_max` and `v_max` and from the Fourier anchor's own quadrature, which takes
+over once the discretisation error drops beneath it. Confirming that needs
+the fourth rung (3361×257, about 1.3 hours), which is in `LADDER` and has not
+been run.
 
 **Three things were wrong with the earlier version of this study, and all
 three are worth understanding.**
 
 1. **The ladder had gone out of date against its own config.** It picked `nv`
-   from multiples of 25 so that v0 = 0.04 lands on a node. That was correct
+   from multiples of 25 so that v0 = 0.04 sits on a node. That was correct
    when `v_max = 1.0`, which is what `reference.cfg` said when the ladder was
    written. P7 changed `v_max` to 0.64 for stability, and 0.04/(0.64/25) =
    **1.5625**, so *every rung* was off-node in variance. The solver was
    warning about it on stderr the whole time, but the script called
-   `subprocess.run(..., capture_output=True)`, which swallowed the warning.
+   `subprocess.run(..., capture_output=True)`, which captured the warning and
+   never printed it.
 2. **The strike was in the middle of a cell on the coarse rungs.** The payoff
    has a kink at K = 5250. For the kink to be discretised the same way on
    every rung, ds must divide it, but at ds = 200 the strike sits at node
@@ -1158,12 +1164,11 @@ three are worth understanding.**
    reference's own error is silently subtracted from every other rung. The
    external Fourier price fixes all three.
 
-`scripts/convergence_plot.py` now works out the alignment requirement from
-the config at run time and refuses to start if any rung misses it. It
-re-raises the solver's off-node warning instead of discarding it, and it
-reports every pairwise order rather than only the mean. The figure is
-`results/convergence.png`, with the raw numbers alongside as CSV. Regenerate
-it with `make convergence`.
+`scripts/convergence_plot.py` now works out the alignment requirement from the
+config at run time and refuses to start if any rung misses it. It re-raises
+the solver's off-node warning, and it reports the order between every pair of
+neighbouring rungs. The figure is `results/convergence.png`, with the raw
+numbers alongside as CSV. Regenerate it with `make convergence`.
 
 **The reference grid, finally run (P7, 2026-08-09).** `config/reference.cfg`
 had never actually produced a number. It specified `nt = 2000`, which is 527×
@@ -1184,11 +1189,11 @@ million. One is a deterministic PDE, one is a deterministic integral
 transform, and one uses actual random paths. This is the accuracy claim to
 make on camera. It is credible because the Fourier price and the Monte Carlo
 price are independent of each other and of the grid. If the PDE had
-disagreed, the grid would have been the thing to blame, not the arithmetic.
+disagreed, the grid would have been the first suspect.
 
 **Do not quote a runtime for this run on camera.** It was measured on the
-laptop, not on rangpur, and there is no `sbatch` job or stamped file behind
-it, so it must not appear beside cluster numbers. A single reference solve
+laptop, and there is no rangpur `sbatch` job or stamped file behind it, so it
+must not appear beside cluster numbers. A single reference solve
 exceeds the 15-minute QOS limit by a wide margin and has never been run
 there. If a runtime is wanted, derive it from the measured rangpur throughput
 and say that you are deriving it. That gives about 2.1 hours for the
@@ -1225,11 +1230,11 @@ in powers of two, and 1024 is 2 to the power 10.
 | Unit | Bytes | In this project |
 |---|---|---|
 | byte | 1 | one `double` is 8 bytes |
-| cache line | 64 | 8 doubles, the amount the cache moves at once |
+| cache line | 64 | 8 doubles, the unit the caches load and store |
 | KiB, kibibyte | 1024 | 4 KiB is one normal memory page |
-| MiB, mebibyte | 1024 KiB = 1,048,576 | one sheet is 8 MiB |
+| MiB, mebibyte | 1024 KiB = 1,048,576 | one buffer is 8 MiB |
 | GiB, gibibyte | 1024 MiB | |
-| TiB, tebibyte | 1024 GiB | keeping every sheet would take 7.5 TiB |
+| TiB, tebibyte | 1024 GiB | keeping the grid of every timestep would take 7.5 TiB |
 
 The i in KiB and MiB marks the 1024 version. KB and MB strictly mean 1000 and
 1,000,000, so 1 MiB is about 5% more than 1 MB. Chip makers often write MB for
@@ -1240,15 +1245,15 @@ The sizes to know by heart.
 
 ```text
 one row     2048 doubles × 8 bytes          = 16,384 bytes    = 16 KiB
-one sheet   2048 × 512 doubles × 8 bytes    = 8,388,608 bytes = 8 MiB
-two sheets  current and next                                  = 16 MiB
-L3 cache    one r730 socket                                   = 30 MiB, so both sheets fit
+one buffer  2048 × 512 doubles × 8 bytes    = 8,388,608 bytes = 8 MiB
+two buffers current and next                                  = 16 MiB
+L3 cache    one r730 socket                                   = 30 MiB, so both buffers fit
 ```
 
 A memory page is the fixed-size chunk the operating system hands out memory
 in. A program never sees real RAM addresses. Every address it uses is a
-virtual address, and the operating system keeps a page table that says which
-piece of real RAM each page of addresses lives in. On Linux on x86 a normal
+virtual address, and the operating system keeps a page table that maps each
+page of virtual addresses to a page of real RAM. On Linux on x86 a normal
 page is 4 KiB. In Python terms, the page table is a dict from page number to a
 place in RAM, and every load and every store has to look its page up.
 
@@ -1268,34 +1273,34 @@ recently in the TLB, the translation lookaside buffer. In Python terms it is
 an `lru_cache` in front of the dict. On the r730 Haswell cores the
 second-level TLB holds 1024 entries, one entry per page.
 
-Because the TLB counts pages, not bytes, the page size decides how much memory
-it covers. 1024 entries of 4 KiB cover only 4 MiB. 1024 entries of 2 MiB huge
-pages cover 2 GiB.
+Each TLB entry covers one page whatever its size, so the page size decides how
+much memory the TLB covers. 1024 entries of 4 KiB cover only 4 MiB. 1024
+entries of 2 MiB huge pages cover 2 GiB.
 
-| Page size | Pages needed for the 16 MiB of sheets | Fits in 1024 TLB entries? |
+| Page size | Pages needed for the 16 MiB of buffers | Fits in 1024 TLB entries? |
 |---|---|---|
 | 4 KiB, normal page | 4096 | no, so the core keeps doing page walks |
 | 2 MiB, huge page | 8 | yes, with room to spare |
 
-That is where the 1.66 times in the page-size trap (§13) comes from. The same binary on
-the same grid ran at 134.8 Mcell/s on huge pages and 81.1 on 4 KiB pages.
-Nothing in the code changed, only the page size the memory happened to get.
-Linux gives a block huge pages by itself (transparent huge pages) when the
-block comes fresh from the operating system through `mmap`.
+That is where the 1.66 times in the page-size trap (§13) comes from. The same
+binary on the same grid ran at 134.8 Mcell/s on huge pages and 81.1 on 4 KiB
+pages. Nothing in the code changed, only the page size the memory happened to
+get. Linux gives a block huge pages by itself (transparent huge pages) when
+the block comes fresh from the operating system through `mmap`.
 `MALLOC_MMAP_THRESHOLD_=1048576` makes every block over 1 MiB come that way,
 so every benchmark sets it.
 
-Pages also decide where memory sits on a two-socket node. Each page is placed
-on the socket of the thread that first writes to it, one page at a time. This
-is first touch (§16.8).
+Pages also decide where memory sits on a two-socket node. Linux places each
+page in the memory of the socket whose thread first writes it. This is called
+the first-touch policy (§16.8).
 
-### 11. The double-buffer trick
+### 11. Double buffering
 
-Within one timestep, every new cell must be computed from the *old* sheet
-only. The worked example in §7.4 assumed all nine neighbours came from step
-0. Two buffers are how the code makes that true.
+Within one timestep, every new cell must be computed from the *old* buffer
+only. The worked example in §7.4 assumed all nine neighbours came from
+step 0, and two buffers are how the code makes that true.
 
-**What goes wrong with one buffer.** Suppose we updated the sheet in place,
+**What goes wrong with one buffer.** Suppose we updated the grid in place,
 walking each row left to right. By the time we reach the cell at S = 5300,
 its west neighbour at S = 5250 has already been overwritten with its step 1
 value, and so has the whole row below. Its east neighbour is still at step 0.
@@ -1325,8 +1330,9 @@ compounds over 56000 steps. With threads it gets worse, because which
 neighbours are new would depend on which thread got there first. That is a
 race condition, and the answer would change from run to run.
 
-**What two buffers do.** One sheet is only read during a step, and the other
-is only written. At the end of the step they swap roles.
+**What two buffers do.** One buffer is only read during a step, and the other
+is only written. At the end of the step the two buffers swap pointers, so the
+buffer just written is the one read in the next step.
 
 ```text
   step 1    read  A (payoff)  -->  update every cell  -->  write  B
@@ -1337,28 +1343,28 @@ is only written. At the end of the step they swap roles.
   ...
 ```
 
-We keep only two sheets, not one per timestep, because each step needs only
-the sheet just before it. Keeping all of them on the reference grid would
-take 980000 sheets of 8 MiB each, which is about 7.5 TiB.
+We keep only two buffers because each step needs only the grid from the step
+just before it. Keeping the grid of every timestep on the reference grid
+would take 980000 copies of 8 MiB each, which is about 7.5 TiB.
 
 The swap at the end of each step exchanges two pointers and copies none of
 the million doubles. CODE_GUIDE.md §5.4 shows the code, and §7.2 there
-explains why the solver's names for the two sheets stay correct after each
+explains why the solver's names for the two buffers stay correct after each
 swap.
 
-Nothing ever reads a half-written sheet. This rule is what makes the later
-parallel versions correct by design. Threads only read data that nobody is
+Nothing ever reads a half-written buffer. Because of this rule the later
+parallel versions are correct by design. Threads only read data that nobody is
 changing, and each thread writes its own separate cells.
 
 ### 12. Memory layout, and why `idx = j*Ns + i`
 
 In the code these have descriptive names. The index is
 `index(stock_i, var_j) = var_j * num_stock_nodes + stock_i`, the spacings are
-`stock_spacing` and `variance_spacing`, and the sheets are `current()` and
+`stock_spacing` and `variance_spacing`, and the buffers are `current()` and
 `next()`. The maths shorthand `i`, `j` and `Ns` below means the same thing.
 
-The sheet is stored as ONE flat array, not a list of lists. Python's
-`list[list]` scatters the rows all over the heap, which is bad for the cache.
+The grid is stored as ONE flat array. A Python `list[list]` would scatter the
+rows all over the heap, which is bad for the cache.
 This is the layout.
 
 ```text
@@ -1371,7 +1377,7 @@ because the inner loop runs along a row, so consecutive cells in the loop are
 consecutive in memory.
 
 ```text
-  the sheet as a picture (Ns = 4 columns, 3 rows)     the same sheet in memory
+  the grid as a picture (Ns = 4 columns, 3 rows)      the same grid in memory
 
   row 2 |  8   9  10  11 |                            index  0  1  2  3 | 4  5  6  7 | 8  9 10 11
   row 1 |  4   5   6   7 |                                   ---row 0-- | --row 1--- | --row 2---
@@ -1380,8 +1386,9 @@ consecutive in memory.
 ```
 
 This picture labels each cell with its position in memory. East and west are
-one place apart, while north and south are a whole row (`Ns` places) apart,
-which is why `row_above = row_centre + num_stock_nodes` in the serial code (CODE_GUIDE.md §8.5).
+one place apart, while north and south are one row (`Ns` places) apart, which
+is why `row_above = row_centre + num_stock_nodes` in the serial code
+(CODE_GUIDE.md §8.5).
 
 So an entire variance row (`j` fixed, `i` running) is **contiguous in
 memory**. The inner loop walks `i`, so it walks memory in order, which is
@@ -1391,13 +1398,14 @@ because vector instructions need adjacent data.
 
 This is the cache picture to have for the interview. RAM is slow, about
 100 ns per access. Caches are fast, about 1 to 10 ns, but small, and data
-moves in 64-byte lines, which is 8 doubles at a time. If you walk memory in
-order, 7 of every 8 loads are nearly free. If you jump around randomly, every
-load pays the full price.
+moves in 64-byte lines, which is 8 doubles at a time. If the loop reads
+memory in order, 7 of every 8 loads hit a cache line that is already loaded.
+If it reads random addresses, every load can miss and wait for main
+memory.
 
 **The measurements forced a correction here.** This section used to end by
-saying that the cell update is only about 20 flops, so this solver's speed is
-set by memory access, not arithmetic. P7 built the roofline to back that
+claiming that the cell update is only about 20 flops, so memory access sets
+this solver's speed. P7 built the roofline to back that
 claim up, and it did not survive.
 
 | | Mcell-updates/s | GFLOP/s (×31 flops/cell) | share of measured scalar peak |
@@ -1408,7 +1416,7 @@ claim up, and it did not survive.
 | level 6, huge pages | 134.8 | 4.18 | **82%** |
 | level 6 @4096×1024 | 156.9 | 4.86 | **95%** |
 
-The peak in the last column is **measured, not quoted**. It is 5.117 GFLOP/s
+The peak in the last column is **measured on this node**. It is 5.117 GFLOP/s
 from a multiply-add microbenchmark that stays in registers, compiled exactly
 like the solver (`slurm/bench_peak.sh`). The memory side of the roofline is
 nowhere near the limit. The optimised kernel asks for about 3 GB/s while
@@ -1416,31 +1424,30 @@ moving 24 bytes per cell, on a machine with four DDR4 channels.
 
 So the accurate statement has three parts.
 
-- **The baseline is limited by division throughput**, not by memory. It runs
-  at the *same* ~45 Mcell-updates/s whether the working set is 1 MiB or
-  64 MiB, so memory size makes no difference to it. Five `divsd`
-  instructions per cell, at about 13 to 20 cycles each, set its speed.
+- **The baseline is limited by division throughput.** It runs at between 42
+  and 58 Mcell-updates/s whether the working set is 1 MiB or 64 MiB
+  (RESULTS.md Table 4), so memory size makes little difference to it. Five
+  `divsd` instructions per cell, at about 13 to 20 cycles each, set its speed.
 - **After optimisation the kernel runs almost AT the scalar compute peak.** It
   reaches 82% at the reference grid and 95% at the largest one, against a
   ceiling measured on the same machine. There is almost nothing left for any
   memory technique to recover, which is why levels 3, 4 and 5 came back with
   no gain.
-- **Memory still matters, but at the margin and not through bandwidth.** The
-  two memory costs P7 actually measured were *page size* (1.66×, from TLB
-  pressure) and *traversal order* (2.1×). Both are latency effects, not
-  bandwidth ones. At the reference size the whole 16 MiB working set fits
-  inside this node's 30 MB L3 cache. The optimised kernel asks for about
-  3 GB/s from a machine with four DDR4 channels, so bandwidth is nowhere near
-  the limit.
+- **Memory still matters at the margin, through latency.** The two memory
+  costs P7 actually measured were *page size* (1.66×, from TLB pressure) and
+  *traversal order* (2.1×). Both are latency effects. At the reference size
+  the whole 16 MiB working set fits inside this node's 30 MB L3 cache. The
+  optimised kernel asks for about 3 GB/s from a machine with four DDR4
+  channels, so bandwidth is nowhere near the limit.
 
-Layout and loop order still matter, and the flat contiguous array is still
-the right decision. It is what makes SIMD possible in Milestone 2, and the
-`ctl-order` control shows that getting it wrong has a real cost. But
-"memory-bound" was an assumption taken from the shape of the problem rather
-than a measurement. The correct version is more interesting. **Optimising the
-arithmetic moved this kernel from division-bound to compute-bound, so the next
-gain has to come from doing more work per instruction, which is exactly what
-SIMD does.** That is the bridge into Milestone 2.
+Layout and loop order still matter, and the flat contiguous array is still the
+right decision. It makes SIMD possible in Milestone 2, and the `ctl-order`
+control shows that getting it wrong has a real cost. But "memory-bound" was an
+assumption taken from the shape of the problem, and it was never measured. The
+measurement gives a different conclusion. **Optimising the arithmetic moved
+this kernel from division-bound to compute-bound, so the next gain has to come
+from doing more work per instruction, which SIMD provides.** That is the
+bridge into Milestone 2.
 
 ### 12b. Two pictures that make the memory story checkable
 
@@ -1450,20 +1457,21 @@ are worth being able to talk through.
 
 **`scripts/memory_anim.py --style cache` is the traffic counter.** Two panels
 sweep the *same* nine-point stencil across the *same* flat array in the two
-possible orders, with a simulated fully-associative LRU cache of 64-byte
-lines running underneath. The picture tells the story before any number
-does. The row-major panel lights up a **horizontal band**, because three rows
-stay in cache as it walks along them. The swapped-loop panel lights up a
-**vertical column**, because three lines stay in cache as it walks down a
+possible orders, with a simulated fully-associative LRU cache of 64-byte lines
+running underneath. The picture shows the difference before any number does.
+The row-major panel lights up a **horizontal strip three rows high**, because
+three rows stay in cache as it walks along them. The swapped-loop panel lights
+up a **vertical column**, because three lines stay in cache as it walks down a
 16 KB stride.
 
-The headline number is deliberately *not* the hit rate. The hit rate barely
-moves, 98.5% against 92.8%, because consecutive cells in the swapped order
-still share six of their nine accesses vertically. The number that matters is
-**bytes moved per cell update, 8.5 B against 41.2 B**, a 4.7× difference for
-identical arithmetic. That is the number the roofline uses, and it is the
-right way to say what a cache line costs. A miss drags all 64 bytes across
-the bus, however few of the eight doubles you use before the line is evicted.
+The headline number is bytes moved per cell update, and the hit rate is
+deliberately left out of it. The hit rate barely moves, 98.5% against 92.8%,
+because consecutive cells in the swapped order still share six of their nine
+accesses vertically. The bytes moved per cell update are **8.5 B against
+41.2 B**, a 4.7× difference for identical arithmetic. The roofline uses this
+number, and it measures what a cache line costs. A miss moves all 64 bytes
+of the line from memory, however few of the eight doubles the loop uses
+before the line is evicted.
 
 Be clear about the model's limits on camera. It simulates **capacity only**.
 The measured slowdown on real hardware is larger than 4.7×, and the gap comes
@@ -1473,7 +1481,7 @@ Quoting the model's 4.7× as if it explained the whole measured slowdown would
 be overclaiming, and the animation's caption says so.
 
 **`scripts/roofline.py` is the test the memory-bound claim failed.** Flops
-per cell are counted **term by term from the level-6 kernel**, not estimated.
+per cell are counted **term by term from the level-6 kernel**.
 There are 15 for the five finite differences (counting `2.0*V` once, since it
 is shared) and 16 for assembling the PDE and stepping, which makes **31 flops
 per interior cell**. Bytes are counted the same way, assuming perfect
@@ -1483,20 +1491,20 @@ and its line is *read* before being overwritten, which is called
 write-allocate and is the detail people forget. That makes **24 bytes per
 cell**.
 
-The arithmetic intensity is 31/24 ≈ **1.3 flop/byte**. Achieved GFLOP/s is
-the measured cell updates per second times 31. The second ceiling on the plot
-is not a vendor bandwidth figure. It is an **empirical** streaming ceiling
-derived from our own `ctl-order` control. That kernel uses roughly one double
-per 64-byte line, so its measured throughput times 256 B per cell is a
-bandwidth the machine has been shown to sustain. It is a lower bound, it is
-our own measurement, and it needs no datasheet.
+The arithmetic intensity is 31/24 ≈ **1.3 flop/byte**. Achieved GFLOP/s is the
+measured cell updates per second times 31. The second ceiling on the plot is
+an **empirical** streaming ceiling derived from our own `ctl-order` control.
+That kernel uses roughly one double per 64-byte line, so its measured
+throughput times 256 B per cell is a bandwidth the machine has been shown to
+sustain. It is a lower bound, it is our own measurement, and it needs no
+datasheet.
 
 **`scripts/memory_anim.py --style buffers`** covers the other half of §11 and
-§13. It shows the ping-pong (read `current`, write `next`, then `std::swap`
-exchanging two pointers with not one double copied). It then shows the
-Milestone 1 ladder's data structures appearing rung by rung, which were the
-row constants, the S and S² tables, the row offsets, the row pointers and the
-four-wide unroll. It is the clearest way to show that the ladder is
+§13. It shows the double buffering (read `current`, write `next`, then
+`std::swap` exchanging two pointers, so no doubles are copied). It then shows
+the Milestone 1 ladder's data structures appearing rung by rung, which were
+the row constants, the S and S² tables, the row offsets, the row pointers and
+the four-wide unroll. It is the clearest way to show that the ladder is
 *cumulative*.
 
 ### 13. The serial optimisation story (Milestone 1's 25%)
@@ -1505,19 +1513,19 @@ four-wide unroll. It is the clearest way to show that the ladder is
 `solver_opt_kernels.h` and `test_opt_matches` were removed at the start of
 Milestone 2 and are kept at git tag `milestone1`. The results below are still
 what you quote when asked how the serial rung got its speed. This table says
-where each M1 technique lives now.
+where each M1 technique is in the M2 code.
 
 | M1 level | Technique | Where it is in the M2 code |
 |---|---|---|
 | L1 | hoisting, lookup tables | `StencilConstants`, built once before the time loop |
 | L2 | reciprocals instead of division | the `inv_*` fields of `StencilConstants` |
-| L3 | row-major traversal | `var_j` outer loop in `SerialSolver::solve`, `stock_i` inner loop in `update_row_scalar` |
+| L3 | row-major traversal | `var_j` outer loop in `SerialSolver::solve`, `stock_i` inner loop in `update_cells_scalar` |
 | L4 | loop splitting | `update_zero_row` and `apply_stock_edges` are separate from the interior |
 | L5 | induction variables | `row_centre`, `row_above`, `row_below`, `out_row` pointers |
 | L6 | unrolling by four | dropped, it measured inside run-to-run spread |
 
-`test_ladder_matches` took over from `test_opt_matches` and checks every M2
-rung against the baseline.
+`test_ladder_matches` replaced `test_opt_matches` and checks every M2 rung
+against the baseline.
 
 The baseline solver is written to be simple on purpose. It recomputes all 9
 stencil weights for every cell at every step. It is correct and slow, and it
@@ -1527,9 +1535,9 @@ every step gave the same answers. These are the course's own named
 techniques (L03), so use these names in the video and interview.
 
 1. **Loop-invariant code motion (hoisting) and a lookup table.** The weights
-   depend only on the row (`v`) and the column (`S`), not on time. They are
-   computed into tables before the time loop, so thousands of repeated
-   per-cell multiplications become one table lookup.
+   depend only on the row (`v`) and the column (`S`), and they do not change
+   with time. They are computed into tables before the time loop, so thousands
+   of repeated per-cell multiplications become one table lookup.
 2. **Strength reduction.** There is no division in the hot loop. A division
    costs 5 to 14 cycles against about 1 for a multiplication, so the
    reciprocals (`1/ds²` and so on) are computed once and multiplied.
@@ -1544,7 +1552,7 @@ techniques (L03), so use these names in the video and interview.
    lecture uses exactly this 2D-to-1D address case as its example.
 6. **Loop unrolling** of the inner loop, kept only if it measured faster.
 
-We deliberately did *not* use tiling or blocking (not course content),
+We deliberately did *not* use tiling or blocking (outside the course content),
 fast-math (it would weaken the correctness story) or float32 (saved as an M2
 experiment, since it halves the memory traffic and doubles the SIMD width).
 
@@ -1554,8 +1562,7 @@ thing, measure, and repeat. `--opt-level 0..6` turned the list above into a
 cumulative ladder. Level 0 was the baseline algorithm, level 1 added the
 lookup table, level 2 added strength reduction on top, and so on. Each rung
 was benchmarked separately, so the bar chart shows the *extra* gain of each
-named technique, not just one before and after pair. Two rules kept the
-experiment fair.
+named technique. Two rules kept the experiment fair.
 
 - The level was chosen ONCE, before the time loop, by picking a kernel
   function for that level (`step_level3()` and so on). Checking
@@ -1583,9 +1590,9 @@ can be compared across grid sizes, which raw seconds cannot.
   (in `solver_opt_kernels.h`) was a *function pointer*, a plain variable whose
   value is which function to call. `OptSolver::solve` asked
   `kernel_for_level(cfg.opt_level)` for it ONCE, before the time loop, so the
-  hot loop never paid for a per-cell check of the level. It is similar to
-  assigning a function to a variable in Python, except that it compiles to a
-  direct jump address with no dictionary lookup per call.
+  hot loop never ran a per-cell check of the level. It is similar to assigning
+  a function to a variable in Python, except that the call compiles to an
+  indirect call through the stored address, with no dictionary lookup.
 - **A kernel owned the interior and the v = 0 row.** The S = 0 and S = max
   columns and the v = vmax row were shared code in `OptSolver::solve`, the
   same for every level and for the baseline, so the ladder timings compared
@@ -1595,15 +1602,14 @@ can be compared across grid sizes, which raw seconds cannot.
   44.8 Mcell-updates/s for the baseline on rangpur, which showed the harness
   itself cost nothing.
 - The opt solver's CSV label carried the level (`opt-L0`, `opt-L3`). The two
-  controls were labelled `opt-ctl-order` and `opt-ctl-branch` rather than
-  `opt-L7` and `opt-L8`, so a benchmark row could never be misread as the
-  ladder continuing upward.
+  controls were labelled `opt-ctl-order` and `opt-ctl-branch`, so a benchmark
+  row could never be misread as an `opt-L7` or `opt-L8` that continued the
+  ladder upward.
 
 #### The measured ladder (rangpur r730-2, Xeon E5-2670 v3, g++ 8.5.0 -O2)
 
 These are 2048×512 runs, median of 5 reps, in the huge-page regime (the page
-size section below explains why that matters). **This is the result, and it
-is not what anyone expects.**
+size section below explains why that matters).
 
 | Level | Technique added | Mcell-updates/s | Step | vs baseline |
 |---|---|---|---|---|
@@ -1616,8 +1622,8 @@ is not what anyone expects.**
 | L5 | induction variable | 134.2 | +2.2% | 2.55× |
 | L6 | unrolling ×4 | 134.8 | +0.5% | **2.56×** |
 
-**One rung out of six did all the work.** The headline is 2.56× end to end,
-and essentially all of it is level 2.
+**Only one rung out of six gave a measurable gain.** The headline is 2.56× end
+to end, and essentially all of it is level 2.
 
 **This is the sentence to have ready for why.** GCC 8.5 at `-O2` had already
 done levels 1, 3, 4, 5 and 6 for us. Hoisting loop-invariant expressions,
@@ -1626,14 +1632,13 @@ counted loops all leave the result unchanged, so the compiler is free to apply
 them and does. **Level 2 is the only rung that changes the result.** Replacing
 `x / (2*ds)` with `x * (1/(2*ds))` produces a different double, because
 `1/(2*ds)` is itself rounded. Without `-ffast-math` the compiler is *not
-allowed* to make that change, however obviously it would pay. The programmer
-has to decide the accuracy cost is acceptable and make the change by hand.
+allowed* to make that change, however much faster the result would be. The
+programmer has to decide the accuracy cost is acceptable and make the change
+by hand.
 
 So the rule the ladder demonstrates is that **at `-O2`, the optimisations
 worth doing by hand are the ones the compiler is not allowed to do for you.**
-That is a far more useful takeaway than a single speedup number, and it is
-only visible because every rung was measured separately instead of shipping
-one before and after pair.
+This rule is only visible because every rung was measured separately.
 
 The cost is real too, and it is measured. Level 2 moves the answer by 3.3e-15
 relative (about 15 ulp) over 5200 timesteps, and the matching test reported
@@ -1649,53 +1654,51 @@ the difference between them is 1.66×.
 each `--bench` rep. This is the measured behaviour on this node, reproducible
 to three digits.
 
-| | Rep 1 | Reps 2–5 |
+| | Rep 1 | Reps 2 to 5 |
 |---|---|---|
 | level 6 @2048×512 | 134.8 Mcell-updates/s | 81.1 |
 
-The obvious suspects are both wrong, and both were checked rather than
-assumed.
+The two obvious suspects were both checked, and neither is the cause.
 
-- **It is not the clock.** `slurm/bench_peak.sh` samples `/proc/cpuinfo`
+- **The clock was ruled out.** `slurm/bench_peak.sh` samples `/proc/cpuinfo`
   *during* an actual solve and finds the clock pinned at 3100 MHz the whole
   way through, so there is no turbo ramp-down.
-- **It is not the cache.** The working set does not change between reps.
+- **The cache was ruled out.** The working set does not change between reps.
 
-It is the **memory allocator**. The first allocation is served by `mmap`,
+The cause is the **memory allocator**. The first allocation is served by `mmap`,
 and with `/sys/kernel/mm/transparent_hugepage/enabled = [always]` it is
 backed by 2 MiB transparent huge pages. The 16 MiB working set then needs
 about **8 TLB entries**. Afterwards glibc raises its *dynamic* `mmap`
 threshold past 8 MiB, so later reps are served from the reused main heap on
 4 KiB pages. The same 16 MiB then needs **4096 entries**, far more than this
-core's L2 TLB holds, and the stencil pays for page walks.
+core's L2 TLB holds, and the stencil's loads trigger page walks.
 
 We proved this by setting the threshold by hand (`slurm/diag_alloc.sh`).
 
-| Setting | Rep 1 | Reps 2–5 |
+| Setting | Rep 1 | Reps 2 to 5 |
 |---|---|---|
 | default | 134.8 | 81.1 |
 | `MALLOC_MMAP_THRESHOLD_=1048576` (force mmap) | 134.3 | **134.2, the drop disappears** |
 | `MALLOC_MMAP_THRESHOLD_=134217728` (force heap) | 134.8 | 81.1 |
 
 **This matters for what gets reported.** A real production solve is a fresh
-process that allocates once, so it lives in the *fast* regime. A plain
+process that allocates once, so it runs in the *fast* regime. A plain
 median of 5 understates real performance by 40% and understates the speedup
 (1.81× instead of 2.56×). Both regimes are measured and both are in
 `results/bench_summary.md`. The huge-page one is the headline because it is
 the one a user experiences.
 
-The lesson that carries over, and a good interview answer, is that **median
-of 5 reps is not automatically the right statistic.** It is right when the
-reps are samples of the same thing. Here rep 1 and reps 2–5 were sampling two
-different memory regimes, and averaging them would have hidden both. The fix
-was not a better statistic. It was finding out *why* the reps disagreed.
+This gives a good interview answer. **The median of 5 reps is the right
+statistic only when the reps sample the same thing.** Here rep 1 and reps 2 to 5
+were sampling two different memory regimes, and averaging them would have
+hidden both. The fix was to find out *why* the reps disagreed.
 
 #### The negative controls, which show what levels 3 and 4 are actually worth
 
 Levels 3 and 4 could not show a gain because the baseline never had the
 loss. So the Milestone 1 ladder shipped two kernels that *do* have the loss,
 measured in the same job, at the same `nt`, on the same node. A comparison
-across jobs would measure run length, not technique.
+across jobs would mix the difference in run length into the result.
 
 | Kernel | What it removes | Mcell-updates/s | vs paired reference |
 |---|---|---|---|
@@ -1709,8 +1712,9 @@ about the machine.** The reference grid is two 8 MiB buffers, which is
 **16 MiB against this node's 30 MB L3**. The whole problem fits in the
 last-level cache. So the wrong traversal still finds its data in cache, just
 one level further away. Swapping the loops moves roughly 4.8× more bytes
-(measured by the cache model in §12b) and costs 2.1× the time, not 4.8×,
-because at this size the extra bytes come from L3 rather than DRAM.
+(measured by the cache model in §12b) and costs only 2.1× the time, because
+at this size the extra bytes are read from L3, which is much faster than
+DRAM.
 
 That gap between *traffic* and *time* is worth saying out loud. A 4.8×
 traffic penalty that costs only 2.1× is evidence that the kernel is not
@@ -1724,13 +1728,13 @@ good advice for hardware without speculative execution. Today it buys about
 1%, and it is *still* worth doing because it costs nothing and makes the loop
 bodies simpler.
 
-**Be careful with local numbers.** On the Mac, `ctl-order` measured about 39×
+**Be careful with local numbers.** On the Mac, `ctl-order` measured about 30×
 slower. That figure was wrong. The reference solve was running at the same
-time, and a bandwidth-hungry kernel is exactly what suffers most from a
-neighbour. The rangpur number was taken on an exclusively allocated node and
-is the one that counts. This is why `--exclusive` is in every benchmark job,
-and it shows how easy it is to measure something real that answers a
-different question from the one you asked.
+time, and a bandwidth-hungry kernel suffers most from a neighbour that
+competes for bandwidth. The rangpur number was taken on an exclusively
+allocated node and is the one that counts. This is why `--exclusive` is in
+every benchmark job, and it shows how easy it is to measure something real
+that answers a different question from the one you asked.
 
 #### Sweep C, which checks whether any of this is the compiler's auto-vectoriser
 
@@ -1745,53 +1749,64 @@ ladder would have credited the vectoriser with the 1.66× page effect. That
 pairing mistake is easy to make, and the summary script now guards against
 it.
 
-The two columns are identical to three digits, so none of the speedup is
-hidden automatic SIMD. That matters because Milestone 1 forbids SIMD and
-Milestone 2 is *about* SIMD, so the M1 number has to be a true scalar
-baseline for M2 to improve on. Note *why* the control changed nothing. GCC
-8.5 enables `-ftree-vectorize` at `-O3`, not `-O2`, so there was nothing to
-switch off. It is still worth running and reporting, because "we assumed it
-was off" and "we measured that it was off" are different claims.
+The two columns are identical to three digits. The question matters because
+Milestone 1 forbids SIMD and Milestone 2 is *about* SIMD, so the M1 number has
+to be a true scalar baseline for M2 to improve on. But the control changed
+nothing for a reason that makes it vacuous. GCC 8.5 enables
+`-ftree-vectorize` at `-O3` and leaves it off at `-O2`, so there was nothing to
+switch off, and RESULTS.md §6 records sweep C as measuring nothing. Sweep G is
+the valid control. It built at `-O3` with and without `-fno-tree-vectorize` in
+one job, and level 6 ran at 135.0 Mcell-updates/s with the vectoriser off
+against 134.8 in the headline sweep, so none of the speedup is hidden
+automatic SIMD. The same sweep showed the vectoriser lifting the *baseline*
+by 1.92×, because division-heavy code gives it real work.
 
 #### Sweep B, which shows how the speedup scales with problem size
 
-| Grid | Working set | Baseline | Level 6 | Speedup |
-|---|---|---|---|---|
-| 512×128 | 1 MiB | 44.5 | 143.6 | 3.23× |
-| 1024×256 | 4 MiB | 41.9 | 100.4 | 2.39× |
-| 2048×512 | 16 MiB | 44.8 | 81.1 | 1.81× |
-| 4096×1024 | 64 MiB | 57.8 | 156.9 | 2.71× |
+These are the pinned re-run (job 556834, RESULTS.md Table 4), with
+`MALLOC_MMAP_THRESHOLD_` set so every rep of a row is served the same way.
 
-There are two things to read off this table, and one trap.
+| Grid | Working set | Page regime (measured) | Baseline | Level 6 | Speedup |
+|---|---|---|---|---|---|
+| 512×128 | 1 MiB | 4 KiB | 44.4 | 155.4 | 3.50× |
+| 1024×256 | 4 MiB | 4 KiB | 41.8 | 104.4 | 2.49× |
+| 2048×512 | 16 MiB | 2 MiB (THP) | 52.6 | 135.1 | 2.57× |
+| 4096×1024 | 64 MiB | 2 MiB (THP) | 57.8 | 157.5 | 2.72× |
 
-- **The baseline is flat.** It stays at about 42 to 58 Mcell-updates/s across
-  a 64× range of working-set sizes. A kernel whose speed does not care
-  whether its data fits in cache is not memory-bound. The baseline's five
-  divisions per cell set its pace, and nothing else matters.
-- **Level 6 is not flat.** It falls from 143.6 to 81.1 as the working set
-  grows from 1 MiB to 16 MiB. With the division bottleneck removed, the
-  kernel is now fast enough to notice the memory hierarchy. The optimisation
-  *moved* the bottleneck rather than just raising the ceiling.
-- **The trap is the 4096×1024 row going back UP**, which looks like the
-  memory effect reversing. It is not. Those buffers are 32 MiB each, which is
-  at glibc's `DEFAULT_MMAP_THRESHOLD_MAX`, so *every* rep is served by a fresh
-  `mmap` and gets huge pages, while the three smaller grids fall back to
-  4 KiB pages for reps 2–5. That row is measured in a different memory regime
-  and is labelled that way on the figure. It is the page-size effect again in
-  a different form, and it shows why an unexplained bump in the data is worth
-  chasing rather than ignoring.
+There are three things to read off this table.
+
+- **The baseline is nearly flat.** It stays between 41.8 and 57.8
+  Mcell-updates/s across a 64× range of working-set sizes. A kernel whose
+  speed barely changes with where its data sits in the memory hierarchy is
+  not memory-bound. The baseline's five divisions per cell set its pace.
+- **Level 6 is not flat.** It falls from 155.4 at 1 MiB to 104.4 at 4 MiB,
+  where RESULTS.md §3 reads the working set as moving past L2 into the shared
+  L3, and recovers to 135.1 and 157.5 on the two large grids, whose buffers
+  get huge pages. With the division bottleneck removed, the kernel is fast
+  enough to show the memory hierarchy, so the optimisation *moved* the
+  bottleneck.
+- **The rows still span two page regimes.** Transparent huge pages need an
+  aligned 2 MiB stretch of memory, and only the 8 MiB and 32 MiB buffers of
+  the two large grids get one. The two small grids therefore run on 4 KiB
+  pages whatever the allocator is told, and the within-regime comparisons are
+  the clean ones. The first run of this sweep (job 556506) did not pin the
+  allocator, mixed the two regimes within single rows and put its 2048×512
+  row at 44.8 and 81.1, so its curve read backwards and it is retired to
+  `results/superseded/`. It shows why an unexplained bump in the data is
+  worth chasing.
 
 There are two smaller observations, worth a sentence each.
 
 - **The Mac and the Xeon disagree about unrolling.** On Apple Silicon (through
   Rosetta) level 6 was a *23% slowdown*. Four cells in flight need more live
-  registers than were available there, so the unrolled loop spilled to
-  memory. On the Xeon it was +0.8%, which is no change. The same source gave
-  opposite results, because an optimisation is a property of the code, the
-  compiler and the machine together, never of the code alone. This is exactly
-  why the rubric insists numbers come from the target machine.
-- **Level 1 giving no gain is not the same as level 1 being pointless.** It is
-  the rung that makes levels 2 to 6 *possible to write*. The reciprocals of
+  registers than were available there, so the compiler had to store some
+  values to the stack and load them back (register spilling). On the Xeon it
+  was +0.5%, which is no change. The same source gave opposite results,
+  because the effect of an optimisation depends on the code, the compiler and
+  the machine together. This is exactly why the rubric insists numbers come
+  from the target machine.
+- **Level 1 gave no gain, and it was still needed.** It is the rung that
+  makes levels 2 to 6 *possible to write*. The reciprocals of
   level 2 have to be hoisted somewhere, and the S and S² tables are what let
   the inner loop become a pure streaming loop. The compiler reproduced its
   speed effect, but it did not write the code that follows.
@@ -1805,44 +1820,44 @@ There are two smaller observations, worth a sentence each.
 - Record the hostname, compiler version, flags and grid size with every
   result.
 - Time only the solve loop, never file input or output.
-- Flags are fixed at `-O2`. One extra run with vectorisation disabled shows
-  the serial gains aren't hidden automatic SIMD. M1 forbids SIMD, and the
-  lectures describe `-O3` as the level that enables vectorisation, which is
-  another reason we stay at `-O2`.
+- Flags are fixed at `-O2`. A run at `-O3` with and without
+  `-fno-tree-vectorize` (sweep G) shows the serial gains aren't hidden
+  automatic SIMD. M1 forbids SIMD, and the lectures describe `-O3` as the
+  level that enables vectorisation, which is another reason we stay at `-O2`.
 - **Profile before optimising.** With `gprof` you compile with `-pg`, run the
   program, then run `gprof prog gmon.out`. Find where the time actually goes
   and optimise that. Don't polish code that takes 1% of the runtime.
 - **Use your results.** Print the price. The lecturer showed a benchmark whose
   runtime dropped to zero because the compiler noticed the result was never
   used and deleted the whole loop.
-- **The problem must not fit in cache**, otherwise you are benchmarking the
-  cache, not the algorithm. Our reference grid is two 8 MB buffers, so say
-  so. §13 shows that 16 MiB does in fact fit in this node's 30 MB L3, and why
-  that matters.
+- **The problem should be larger than the cache**, otherwise the benchmark
+  measures the cache. Our reference grid is two 8 MiB buffers, so say so.
+  §13 shows that those 16 MiB do fit in this node's 30 MiB L3, and why that
+  matters.
 - **Check correctness while benchmarking.** It is very easy to make code run
   fast that doesn't work, so our benchmark job runs `make test` first.
 - **Report null results.** If an optimisation doesn't help, the compiler may
   already have done it, and saying so shows method.
 
-**What the benchmark machine actually is, and why it matters (P7).**
-Rangpur's `cosc3500` partition is not one kind of machine. It mixes 24-core
-Intel Xeon E5-2670 v3 boxes (`r730-*`, Haswell, 2014) with 8-core virtual
-machines (`a100-*`, `vcpu-*`). Three things followed from that, and all of
-them are worth being able to explain.
+**What the benchmark machine actually is, and why it matters (P7).** Rangpur's
+`cosc3500` partition mixes 24-core Intel Xeon E5-2670 v3 boxes (`r730-*`,
+Haswell, 2014) with 8-core virtual machines (`a100-*`, `vcpu-*`). Three things
+followed from that, and all of them are worth being able to explain.
 
 - **Every benchmark job pins to the same physical node**
   (`--nodelist=r730-2`) **and takes it exclusively** (`--exclusive`). Without
   the pin, the ladder might be measured on a Xeon and the controls on a
   virtual machine, and comparing them would be meaningless. Without
   `--exclusive`, another job on a different core of the same socket competes
-  for the *shared* memory bandwidth and L3 cache. It never touches our core,
+  for the *shared* memory bandwidth and L3 cache. It never runs on our core,
   and it still changes our numbers.
 - **The QOS caps a job at 15 minutes.** A single job covering everything sits
-  in the queue forever with reason `QOSMaxWallDurationPerJobLimit`. It is not
-  rejected, it just never starts, which is a much more confusing failure. The
-  Milestone 1 suite was five sweeps plus two diagnostic jobs, each writing
-  its own CSV (removed in Milestone 2, still at git tag `milestone1`). The M2
-  sweeps follow the same one-job-per-sweep rule, and COMMANDS.md lists them.
+  in the queue forever with reason `QOSMaxWallDurationPerJobLimit`. Slurm
+  never rejects the job and never starts it, which is a much more confusing
+  failure. The Milestone 1 suite was five sweeps plus two diagnostic jobs,
+  each writing its own CSV (removed in Milestone 2, still at git tag
+  `milestone1`). The M2 sweeps follow the same one-job-per-sweep rule, and
+  COMMANDS.md lists them.
 - **That node is slow, and the reason is informative.** It runs the baseline
   at about 4.7e7 cell updates per second, roughly a tenth of a modern laptop
   core, at a measured **3.1 GHz**. `bench_peak.sh` sampled `/proc/cpuinfo`
@@ -1854,30 +1869,32 @@ them are worth being able to explain.
   cell**, and a Haswell `divsd` takes about 13 to 20 cycles and pipelines
   poorly, so those five alone account for 65 to 100 cycles, which is the
   whole budget. So the *baseline* on this machine is limited by division
-  before anything else. That is exactly why strength reduction (level 2) pays
-  so well here, and the corrected clock makes that argument stronger.
+  before anything else. That is why strength reduction (level 2) gives such a
+  large gain here, and the corrected clock makes that argument stronger.
 
 **A useful debugging habit is to check a surprising number before believing
 it.** When rangpur first came back 10× slower than the laptop, the obvious
 suspect was denormal arithmetic. `bench.cfg` uses a very short maturity, so
 much of the grid holds values near 1e-300, and x86 takes a microcode assist
-of tens of cycles on every operation that touches a denormal. That would have
-been a benchmarking artefact, not a result. So it was tested
-(`slurm/diag_denormal.sh`) rather than assumed. The same run was repeated
+of tens of cycles on every operation that reads or produces a denormal. That
+would have made the slow speed a benchmarking artefact. So it was tested with
+`slurm/diag_denormal.sh`. The same run was repeated
 with `-ffast-math` (which links `crtfastmath.o` and sets FTZ/DAZ so denormals
 flush to zero), with the grid full of NaNs, and with values around 1e33. All
-of them gave the *same* throughput to within noise. The hypothesis was wrong,
-and the hardware is simply old, which is now a measured statement instead of
-a guess. The same test also justifies the short `nt` used throughout the
-benchmarks. Since the data values provably do not affect throughput, a
-400-step run measures the same *rate* as a 400 000-step one.
+of them gave the *same* throughput to within noise. The hypothesis was wrong
+for the Milestone 1 kernels, and the hardware is old, which is now a
+measured statement. That test was also the reason the short `nt` was trusted,
+since for those kernels a 400-step run measured the same *rate* as a
+400 000-step one. Milestone 2 overturned this for the faster rungs.
+Unflushed denormals cost the baseline 1.07× and the simd rung 1.42×
+(RESULTS.md M2.7), so every M2 benchmark flushes them to zero (§18.5).
 
 **Self-test.** Is the solver memory-bound or compute-bound, and what
-measurement settles it? Why is `j*Ns + i` the right index formula and not
-`i*Nv + j`? What does the buffer swap cost? Why take the median of 5 runs on
-a compute node? Why does `--exclusive` matter when we only use one core? What
-is the difference between a job that is *rejected* and a job that never
-starts?
+measurement settles it? Why is `j*Ns + i` the right index formula for a loop
+whose inner index is `i`? What does the buffer swap cost? Why take the median
+of 5 runs on a compute node? Why does `--exclusive` matter when we only use
+one core? What is the difference between a job that is *rejected* and a job
+that never starts?
 
 ---
 
@@ -1887,72 +1904,72 @@ You will be asked where the parallelism is, even about Milestone 1. This is
 the answer.
 
 **Within one timestep the work is fully parallel.** Every cell of the new
-sheet depends only on the old sheet, so all `Ns·Nv ≈ 1M` cells could be
+time level depends only on the old one, so all `Ns·Nv ≈ 1M` cells could be
 computed at the same time, in any order.
 
-**Across timesteps the work is strictly sequential.** Sheet k+1 can't start
-until sheet k is complete. Every one of the `nt` timesteps is a point where
+**Across timesteps the work is strictly sequential.** Step k+1 can't start
+until step k is complete. Every one of the `nt` timesteps is a point where
 all workers must wait for each other.
 
-That combination, with a lot of parallelism inside a step and a hard barrier
-between steps, is what makes this a *real* parallel-computing problem. It is
-not embarrassingly parallel like Monte Carlo, where the paths never talk to
-each other.
+That combination, with a lot of parallelism inside a step and a barrier
+between steps, makes this a *real* parallel-computing problem. Monte Carlo is
+embarrassingly parallel because its paths never exchange data, while this
+solver has to synchronise every step.
 
 The M2 ladder uses it rung by rung, with the same `Solver` interface each
-time, using exactly what the course teaches (L04 and L05) and nothing
-fancier.
+time, using only what the course teaches (L04 and L05).
 
 - **SIMD uses AVX intrinsics.** These come from `<immintrin.h>`, a `__m256d`
-  holds 4 doubles, and FMA does the multiply-adds. It is NOT compiler
-  auto-vectorisation, which the lectures call "pretty subpar", and it is not
-  assembly. Adjacent cells in a row share the same formula and sit next to
-  each other in memory, so one vector instruction computes 4 cells. The plan
-  uses unaligned loads (`_mm256_loadu_pd`), because the stencil reads
-  `stock_i - 1`, `stock_i` and `stock_i + 1`, so at most one of those three
-  loads could ever be aligned. Experiment E2 measures whether aligned buffers
-  help anyway. The lectures' rule of thumb is **about 4×, not the full vector
-  width**, because such kernels are usually memory-bound. **We measured that,
-  and it is not true here** (§12). The M1 optimised kernel already runs at
-  82% of this node's measured scalar peak while asking for only about 3 GB/s,
-  so it is compute-bound. Arithmetic throughput is what stands between us and
-  more speed, and that is exactly what SIMD widens. So expect something
-  closer to the vector width than the rule of thumb predicts, and then
-  measure it, because measuring is how the rule of thumb got caught out. A
-  float32 version (8 wide) is the natural follow-on experiment. §15 has how the rung was built and checked.
+  holds 4 doubles, and FMA does the multiply-adds. The vector code is written
+  by hand with intrinsics, which sit between compiler auto-vectorisation
+  (which the lectures call "pretty subpar") and assembly. Adjacent cells in a
+  row share the same formula and sit next to each other in memory, so one
+  vector instruction computes 4 cells. The plan uses unaligned loads
+  (`_mm256_loadu_pd`), because the stencil reads `stock_i - 1`, `stock_i` and
+  `stock_i + 1`, so at most one of those three loads could ever be aligned.
+  Experiment E2 measured whether alignment helps anyway (§15.4 and §15.5). The
+  lectures' rule of thumb is **about 4×, below the full vector width**,
+  because such kernels are usually memory-bound. **Our measurements show this
+  kernel is compute-bound** (§12). The M1 optimised kernel already runs at 82%
+  of this node's measured scalar peak while asking for only about 3 GB/s.
+  Arithmetic throughput limits its speed, and SIMD raises arithmetic
+  throughput. So the plan expected a gain closer to the vector width than the
+  rule of thumb predicts, and the measured gain over serial was 2.87×
+  (RESULTS.md M2.10). A float32 version (8 wide) became experiment E3. §15 has
+  how the rung was built and checked.
 - **OpenMP puts `#pragma omp parallel for` on the outer `var_j` loop.** The
   lecture rule is to parallelise the outermost loop first. It uses
   `default(none)` with explicit sharing lists, as the lecture recommends, and
   the thread count comes from `OMP_NUM_THREADS`. Our design needs **no
-  synchronisation inside a step**. Threads read the shared `current` sheet,
+  synchronisation inside a step**. Threads read the shared `current` buffer,
   which nobody changes during the step, and write separate rows of `next`.
   The only wait is the implicit barrier at the end of the parallel loop. In
   the lecture's warning example, putting `critical` in a hot loop made the
   code **40× slower** than serial, and our structure, which needs no locks,
   is the answer to how we avoided that. Expect a speedup close to the number
-  of physical cores (not hyper-threads). Accept tiny run-to-run
-  floating-point differences from reordered sums, since floating-point
-  addition isn't associative, as long as they stay within the test
-  tolerance.
+  of physical cores (the r730 has no hyper-threading). Each cell is computed
+  by the same arithmetic in the same order whichever thread runs it, and
+  there are no sums across threads, so the omp rung matches simd bit for bit
+  (RESULTS.md M2.1).
 - **MPI is hybrid with OpenMP.** Several processes, possibly on different
-  nodes, each own a block of rows. A process cannot see another's memory, so
-  before each step neighbouring processes send each other the one row their
-  stencils need. That copied row is the halo.
+  nodes, each own a block of rows. A process cannot read another's memory,
+  so before each step each process sends its first and last rows to its
+  neighbours and receives theirs into its copied rows.
 - **CUDA is optional.** It would use one GPU thread per cell, with both
-  sheets kept on the GPU so nothing crosses the PCIe bus inside the time
+  buffers kept on the GPU so nothing crosses the PCIe bus inside the time
   loop.
 
-**How each rung splits one sheet.** The details land with each phase. This is
-the shape to have in your head.
+**How each rung splits the grid.** Each phase adds the details. This is the
+shape to have in your head.
 
 ```text
   SIMD, inside one row            OpenMP, rows to threads       MPI, blocks of rows to processes
 
   row var_j                       row 7  thread 3               +---------------------+
   [c c c c][c c c c][c c c c]     row 6  thread 3               | rank 1  rows 4..7   |
-   4 cells per instruction        row 5  thread 2               | halo: copy of row 3 |
+   4 cells per instruction        row 5  thread 2               | copy of row 3       |
                                   row 4  thread 2               +---------------------+
-                                  row 3  thread 1               | halo: copy of row 4 |
+                                  row 3  thread 1               | copy of row 4       |
                                   row 2  thread 1               | rank 0  rows 0..3   |
                                   row 1  thread 0               +---------------------+
 ```
@@ -1960,43 +1977,44 @@ the shape to have in your head.
 This picture shows that every rung divides up the same rectangle from §6.1.
 It works without locks because of the two buffers in §11. Every worker reads
 `current`, which nobody writes during a step, and writes only its own rows of
-`next`. The halo is one row deep because the stencil reaches exactly one row
-up and one row down (§7.2).
+`next`. One copied row on each side is enough because the stencil reaches
+exactly one row up and one row down (§7.2).
 
-Have two laws ready. **Amdahl's law** says the speedup is capped by the
-serial fraction of the work, and our per-step barrier is exactly such a
-fraction. The lecture example is that 90% parallel code can reach at most
-10×. **Gustafson's law** says that if you scale the *problem* up with the
-machine, efficiency comes back, so finer grids justify more cores.
-The task sheet names Gustafson's law, but the lectures do not teach it, so
-the video cites the paper, J. L. Gustafson, Reevaluating Amdahl's law, Communications of the ACM 31(5), 532 to 533, 1988. With serial share f of the scaled run on N cores, the scaled speedup
-is f + (1 - f)N. Our measured f = 0.0836 on 24 threads gives 22, against 19
-measured.
+Have two laws ready. **Amdahl's law** says the speedup is capped by the serial
+fraction of the work, and our per-step barrier is exactly such a fraction. The
+lecture example is that 90% parallel code can reach at most 10×. **Gustafson's
+law** says that if you scale the *problem* up with the machine, efficiency
+recovers, so finer grids justify more cores. The task sheet names Gustafson's
+law, but the lectures do not teach it, so the video cites the paper, J. L.
+Gustafson, Reevaluating Amdahl's law, Communications of the ACM 31(5), 532 to
+533, 1988. With serial share f of the scaled run on N cores, the scaled
+speedup is f + (1 - f)N. Our measured f = 0.092 on 24 threads gives 21.9,
+against 16.3 measured (RESULTS.md M2.3).
 
 The video stays with what the course teaches. Where a slide uses an idea from
 outside the lectures, it carries a source line, and M2_SCRIPT.md lists them.
 The roofline is from Williams, Waterman and Patterson (2009). Fitting
 Amdahl's serial fraction to measured speedups is the Karp and Flatt metric
 (1990), which `amdahl_fit` in `scripts/m2_figures.py` does by least squares
-over every thread count. First touch and NUMA are from Drepper (2007).
+over every thread count. Page placement on NUMA nodes is from Drepper (2007).
 Denormal numbers are from Goldberg (1991).
 
 ---
 
 ## Part IVb. Milestone 2, rung by rung
 
-Each section below is written when its rung lands, and says what the rung
-does, why it works, how it was checked, and what it measured. The code itself
-is walked through in CODE_GUIDE.md.
+Each section below was written when its rung was finished, and says what the
+rung does, why it works, how it was checked, and what it measured. The code
+itself is walked through in CODE_GUIDE.md.
 
 ### 15. SIMD with AVX2 (the `simd` rung)
 
 #### 15.1 What SIMD is
 
 SIMD stands for single instruction, multiple data. A normal (scalar)
-instruction adds one pair of numbers. A SIMD instruction adds several pairs at
-once, held side by side in one wide register. The CPU has to have the wide
-registers and the instructions, and they come in generations.
+instruction adds one pair of numbers. A SIMD instruction adds several pairs in
+one instruction, held side by side in one wide register. The CPU has to have
+the wide registers and the instructions, and they come in generations.
 
 | Name | Register | Width | Doubles per register | Register names |
 |---|---|---|---|---|
@@ -2052,7 +2070,7 @@ like the grid values.
 #### 15.3 How the nine neighbours are loaded
 
 For four cells starting at column `i`, the AVX row loads nine registers, one
-per neighbour direction. Each is the same four-wide window shifted by one
+per neighbour direction. Each is the same four-wide load shifted by one
 column or one row.
 
 ```text
@@ -2078,13 +2096,22 @@ two loads per cycle.
 #### 15.4 Why unaligned loads
 
 An aligned load (`_mm256_load_pd`) needs the address to be a multiple of 32
-bytes, and crashes otherwise. Our windows start at `i - 1`, `i` and `i + 1`,
-which are 8 bytes apart. At most one of any three addresses 8 bytes apart can
-be a multiple of 32. So aligned loads are not possible for this stencil
-without copying data around, and we use `_mm256_loadu_pd` everywhere. On
+bytes, and crashes otherwise. Our west, centre and east loads start at
+`i - 1`, `i` and `i + 1`, which are 8 bytes apart. At most one of any three
+addresses 8 bytes apart can be a multiple of 32. So the three loads cannot
+all be aligned, and the shipped row uses `_mm256_loadu_pd` everywhere. On
 Haswell and later, an unaligned load that happens to be aligned runs at full
 speed, and one that crosses a 64-byte cache line costs a little more.
-Experiment E2 in PLAN §6 measures whether aligning the buffers helps anyway.
+
+Experiment E2 measured the alternatives (RESULTS.md M2.6, the E2b rows with
+unsplit loads, one thread). The aligned load instruction ran at exactly the
+same speed as the unaligned one at the same address (477 and 477
+Mcell-updates/s). Where the data sits still matters. A row whose centre load
+is 32 byte aligned ran at 477, one aligned on the west or east load at 439,
+and one with nothing aligned at 412, because every unaligned 32 byte load
+crosses a cache line on every other iteration. Building east and west from
+the aligned centre by register shuffles (460) was no faster. §15.5 covers the
+compiler setting that E2 found first.
 
 #### 15.5 What FMA changes
 
@@ -2108,12 +2135,23 @@ rungs would quietly change their answers and their speed too, and the
 ladder would no longer measure one change per rung. So the Makefile builds
 `stencil_avx.cpp` with `-mavx2 -mfma` and every other file without.
 
-We use `-mavx2 -mfma` and not `-march=native`. `-march=native` enables every
-feature of the build machine, so a binary built on a newer node could use
-AVX-512 and crash on the r730s. The check for this is
-`objdump -d heston | grep zmm`, which must print nothing, because `zmm`
-registers only exist in AVX-512. Some AVX-512 intrinsics also have names
-starting with `_mm256_`, so the name alone does not prove the code is AVX2.
+We use `-mavx2 -mfma` and leave out `-march=native`, because `-march=native`
+enables every feature of the build machine, so a binary built on a newer node
+could use AVX-512 and crash on the r730s. The check for this is `objdump -d
+heston | grep zmm`, which must print nothing, because `zmm` registers only
+exist in AVX-512. Some AVX-512 intrinsics also have names starting with
+`_mm256_`, so the name alone does not prove the code is AVX2.
+
+The AVX2 file gets two more flags, `-mno-avx256-split-unaligned-load` and
+`-mno-avx256-split-unaligned-store` (`NOSPLIT` in the Makefile). Given only
+`-mavx2`, g++ 8.5 tunes for a generic x86 and compiles every unaligned 256 bit
+load as two 128 bit loads joined by `vinsertf128`, and every unaligned store
+as two 128 bit stores. Experiment E2 found the split in the disassembly. On
+the r730s' Haswell cores the split version is slower, and E2b measured simd
+1.19 times and omp 1.12 times faster with the two flags, with the same
+answers. `-march=native` would also keep the 256 bit loads unsplit, because it
+tunes for Haswell, but it ties the binary to the build machine for the reason
+above.
 
 #### 15.6 The remainder
 
@@ -2135,14 +2173,14 @@ The Mac is arm64 and has no AVX2, so there are three layers.
 2. **On the Mac, under Rosetta.** `make avx-check` builds an Intel (x86_64)
    copy of the row test with `clang++ -arch x86_64 -mavx2 -mfma`. macOS runs
    it through Rosetta, which translates AVX2 into ARM instructions. The
-   answers are real, but the speed is not.
+   answers are valid, and the timings are meaningless.
 3. **On rangpur.** `slurm/debug.sh` builds with the real flags, runs
    `make test` (which includes `simd` in `test_ladder_matches`) and
    `make avx-check`, and counts `zmm` instructions.
 
 | Check | Where | Result |
 |---|---|---|
-| `test_avx_row`, AVX2 row vs scalar row, random sheet, row lengths 130 to 133 and 2048 | Rosetta and rangpur | worst gap 2.3e-15 of the largest value, tolerance 1e-13 |
+| `test_avx_row`, AVX2 row vs scalar row, random buffer, row lengths 130 to 133 and 2048 | Rosetta and rangpur | worst gap 2.3e-15 of the largest value, tolerance 1e-13 |
 | `test_ladder_matches`, simd vs baseline, 5200 steps, price and three Greeks | rangpur job 651064 | 1.06e-15 call, 0 put, tolerance 1e-11 |
 | `test_ladder_matches`, serial vs baseline, same run | rangpur job 651064 | 3.3e-15 call, 0 put, unchanged |
 | `zmm` instructions in `heston` | rangpur job 651064 | 0 |
@@ -2161,9 +2199,9 @@ PLAN §5 hypothesis 1 predicts 2 to 3.5 times over the serial rung. The M1
 serial kernel was compute-bound at 82 to 95% of the node's scalar peak, so a
 four-wide register with FMA should carry most of its width through. The
 debug job's smoke run on a shared `vcpu-2` node showed about 2.4 times. The
-benchmark on r730-2 (job 651295, denormals flushed, §18.5) measured serial
-159 and simd 379 Mcell-updates/s, 2.39 times, inside the predicted range.
-§18.6 explains why it is not 4.
+benchmark on r730-2 (job 659238, denormals flushed, §18.5, loads kept whole)
+measured serial 159 and simd 456 Mcell-updates/s, 2.87 times, inside the
+predicted range. §18.6 explains why it falls short of 4.
 
 #### 15.9 Float instead of double (experiment E3)
 
@@ -2174,9 +2212,10 @@ is the worst rounding) and about 6e-8 for float (2^-24).
 
 The same 256-bit register holds four doubles (`__m256d`) or eight floats
 (`__m256`), so a float row does twice the cells per instruction, and each
-sheet takes half the memory. That gives two ways it could be faster. On one
-thread, where the kernel is compute-bound, eight lanes instead of four. On 24
-threads on a large grid, where it is memory-bound, half the bytes per cell.
+buffer takes half the memory. That gives two ways it could be faster. On one
+thread, where the kernel is compute-bound, a float register has eight lanes
+where a double register has four. On 24 threads on a large grid, where the
+kernel is memory-bound, float moves half the bytes per cell.
 
 The cost is accuracy, and it is not the same on every grid. Each time step
 rounds every cell once, so the error builds up step after step. If each
@@ -2196,32 +2235,33 @@ demo rows are local runs on the Mac, and the reference row is from rangpur
 job 652647, where delta moved by 0.46% and vega by 2.3% as well. Gamma
 suffers most because it is a second difference, `(east - 2 centre + west)
 / ds^2`, which subtracts nearly equal numbers and then divides by a small
-one, so the rounding in each value is blown up.
+one, so the rounding error in each value is multiplied many times over.
 
 The Fourier price for the reference contract is 196.1692. The double
 solver gives 196.1684, $0.0008 off. The float solver gives 196.1256, $0.044
 off. That is worse than the double answer on the much coarser 841 by 65
-grid with 224000 steps, which is $0.026 off (RESULTS §7). In other words,
-float throws away the accuracy the fine grid was paid for.
+grid with 224000 steps, which is $0.026 off (RESULTS §7). So float loses
+the accuracy that the fine grid's extra cost was spent on.
 
-And the speed, from rangpur job 652647 on r730-2, in Mcell-updates/s.
+And the speed, from rangpur job 659247 on r730-2, in Mcell-updates/s.
 
 ```text
 run                          double     float    float / double
-1 thread, 2048 x 512            383       735    1.92x
-24 threads, 2048 x 512         5732     10048    1.75x
-24 threads, 4096 x 1024        2902     12945    4.46x
-24 threads, reference grid     6037     10754    1.78x
+1 thread, 2048 x 512            453       871    1.92x
+24 threads, 2048 x 512         6375     11043    1.73x
+24 threads, 4096 x 1024        2975     14353    4.82x
+24 threads, reference grid     6856     11676    1.70x
 ```
 
-On one thread the gain is close to the full 2x of eight lanes against
-four, because the simd rung is compute-bound. On 24 threads at 2048 by 512
-both versions fit in the 60 MB of L3 (16 MB of sheets for double, 8 MB for
-float), and the gain is 1.75x. At 4096 by 1024 the double sheets take 64 MB
-and spill to memory, while the float sheets take 32 MB and still fit in the
-two L3 caches. So float does not just halve the bytes, it moves the whole
-grid from memory back into cache, and the gain jumps to 4.46x. That is the
-same cache cliff F4 shows for the double grid as it grows.
+On one thread the gain is close to the full 2x, because float doubles the
+lanes per instruction and halves the bytes per cell at the same time. On 24
+threads at 2048 by 512 both versions fit in the 60 MB of L3 (16 MB of
+buffers for double, 8 MB for float), and the gain is 1.73x. At 4096 by 1024
+the double buffers take 64 MB and no longer fit in L3, so they are read from
+main memory, while the float buffers take 32 MB and still fit in the two L3
+caches. So float halves the bytes and also keeps the whole grid in cache, and
+the gain rises to 4.82x. Figure F4 shows the same drop for the double grid
+as it grows.
 
 So float is a real speedup, and on a large grid a big one. It was not taken
 into the ladder, because the price it gives on the reference grid is
@@ -2232,17 +2272,17 @@ only the arithmetic in double would not remove it.
 #### 15.10 Self-test
 
 - **What is a `__m256d`?** A 256-bit register holding four doubles side by
-  side. One AVX instruction works on all four at once.
+  side. One AVX instruction operates on all four lanes.
 - **Why can the row be vectorised at all?** Every cell runs the same formula,
   neighbouring cells sit next to each other in memory, and no cell reads
   another cell's new value inside a step.
-- **Why `loadu` and not `load`?** The windows start 8 bytes apart, so at most
-  one of the three per row can be 32-byte aligned, and the aligned load
-  crashes on the others.
+- **Why does the row use `loadu`?** The west, centre and east loads start 8
+  bytes apart, so at most one of the three per row can be 32-byte aligned,
+  and the aligned load crashes on the others.
 - **What does FMA change?** It does a multiply and an add as one instruction
   with one rounding. That is faster, and it moves the last bits of the
-  answer, so the SIMD rung matches the baseline to about 1e-15 rather than
-  bit for bit.
+  answer, so the SIMD rung matches the baseline to about 1e-15 and is not
+  bit-identical to it.
 - **Why are only some files built with `-mfma`?** With `-mfma` the compiler
   may fuse multiply-adds in any file, which would change the baseline and
   serial rungs too.
@@ -2319,7 +2359,7 @@ whole time loop is faster.
 |---|---|
 | `parallel` | start a team of threads for the next statement |
 | `for` | split the iterations of the following `for` loop across the team |
-| `schedule(static)` | cut the iterations into one equal contiguous band per thread, decided before the loop starts |
+| `schedule(static)` | cut the iterations into one equal contiguous block per thread, decided before the loop starts |
 | `default(none)` | every variable used inside must have its sharing stated, or the compile fails |
 | `shared(...)` | these variables are the same object for every thread |
 
@@ -2330,7 +2370,7 @@ have been private silently becomes a data race. With it, forgetting a
 variable is a compile error.
 
 `schedule(static)` suits this loop because every row has the same number of
-cells and the same formula, so equal bands mean equal work. `dynamic`
+cells and the same formula, so equal blocks mean equal work. `dynamic`
 scheduling hands out rows on demand, which helps when iterations cost
 different amounts but adds a little bookkeeping per chunk. Experiment E5
 measures the difference.
@@ -2339,15 +2379,16 @@ When the rows do not divide evenly, the first threads get one extra row each.
 510 interior rows over 4 threads gives 128, 128, 127 and 127. Both libgomp
 (g++) and libomp (clang) split it this way.
 
-#### 16.4 Why rows, and not columns
+#### 16.4 Why the threads split rows
 
-Each thread gets a band of whole rows. That has three good properties.
+Each thread gets a contiguous block of whole rows. That has three good
+properties.
 
-1. It parallelises the outermost loop, so there is one fork per step and not
-   one per row.
+1. It parallelises the outermost loop, so there is one fork per step, where
+   parallelising the inner loop would fork once per row.
 2. Each thread's rows are one contiguous block of memory, so each thread
    streams through its own part of the arrays.
-3. The inner loop along a row is untouched, so it is still the AVX2 row from
+3. The inner loop along a row is unchanged, so it is still the AVX2 row from
    §15 and the two speedups multiply.
 
 Splitting along columns instead would cut every row into short pieces, would
@@ -2356,8 +2397,8 @@ contiguous AVX2 loop.
 
 #### 16.5 Why no locks are needed
 
-A data race is when two threads touch the same memory at the same time and at
-least one of them writes. Our loop has none.
+A data race is when two threads access the same memory location at the same
+time and at least one of them writes. Our loop has none.
 
 - Every thread reads `current`, but nobody writes `current` during the loop.
   Reading the same memory from many threads is always safe.
@@ -2365,7 +2406,7 @@ least one of them writes. Our loop has none.
   have the same row.
 - `constants` is only read.
 
-This is the two-buffer design from §11 paying off a second time. With a
+The two-buffer design from §11 helps here a second time. With a
 single buffer, a thread would read a neighbour row that another thread might
 already have overwritten, and the answer would depend on timing.
 
@@ -2386,8 +2427,8 @@ answer bit for bit, at any thread count.
 
 `test_ladder_matches` checks this with a tolerance of exactly zero at 1, 2
 and 7 threads. Seven threads do not divide the 30 interior rows of the test
-grid, so the bands are uneven. If a row were skipped or computed twice at a
-band edge, the result would change, and a tolerance like 1e-11 could hide
+grid, so the blocks are uneven. If a row were skipped or computed twice at a
+block edge, the result would change, and a tolerance like 1e-11 could hide
 that.
 
 #### 16.7 The serial part, and Amdahl's law
@@ -2418,7 +2459,8 @@ with `omp_get_max_threads()`, and that number goes in the CSV.
 
 Setting more threads than cores is called oversubscription. The threads then
 take turns on the cores, and since every step ends in a barrier, the whole
-team waits for whichever thread was paused. It is slower, not faster.
+team waits for whichever thread was paused. So oversubscription makes the
+run slower.
 
 The r730 nodes have two sockets of 12 cores. Each socket has its own 30 MiB
 L3 cache and its own memory. Two settings decide where threads run.
@@ -2434,15 +2476,15 @@ What that means in sockets depends on how the machine numbers its CPUs. On
 the r730 nodes the even CPUs are socket 0 and the odd ones socket 1, and the
 `cores` place list is in CPU order, so `close` alternates sockets from the
 second thread on, and `spread` with 6 or 12 threads uses only even CPUs,
-all on socket 0. That is the opposite of the usual picture, and it was
-measured, not assumed (`slurm/diag_placement.sh`, job 651500, printed each
-thread's CPU).
+all on socket 0. That is the opposite of the usual picture, and job 651500
+(`slurm/diag_placement.sh`) measured it by printing each thread's CPU.
 
-Memory pages are placed on the socket of the thread that first writes them
-(first touch). `Grid` fills both sheets on the main thread, so all the pages
-start on socket 0, and threads on socket 1 read them across the link between
-sockets. Experiments E6 (binding) and E7 (first touch) measure how much this
-matters, which should only be visible once the grid no longer fits in L3.
+Linux places each page in the memory of the socket whose thread first writes
+it (§10b). `Grid` fills both buffers on the main thread, so all the pages are
+placed in socket 0's memory, and threads on socket 1 read them across the
+link between sockets. Experiments E6 (binding) and E7 (page placement)
+measure how much this matters, which should only be visible once the grid no
+longer fits in L3.
 
 #### 16.9 How it was checked
 
@@ -2459,12 +2501,13 @@ matters, which should only be visible once the grid no longer fits in L3.
   process share its memory, processes do not. OpenMP uses threads, MPI uses
   processes.
 - **What does `default(none)` do and why use it?** It forces every variable
-  in the loop to have its sharing stated, so a forgotten variable is a
-  compile error and not a silent data race.
-- **Why `schedule(static)`?** Every row costs the same, so equal bands decided
-  up front give equal work with no runtime bookkeeping.
-- **Why rows and not columns?** It is the outer loop, so there is one fork per
-  step, each thread gets contiguous memory, and the AVX2 inner loop is kept.
+  in the loop to have its sharing stated, so a forgotten variable is caught
+  as a compile error.
+- **Why `schedule(static)`?** Every row costs the same, so equal blocks
+  decided up front give equal work with no runtime bookkeeping.
+- **Why split rows across the threads?** It is the outer loop, so there is
+  one fork per step, each thread gets contiguous memory, and the AVX2 inner
+  loop is kept.
 - **Why are no locks needed?** Threads only read `current`, which nobody
   writes during the step, and each writes only its own rows of `next`.
 - **Why is the answer exactly the same as the SIMD rung?** There is no
@@ -2479,9 +2522,9 @@ matters, which should only be visible once the grid no longer fits in L3.
   about 0.5% of a step, so the cap from that alone is about 21.5 times on 24
   threads. The measured fit will be larger because it also catches the
   barrier and memory limits.
-- **What is first touch?** A memory page is placed on the socket of the
-  thread that first writes it. Our grid is filled by the main thread, so all
-  of it starts on socket 0.
+- **Where does Linux place the grid's memory pages?** Linux places each page
+  in the memory of the socket whose thread first writes it. Our grid is
+  filled by the main thread, so all of it is placed in socket 0's memory.
 
 ---
 
@@ -2492,18 +2535,18 @@ matters, which should only be visible once the grid no longer fits in L3.
 OpenMP threads share one process's memory. MPI (Message Passing Interface)
 works with separate processes, usually called ranks. Each rank is a full copy
 of the program with its own memory, and it may run on a different machine.
-One rank cannot read another rank's variables. The only way to move data is
-to send it as a message and have the other rank receive it.
+One rank cannot read another rank's variables. A rank moves data to another
+rank by sending it as a message, which the other rank receives.
 
-That is more work for the programmer, but it is the only way to use more
-than one machine, because two nodes have no shared memory at all.
+That is more work for the programmer, and it is needed to use more than one
+machine, because two nodes have no shared memory at all.
 
 `mpiexec -n 4 ./heston ...` starts four copies of the same program. Each one
 calls the same four functions.
 
 | Call | Does |
 |---|---|
-| `MPI_Init(&argc, &argv)` | joins this process to the group started by `mpiexec` |
+| `MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &thread_level)` | joins this process to the group started by `mpiexec`, and promises that only the main thread makes MPI calls |
 | `MPI_Comm_rank(MPI_COMM_WORLD, &rank)` | which copy am I, 0 to n-1 |
 | `MPI_Comm_size(MPI_COMM_WORLD, &num_ranks)` | how many copies there are |
 | `MPI_Finalize()` | leaves the group, must be called before the program ends |
@@ -2512,13 +2555,13 @@ calls the same four functions.
 `mpiexec`, the program is a group of one (a singleton) and `rank` is 0, which
 is how the other rungs and `make test` run inside the same MPI binary.
 
-#### 17.2 Splitting the grid into slabs
+#### 17.2 Splitting the grid into blocks of rows
 
-Each rank owns a contiguous block of variance rows, a slab. With 512 rows on
-2 ranks, rank 0 owns rows 0 to 255 and rank 1 owns 256 to 511. When the rows
-do not divide evenly the first ranks get one extra row. Rank 0 owns the
-v = 0 row and the last rank owns the top row, so every boundary has exactly
-one owner. In the code a slab is a `RowRange` called `owned_rows`, made by
+Each rank owns a contiguous block of variance rows. With 512 rows on 2 ranks,
+rank 0 owns rows 0 to 255 and rank 1 owns 256 to 511. When the rows do not
+divide evenly the first ranks get one extra row. Rank 0 owns the v = 0 row and
+the last rank owns the top row, so every boundary has exactly one owner. In
+the code a block of rows is a `RowRange` called `owned_rows`, made by
 `rows_for_rank`.
 
 Rows are the right unit here for the same reasons as in OpenMP (§16.4), and
@@ -2527,31 +2570,32 @@ row goes as one message straight out of the array. Splitting by columns
 would need the edge column copied into a separate buffer every step, because
 a column's values are `Ns` doubles apart.
 
-#### 17.3 Halo rows
+#### 17.3 Copied rows
 
 The stencil for row `j` reads rows `j - 1`, `j` and `j + 1` (§7.2). So a
-rank's first row needs the row just below its slab, and its last row needs
-the row just above. Those rows belong to the neighbours. Each step, each
-rank receives a copy of them. Those copies are called halo rows (or ghost
-rows), and they are one row deep because the stencil reaches exactly one row.
-The code names them by position, `row_below` and `row_above`, and the
-function that swaps them is `exchange_edge_rows`.
+rank's first row needs the row just below its block of rows, and its last row
+needs the row just above. Those rows belong to the neighbours. Each step, each
+rank sends its first and last rows to its neighbours and receives theirs into
+its copied rows. The copied rows are one row deep because the stencil reaches
+exactly one row up and one row down. The code names them by position,
+`row_below` and `row_above`, and the function that sends the edge rows and
+receives the copied rows is `exchange_edge_rows`.
 
 ```text
   rank 1 owns rows 256..511                    rank 0 owns rows 0..255
 
   row 511  top row (rank 1 owns it)
    ...
-  row 256  first row    ─── sent to rank 0 ──►  row 256  halo above (copy)
-  row 255  halo below (copy)  ◄── sent to rank 1 ───  row 255  last row
+  row 256  first row    ─── sent to rank 0 ──►  row 256  row_above (copy)
+  row 255  row_below (copy)   ◄── sent to rank 1 ───  row 255  last row
                                                  ...
                                                 row 0  v = 0 row (rank 0 owns it)
 ```
 
 Per step each rank sends at most two rows and receives at most two rows. At
 2048 columns a row is 16 KiB, so a rank in the middle moves 64 KiB per step.
-The compute per step is the whole slab, about half a million cells for two
-ranks, so the message is small next to the work. That ratio is PLAN §5
+The compute per step is the whole block of rows, about half a million cells
+for two ranks, so the message is small next to the work. That ratio is PLAN §5
 hypothesis 6.
 
 #### 17.4 Non-blocking messages and why the receives go first
@@ -2559,24 +2603,25 @@ hypothesis 6.
 `MPI_Send` and `MPI_Recv` are blocking. `MPI_Send` may not return until the
 other side has started receiving. If two neighbours both call `MPI_Send`
 first, each waits for the other to receive, and neither ever does. That is a
-deadlock. Small messages often get through because MPI buffers them, so the
-bug can hide until the grid gets bigger.
+deadlock. Small messages often complete because MPI sends them with the
+eager protocol and buffers them at the receiver, so the bug can stay hidden
+until the rows grow past the eager limit.
 
 The rung uses the non-blocking versions.
 
 | Call | Does |
 |---|---|
-| `MPI_Irecv(buffer, count, MPI_DOUBLE, source, tag, comm, &request)` | starts a receive and returns at once |
-| `MPI_Isend(buffer, count, MPI_DOUBLE, dest, tag, comm, &request)` | starts a send and returns at once |
-| `MPI_Waitall(n, requests, MPI_STATUSES_IGNORE)` | waits until all n have finished |
+| `MPI_Irecv(buffer, count, MPI_DOUBLE, source, tag, comm, &request)` | starts a receive and returns immediately |
+| `MPI_Isend(buffer, count, MPI_DOUBLE, dest, tag, comm, &request)` | starts a send and returns immediately |
+| `MPI_Waitall(n, requests, MPI_STATUSES_IGNORE)` | blocks until all n sends and receives have completed |
 
 Nothing blocks until `MPI_Waitall`, and by then every send has a matching
 receive posted, so a deadlock is impossible. The receives are posted before
 the sends so that when a row arrives, MPI already knows where it goes and can
 copy it straight into the array instead of into a temporary buffer. The
-buffers must not be touched between the `I` call and the wait. Here nothing
-touches them, because the exchange happens after the step's update and
-before the swap.
+rows being sent and received must not be read or written between the `I`
+call and the wait. Here nothing reads or writes them, because the exchange
+happens after the step's update and before the swap.
 
 The `tag` is a number that labels a message. Both directions between a pair
 of ranks use tag 0, which is safe because MPI matches a receive by source as
@@ -2588,14 +2633,14 @@ well as tag, and the two messages have different sources.
   each step on every rank
     1. update own interior rows      OpenMP threads, reads current, writes next
     2. own boundaries                v = 0 row on rank 0, top row on the last rank
-    3. swap halo rows of next        MPI_Irecv, MPI_Isend, MPI_Waitall
+    3. exchange edge rows of next    MPI_Irecv, MPI_Isend, MPI_Waitall
     4. swap_buffers                  next becomes current
 ```
 
 The exchange is done on `next` at the end of the step, so when the following
-step starts each rank already has fresh halos in `current`. At the first
-step the halos are fine without an exchange, because every rank filled the
-whole grid with the payoff.
+step starts each rank already has fresh copied rows in `current`. At the
+first step the copied rows are already correct without an exchange, because
+every rank filled the whole grid with the payoff.
 
 The wait in step 3 is also a synchronisation point. A rank cannot start step
 k + 1 until its neighbours have finished step k, which keeps neighbouring
@@ -2604,7 +2649,7 @@ ranks in step with each other without any global barrier.
 The time spent in step 3 is added up in `exchange_seconds` so the benchmarks can
 show communication against compute. Experiment E9 overlaps it with compute,
 by updating and sending the edge rows first and then doing the middle rows
-while the messages travel.
+while the messages are in transit.
 
 #### 17.6 Hybrid, MPI between and OpenMP within
 
@@ -2618,10 +2663,10 @@ node or one per socket, with a thread per core inside it.
 | one rank per socket | 4 | 12 |
 | one rank per core, pure MPI | 48 | 1 |
 
-Hybrid needs fewer ranks than pure MPI, so there are fewer halos and fewer
+Hybrid needs fewer ranks than pure MPI, so there are fewer copied rows and fewer
 messages. One rank per socket also keeps each rank's memory on its own
 socket, which PLAN §5 hypothesis 5 says should beat one rank of 24 threads
-whose memory all sits on socket 0 (§16.8).
+whose pages are all in socket 0's memory (§16.8).
 
 When launching, the rank must not be pinned to one core, or all its threads
 would share that core. `--bind-to none` stops Open MPI pinning, or
@@ -2630,41 +2675,43 @@ one socket.
 
 #### 17.7 Every rank keeps the whole grid, a trade-off
 
-Every rank allocates both full sheets and only updates its own rows. The rest
-of its copy goes stale and is never read, apart from the two halo rows.
+Every rank allocates both full buffers and only updates its own rows. The
+rest of its copy goes stale and is never read, apart from the two copied
+rows.
 
-That costs memory. At 2048 by 512 the two sheets are 16 MiB per rank, which
+That costs memory. At 2048 by 512 the two buffers are 16 MiB per rank, which
 is nothing on a node with hundreds of GiB. In return, every row has the same
 index on every rank, so `update_row_avx`, `apply_stock_edges` and the
 boundary functions are exactly the code the other rungs run, and rank 0 can
 reuse the same `extract_result` after one gather.
 
-For a grid too big for one machine, each rank would instead allocate only
-its slab plus one halo row on each side, and every row index would be shifted
-by `owned_rows.begin - 1`. The maths would not change. That is the textbook layout,
-and it is what this rung would become if memory ran out.
+For a grid too big for one machine, each rank would instead allocate only its
+block of rows plus one copied row on each side, and every row index would be
+shifted by `owned_rows.begin - 1`. The maths would not change. That is the
+textbook layout, and this rung would switch to it if memory ran out.
 
 #### 17.8 Collecting the answer with MPI_Gatherv
 
-After the last step, `MPI_Gatherv` copies each rank's rows into rank 0's
-spare sheet. A plain `MPI_Gather` needs every rank to send the same amount,
-and `Gatherv` (v for vector) takes a count and an offset per rank, which we
-need because slabs can differ by a row. Then rank 0 swaps so the gathered
-sheet is `current`, and reads the price and Greeks as every other rung does.
-The gather is outside the timed loop.
+After the last step, `MPI_Gatherv` copies each rank's rows into rank 0's spare
+buffer. A plain `MPI_Gather` needs every rank to send the same amount, and
+`Gatherv` (v for vector) takes a count and an offset per rank, which we need
+because blocks of rows can differ by a row. Then rank 0 swaps the two buffer
+pointers so the gathered buffer is `current`, and reads the price and Greeks
+as every other rung does. The gather is outside the timed loop.
 
 #### 17.9 Why it is bit-identical too
 
-Each cell is computed by the same `update_row_avx` instructions as in the
-SIMD rung. The halo rows are exact copies, not recomputed, because a message
+Each cell is computed by the same `update_row_avx` instructions as in the SIMD
+rung. The copied rows hold exactly the neighbour's values, because a message
 carries the 64-bit doubles unchanged. Nothing is summed across ranks. So the
 MPI answer is the SIMD answer bit for bit, at any number of ranks and threads,
 and `test_ladder_matches` checks this with zero tolerance.
 
-With the halo exchange removed on purpose, the two-rank answer moved by
-2e-9. The stale halos (still the payoff) leak in one row per step from the
-slab edge, and the quote point is far enough away that the damage is small.
-A loose tolerance might have let that through. The zero tolerance did not.
+With the edge row exchange removed on purpose, the two-rank answer moved by
+2e-9. The stale copied rows (still the payoff) spread their error one row
+further into the block each step, and the quote point is far enough away
+that the error is small. A loose tolerance might have let that through, and
+the zero tolerance caught it.
 
 #### 17.10 How it was checked
 
@@ -2673,7 +2720,7 @@ A loose tolerance might have let that through. The zero tolerance did not.
 | `test_ladder_matches` with mpi as a singleton at 1, 2, 7 threads | Mac | mpi vs baseline 2.35e-15 call, 2.24e-15 put, mpi vs simd 0 |
 | `make test-mpi`, 2 and 3 ranks, 2 threads each | Mac | mpi vs simd exactly 0 |
 | demo grid price at 1, 2 and 4 ranks | Mac | 196.1054098 every time |
-| halo exchange removed on purpose | Mac | mpi vs simd 2.0e-9, test fails as it should |
+| edge row exchange removed on purpose | Mac | mpi vs simd 2.0e-9, test fails as it should |
 | `test_ladder_matches` at 2, 3 and 4 ranks over two nodes, 2 threads each | rangpur job 651092, a100-a and a100-b | mpi vs simd exactly 0, mpi vs baseline 1.06e-15 call and 0 put |
 | `make test` and `make test-mpi` on one node | rangpur job 651091, r730-0 | all pass, mpi vs simd exactly 0 as a singleton at 1, 2, 7, 8 threads and at 2 and 3 ranks |
 
@@ -2682,30 +2729,34 @@ A loose tolerance might have let that through. The zero tolerance did not.
 - **What is the difference between MPI and OpenMP?** OpenMP threads share
   one process's memory. MPI ranks are separate processes with separate
   memory, possibly on different machines, and move data only by messages.
-- **Why is the halo one row deep?** The stencil reads exactly one row above
-  and one below, so a rank needs exactly one row from each neighbour.
-- **Why rows and not columns for the slabs?** A row is contiguous in memory,
+- **Why is one copied row on each side enough?** The stencil reads exactly one
+  row above and one below, so a rank needs exactly one row from each
+  neighbour.
+- **Why are the blocks made of rows?** A row is contiguous in memory,
   so it goes as one message straight from the array. A column would have to
   be copied into a buffer first.
 - **Why `Irecv` before `Isend`?** When the data arrives MPI already knows
-  where to put it, so it lands in place without an extra copy.
+  where to put it, so it is received directly into the array without an
+  extra copy.
 - **Why non-blocking at all?** Two neighbours doing blocking sends to each
-  other at the same time can deadlock. With non-blocking calls nothing waits
-  until every send and receive is posted.
-- **What does `MPI_Waitall` protect?** The halo buffers. They must not be
-  read or written until the transfers have finished.
+  other at the same time can deadlock. With non-blocking calls nothing blocks
+  until every send and receive has been posted.
+- **What does `MPI_Waitall` protect?** The rows being sent and received. They
+  must not be read or written until the transfers have finished.
 - **Why does every rank hold the whole grid?** It keeps every row index the
   same on every rank, so the row functions and `extract_result` are reused
   unchanged. The cost is memory, 16 MiB per rank here. For a huge grid each
-  rank would hold only its slab plus two halo rows.
-- **Why `Gatherv` and not `Gather`?** Slabs can differ in size by a row, and
-  `Gatherv` takes a count and an offset per rank.
+  rank would hold only its block of rows plus two copied rows.
+- **Why `Gatherv`?** Blocks of rows can differ in size by a row, and
+  `Gatherv` takes a count and an offset per rank, where `MPI_Gather` needs
+  the same count from every rank.
 - **Why is the answer bit-identical?** Every cell runs the same instructions,
-  halo rows are exact copies, and nothing is summed across ranks.
-- **Why hybrid and not pure MPI?** Fewer ranks means fewer halo messages, and
-  one rank per socket keeps each rank's memory on its own socket.
+  copied rows are exact copies, and nothing is summed across ranks.
+- **What does the hybrid layout gain over pure MPI?** Fewer ranks means fewer
+  exchange messages, and one rank per socket keeps each rank's memory on its
+  own socket.
 - **What does `--bind-to none` do?** It stops Open MPI pinning each rank to a
-  single core, which would squeeze all of that rank's threads onto it.
+  single core, which would put all of that rank's threads on that one core.
 
 ---
 
@@ -2718,10 +2769,10 @@ below exists because breaking it would give a wrong or unrepeatable number.
 
 | Rule | Why |
 |---|---|
-| exclusive node, pinned to r730-2 (and r730-3 for two nodes) | another job on the node would steal cores, cache and memory bandwidth |
+| exclusive node, pinned to r730-2 (and r730-3 for two nodes) | another job on the node would compete for cores, cache and memory bandwidth |
 | build from clean, run every test, refuse to time if one fails | a fast wrong answer is worth nothing |
 | `MALLOC_MMAP_THRESHOLD_=1048576` | M1 found the same binary runs 1.66 times faster on huge pages, and without this only the first rep got them |
-| `OMP_PLACES=cores`, `OMP_PROC_BIND=close` | threads that move between cores lose their cache, and the binding decides which socket's memory they use |
+| `OMP_PLACES=cores`, `OMP_PROC_BIND=close` | threads that migrate between cores lose the data in their cache, and the binding decides which socket's memory they use |
 | median of 5 reps, min and max kept | one rep can be unlucky, the spread shows how much to trust a difference |
 | every rep runs for several seconds | short runs are dominated by start-up and timer noise |
 | flush denormals to zero with `LD_PRELOAD` (§18.5) | without it, short runs on big grids are full of very slow tiny numbers and different runs measure different regimes |
@@ -2757,7 +2808,7 @@ library is needed. The fitted `f` lumps together everything that does not
 shrink with more threads, the serial boundaries, the fork and barrier each
 step, and any shared limit such as memory bandwidth. It is a measured
 number, and comparing it with the 0.5% boundary share says how much of the
-loss is not the boundaries at all.
+loss comes from something other than the boundaries.
 
 The figure draws the AVX2 omp rung and the scalar omp rung. Each line is
 normalised to its own one-thread run, so the two lines show how well each
@@ -2794,10 +2845,12 @@ takes Gustafson's `f` straight from the 24-thread weak run, as
 `p * t(1) / t(p)` against that line.
 
 One effect to know before reading it. On 1 thread the grid has only 23 rows,
-about 370 KiB per sheet, which sits in that core's L2 cache. On 24 threads it
-is 506 rows, 8 MiB per sheet, which lives in L3. So the one-thread point is
-helped by cache, and some of any rise in step time is the move from L2 to
-L3, not parallel overhead.
+about 370 KiB per buffer, which is larger than the 256 KiB L2 of one core.
+On 24 threads it is 506 rows, 8 MiB per buffer. Both fit in L3, so both
+ends of the sweep work from L3. The one thread has a whole socket's L3 and
+memory bandwidth to itself, while the 24 threads share them, so part of the
+rise in step time comes from that sharing and 9.2 percent from the serial
+boundaries (RESULTS.md M2.3).
 
 #### 18.4 The roofline, with more than one roof
 
@@ -2817,7 +2870,7 @@ M2 adds roofs that `bench_peak.sh` measures on the node itself.
 |---|---|
 | scalar peak, 1 core | eight independent scalar multiply-add chains, the M1 roof |
 | AVX2 FMA peak, 1 core | ten independent `_mm256_fmadd_pd` chains, 4 lanes, 2 flops each |
-| AVX2 FMA peak, 24 cores | the same on every core at once |
+| AVX2 FMA peak, 24 cores | the same on every core simultaneously |
 | triad bandwidth, 1 thread and 24 threads | `a[i] = b[i] + 3 * c[i]` over three 256 MiB arrays, counted as 24 bytes per element |
 
 Each rung's point sits on the same vertical line, because the maths is the
@@ -2842,9 +2895,9 @@ that takes on the order of a hundred cycles instead of a few.
 Our grid makes them naturally. A call is worth exactly zero below the
 strike at expiry, and each step the diffusion spreads a little value one
 cell further into that zero region (§7.6). A cell far from the strike
-therefore holds values like 1e-200, then 1e-310, then 1e-320, then exactly
-0. How many cells are in the slow denormal band depends on how many steps
-have run and on the grid, and benchmark runs vary both.
+therefore holds values like 1e-200, then 1e-310, then 1e-320, then
+exactly 0. How many cells hold denormals depends on how many steps have run
+and on the grid, and benchmark runs vary both.
 
 The first size sweep showed it. One grid ran 2.4 times slower than the grids
 either side of it on every solver, and the prices printed were as small as
@@ -2871,52 +2924,63 @@ unnoticed. Experiment E12 measures what denormals cost each rung.
 The full tables with job ids are in `docs/RESULTS.md`, Milestone 2. These are
 the results to be able to explain, each with its reason.
 
-**The ladder.** baseline 57, serial 159, simd 379, omp on 24 threads 5729,
-mpi as 2 ranks of 12 on one node 6019 Mcell-updates/s. That is 101 times the
-baseline for one node of threads, and every rung gives the same answer.
+**The ladder.** baseline 57, serial 159, simd 456, omp on 24 threads 6367,
+mpi as 2 ranks of 12 on one node 6984 Mcell-updates/s. That is 123 times the
+baseline on one node, and every rung gives the same answer.
 
-**SIMD gave 2.4 times, not 4.** Four lanes is the ceiling. The loop also
-loads nine overlapping windows, does the remainder cells one at a time, and
-the scalar rung was already using the CPU's two arithmetic ports well, so
-the real gain is below the lane count.
+**SIMD gave 2.9 times, and four lanes set the upper limit at 4.** The loop
+issues nine overlapping loads per four cells, and the unaligned ones cross a
+cache line on every other iteration. The last cells of each row are computed
+one at a time. At 456 Mcell-updates/s one core already moves about 11 GB/s,
+close to the 12.4 GB/s it can stream from memory. Before the build kept the
+256 bit loads unsplit, the rung gave only 2.4 times, because g++ split every
+unaligned 256 bit load into two 128 bit loads (E2 and E2b).
 
-**Threads gave 15.8 times on 24 cores, not 24.** Three things eat the rest.
-The serial boundaries grow from 0.4% of a one-thread step to 8.2% of a
-24-thread step, because the main thread has to pull in rows other cores
-just wrote. The fork and barrier cost the same every step however short the
-step gets. And at 24 threads the AVX2 kernel moves about 138 GB/s through
-the caches, so it starts to run out of shared bandwidth, which is why the
-scalar row (half the data rate) scales better, 18.5 times.
+**Threads gave 13.9 times on 24 cores.** Three things account for the rest.
+The serial boundaries grow from 0.44% of a one-thread step to 9.1% of a
+24-thread step, because the main thread has to fetch rows that other cores
+have just written. The fork and barrier cost the same every step however short
+the step gets. And at 24 threads the AVX2 kernel moves about 151 GB/s through
+the caches, so it runs out of shared bandwidth first. That is why the scalar
+row, whose threads each need data at a third of the rate, scales better, 18.5
+times.
 
-**Amdahl's fit gives f = 1.2%.** That is three times the boundary share of a
-one-thread run, which says most of the loss is not the boundaries but the
-per-step overhead and bandwidth that grow with the thread count.
+**Amdahl's fit gives f = 2.4%.** That is more than five times the boundary
+share of a one-thread run, so most of the loss is the per-step overhead and
+the bandwidth that grow with the thread count. The scalar row fits 1.6%. A
+faster row makes the fixed costs a larger share of each step, which is also
+why f doubled from 1.2% when the 256 bit loads were unsplit.
 
 **Small grids scale badly, big grids hit memory.** 512 by 128 on 24 threads
-is only 8 times serial, because each step is too short to hide the fork and
-barrier. 2048 by 512 fits in the two L3 caches and gets 36 times. 4096 by
+is only 8 times serial, because each step is too short to amortise the fork
+and barrier. 2048 by 512 fits in the two L3 caches and gets 40 times. 4096 by
 1024 does not fit, sits on the measured DRAM roof, and drops to 19 times.
 
-**Where the pages live matters.** The grid is written first by the main
-thread, so every page sits on socket 0. On the big grid, spreading the
-pages over both sockets with `numactl --interleave=all` gave 28% more, and
-one MPI rank per socket, each owning its own copy of the grid on its own
-socket, gave 2.16 times one 24-thread rank.
+**Page placement matters.** The grid is written first by the main thread,
+so Linux places every page in socket 0's memory. On the big grid, spreading
+the pages over both sockets with `numactl --interleave=all` gave 1.74 times
+in the latest run and 1.28 times in the two before it, because the runs
+without it come out near either 2800 or 4000. One MPI rank per socket, each
+with its own copy of the grid in its own socket's memory, gave 2.28 times
+one 24-thread rank.
 
-**Two nodes gave 1.41 to 1.57 times, not 2.** The halo is only 64 KiB per
-rank per step, but a step is only 0.12 ms, and each exchange takes about 45
-microseconds, mostly latency and waiting for the neighbour. The bigger grid
-has longer steps, so the same exchange is a smaller share.
+**Two nodes gave 1.21 times on the small grid and 1.64 on the big one.** The
+exchange is only 64 KiB per rank per step, but a step on the small grid is
+only 0.126 ms, and each exchange takes about 50 microseconds, mostly latency
+and waiting for the neighbour. The bigger grid has longer steps, so the same
+exchange is a smaller share, and it reaches 82% efficiency. The small grid's
+two-node layouts also vary between jobs, so its gain lies between 1.21 and
+1.33 times.
 
 **Three things outside the code moved the numbers more than some
-optimisations.** Huge pages (1.5 to 1.8 times, E11), denormals (1.08 to 1.38
-times, E12), and page placement (up to 2.16 times). That is why the
+optimisations.** Huge pages (1.6 to 1.8 times, E11), denormals (1.07 to 1.42
+times, E12), and page placement (up to 2.28 times). That is why the
 protocol pins all three, and why each is reported as its own experiment.
 
-**What was tried and rejected.** Dynamic and guided scheduling lost 16 to
-40%, because every row costs the same and handing rows out on demand only
+**What was tried and rejected.** Dynamic and guided scheduling lost 22 to
+43%, because every row costs the same and handing rows out on demand only
 adds bookkeeping. One parallel region per solve (E4) and parallel boundaries
-(E8) were small wins, 3.5% and 5% on the benchmark grid and up to 15% on the
+(E8) were small wins, 2% and 6% on the benchmark grid and up to 13% on the
 small grid, and were not folded into the ladder so the ladder keeps one
 technique per rung.
 
@@ -2939,12 +3003,12 @@ thing worth making faster or splitting between cores. A profile only
 works at the level of functions, which is one reason the later rungs put
 each piece of work in its own function.
 
-**What the -O levels do.** `-O0` does no optimisation, so every variable
-lives in memory and is loaded and stored around each line. `-O1` keeps
-values in registers and removes repeated work. `-O2` adds instruction
-scheduling and more, but on GCC 8.5 not the auto-vectoriser. `-O3` turns
-on the auto-vectoriser, which rewrites a loop to work on several cells per
-instruction when it can prove that is safe.
+**What the -O levels do.** `-O0` does no optimisation, so every variable is
+kept in memory, loaded before each use and stored after each change. `-O1`
+keeps values in registers and removes repeated work. `-O2` adds instruction
+scheduling and more, and on GCC 8.5 it leaves the auto-vectoriser off. `-O3`
+turns on the auto-vectoriser, which rewrites a loop to work on several cells
+per instruction when it can prove that is safe.
 
 ```text
 level   baseline   serial      Mcell-updates/s, job 652696
@@ -2957,12 +3021,12 @@ level   baseline   serial      Mcell-updates/s, job 652696
 Every level gave exactly the `-O2` answer, because none of them is allowed
 to reorder floating point arithmetic. `-O3` gains 1.95 times on the
 baseline and 1.51 times on the serial rung, using two-lane SSE2, since the
-build has no `-mavx2`. The hand-written AVX2 rung reaches 379, 1.59 times
+build has no `-mavx2`. The hand-written AVX2 rung reaches 456, 1.91 times
 the `-O3` serial rung, because it uses four lanes and FMA, which the
 compiler is not given. The project builds at `-O2` so that each rung of
-the ladder measures one change of ours and not a change of the compiler's.
-Milestone 1's sweep C (§13) found the same `-O3` effect on the
-baseline.
+the ladder measures one change of ours, with the compiler's optimisations
+held fixed. Milestone 1's sweeps F and G (§13, RESULTS.md §6) found the same
+`-O3` effect on the baseline.
 
 #### 18.8 Self-test
 
@@ -2977,26 +3041,31 @@ baseline.
 - **Why does the one-thread weak scaling point look good?** Its 23 row grid
   fits in one core's L2 cache.
 - **What is the arithmetic intensity of the kernel and does FMA change it?**
-  31 flops over 24 bytes, 1.29. FMA does not change it, one FMA is still two
-  flops.
+  31 flops over 24 bytes, 1.29. FMA does not change it, because one FMA is
+  still two flops.
 - **How can a point sit above the DRAM roof?** When the grid fits in cache,
   most of its traffic never reaches DRAM.
-- **What is a denormal and why did it matter?** A double smaller than about
-  2.2e-308. Arithmetic on one is far slower, and short runs on big grids were
-  full of them, so different runs were measured in different regimes.
+- **What is a denormal and why did it matter?** A denormal is a double smaller
+  than about 2.2e-308. Arithmetic on one is far slower, and short runs on big
+  grids were full of them, so different runs were measured in different
+  regimes.
 - **What do FTZ and DAZ do?** FTZ writes tiny results as zero, DAZ reads tiny
   inputs as zero, so the slow path is never taken.
-- **Why did SIMD give 2.4 times and not 4?** Overlapping loads, the scalar
-  remainder, and a scalar rung that already kept the arithmetic ports busy.
-- **Why 15.8 times on 24 threads?** The serial boundaries grow to 8% of a
+- **Why did SIMD give 2.9 times with four lanes?** The row issues nine
+  overlapping loads per four cells, the unaligned ones cross a cache line on
+  every other iteration, the scalar remainder runs one cell at a time, and
+  one core already moves about 11 GB/s. Before the 256 bit loads were
+  unsplit it was 2.4 times.
+- **Why 13.9 times on 24 threads?** The serial boundaries grow to 9% of a
   step, the fork and barrier cost the same every step, and the AVX2 kernel
-  starts to share out the cache and memory bandwidth.
-- **Why does one rank per socket beat one rank of 24 threads?** Each rank
-  first-touches its own copy of the grid, so its pages are on its own socket.
-  One 24-thread process has every page on socket 0.
-- **Why do two nodes not give twice the speed?** Each step ends with a halo
-  exchange that costs about 45 microseconds of latency and waiting, against
-  a step of only 0.12 ms.
+  runs out of shared cache and memory bandwidth.
+- **Why does one rank per socket beat one rank of 24 threads?** Each rank's
+  main thread writes its own copy of the grid first, so Linux places those
+  pages in that rank's own socket's memory. One 24-thread process has every
+  page in socket 0's memory.
+- **Why do two nodes not give twice the speed?** Each step ends with an edge row
+  exchange that costs about 50 microseconds of latency and waiting, against
+  a step of only 0.126 ms on the small grid.
 - **Which three settings outside the code mattered most?** Huge pages,
   flushing denormals, and where memory pages are placed.
 - **What does a flat profile of the baseline show, and why is it not more
@@ -3006,7 +3075,7 @@ baseline.
 - **Why build at -O2 when -O3 is faster?** `-O3` auto-vectorises with two
   SSE2 lanes and gives 1.5 times on the serial rung. Building every rung at
   `-O2` means each rung's gain comes from one change of ours. The hand AVX2
-  rung at `-O2` is still 1.6 times the `-O3` serial rung.
+  rung at `-O2` is still 1.9 times the `-O3` serial rung.
 
 ---
 
@@ -3018,16 +3087,16 @@ Answer these out loud. If any of them trip you up, reread its section.
 first time. Re-explain them at the start of the next session, then re-quiz
 until they stick.
 
-- **Why does `init_payoff` write into `current_` and not `next_`?** The time
-  loop always READS `current()` and WRITES `next()`. The payoff is the first
-  sheet the loop ever reads, so it must start in the read buffer. (§11)
+- **Why does `init_payoff` write into `current_`?** The time loop always
+  READS `current()` and WRITES `next()`. The payoff is the first grid the
+  loop ever reads, so it must start in the read buffer. (§11)
 - **With one buffer instead of two, what goes wrong in the middle of a
   timestep?** Updating in place means some of the neighbours you read were
   already updated *this* step, so the stencil mixes time step n with n+1. The
-  results then depend on the loop order and are simply wrong. Two buffers
-  freeze the read sheet for the whole step. (§11)
-- **Why use a FORWARD difference for V_v on the v = 0 row, and not a central
-  one?** A central difference needs a node at v = −dv, which doesn't exist and
+  results then depend on the loop order and are wrong. With two buffers, the
+  buffer being read does not change during the step. (§11)
+- **Why use a FORWARD difference for V_v on the v = 0 row?** A central
+  difference needs a node at v = −dv, which doesn't exist and
   can't, since negative variance is meaningless. Also, the drift kappa·theta
   > 0 points INTO the grid, so taking the derivative from above, which is
   where the information comes from, is the stable and physical choice.
@@ -3039,11 +3108,11 @@ until they stick.
   is the checkerboard. (§7.5 and §8)
 - **Feller is violated for our parameters, so why not fix it, and what does it
   actually cost us?** 2κθ ≥ ξ² is a property of the market-calibrated
-  parameters, not of our code, and equity calibrations usually violate it.
-  The consequence is that the variance process puts real probability near
-  v = 0, where our uniform v grid is relatively coarse, so that region is
-  slightly under-resolved. The scheme stays valid, and we state it as a known
-  limitation, with a non-uniform v grid as future work. (§9)
+  parameters, which our code cannot change, and equity calibrations usually
+  violate it. The consequence is that the variance process puts real
+  probability near v = 0, where our uniform v grid is relatively coarse, so
+  that region is slightly under-resolved. The scheme stays valid, and we state
+  it as a known limitation, with a non-uniform v grid as future work. (§9)
 
 **Finance and the model**
 1. What's the difference between a call and a put? What about European and
@@ -3054,8 +3123,8 @@ until they stick.
 
 **Numerics**
 5. Why solve backwards from expiry? (That's where the answer is known.)
-6. Why are there 9 points in the stencil and not 5? (The cross term, from the
-   correlation.)
+6. Why does the stencil need 9 points where the heat equation needs 5? (The
+   cross term, from the correlation.)
 7. What makes the explicit scheme blow up, where does it start, and why
    there?
 8. Explain the v = 0 boundary to a child. Then explain the Feller condition.
@@ -3078,26 +3147,26 @@ until they stick.
 **Milestone 2 build decisions**
 17. Why does `update_cells_scalar` copy every constant into a local variable
     before the loop? (The loop writes through a `double*` into the next
-    sheet. The compiler cannot prove that pointer never points into the
+    buffer. The compiler cannot prove that pointer never points into the
     `StencilConstants` struct, so it would have to reload each constant from
     memory after every store. A local variable cannot be reached through
     that pointer, so it stays in a register. This is called pointer
     aliasing.)
 18. Why is every rung, even `baseline` and `serial`, built with `mpicxx`?
     (There is one binary for the whole ladder, and the `mpi` rung needs the
-    MPI library. `mpicxx` is g++ with the MPI include and library paths
-    added, so the serial rungs compile exactly as with g++. `main` calls
-    `MPI_Init` once, and run without `mpiexec` it becomes a single process
-    MPI program.)
-19. Why are the experiments separate solver classes and not a flag inside
+    MPI library. `mpicxx` is g++ with the MPI include and library paths added,
+    so the serial rungs compile exactly as with g++. `main` calls
+    `MPI_Init_thread` once, and run without `mpiexec` it becomes a single
+    process MPI program.)
+19. Why is each experiment its own solver class, with no flag inside
     `OmpSolver`? (Each one is the `omp` loop with one thing changed, so the
     rung the video shows stays one pragma, and each experiment goes through
     `test_ladder_matches` like a rung before it is timed. `omp_runtime`
     covers every schedule with one class by reading `OMP_SCHEDULE`.)
 
-**The spreadsheet, the stencil and the buffers (work these on paper)**
-- In the first timestep, which sheet do the nine values come from? (The
-  expiry sheet, §6.3.)
+**The grid, the stencil and the buffers (work these on paper)**
+- In the first timestep, which time level do the nine values come from? (The
+  expiry grid, §6.3.)
 - Is the nine-point update an average of the nine cells? (No. It is a
   weighted sum with very uneven weights that add up to `1 − r·dt`, §6.4.)
 - Which of the nine cells does each derivative read, and why is the cross
@@ -3109,7 +3178,7 @@ until they stick.
 - Why does today's spot cell stay at zero for the first step? (§7.6)
 - Give a concrete example of what goes wrong with one buffer. (§11)
 - Why do the `current` and `next` references in the solver still point at
-  the right sheets after `swap_buffers`? (CODE_GUIDE.md §7.2)
+  the right buffers after `swap_buffers`? (CODE_GUIDE.md §7.2)
 
 CODE_GUIDE.md §14 has the practice questions on the code itself.
 

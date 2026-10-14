@@ -12,3 +12,11 @@ slurm-*.out
 __pycache__/
 .venv/
 .DS_Store
+# LaTeX build files from building the decks with pdflatex
+presentation/*.aux
+presentation/*.log
+presentation/*.nav
+presentation/*.out
+presentation/*.snm
+presentation/*.toc
+presentation/*.vrb

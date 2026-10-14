@@ -10,11 +10,11 @@ comes from an exclusive r730 node on rangpur and has its job id in
 `docs/RESULTS.md`. The whole code base, file by file, is in `CODE_GUIDE.md`,
 and the concepts behind it are in `STUDY_GUIDE.md`.
 
-The machine, so the numbers make sense. An r730 node has two Xeon E5-2670 v3
-sockets with 12 cores each, no hyper-threading, 30 MiB of L3 cache per
-socket and one memory controller per socket. Each socket is one NUMA node.
-The standard benchmark grid is 2048 stock nodes by 512 variance nodes, which
-is 8 MiB per sheet and 16 MiB for the two sheets.
+A few facts about the machine make the numbers easier to follow. An r730 node
+has two Xeon E5-2670 v3 sockets with 12 cores each, no hyper-threading, 30 MiB
+of L3 cache per socket and one memory controller per socket. Each socket is
+one NUMA node. The standard benchmark grid is 2048 stock nodes by 512 variance
+nodes, which is 8 MiB per buffer and 16 MiB for the two buffers.
 
 ---
 
@@ -23,11 +23,11 @@ is 8 MiB per sheet and 16 MiB for the two sheets.
 ### Why is this problem a good fit for parallel computing?
 
 ```cpp
-// src/stencil.cpp:87-90 and 95-121 (excerpt)
-const double* row_centre = current.data() + var_j * num_stock_nodes;
+// src/stencil.cpp:88-91 and 96-122 (excerpt)
+const double* row_centre = current + var_j * num_stock_nodes;
 const double* row_above = row_centre + num_stock_nodes;
 const double* row_below = row_centre - num_stock_nodes;
-double* out_row = next.data() + var_j * num_stock_nodes;
+double* out_row = next + var_j * num_stock_nodes;
 ...
 double centre = row_centre[stock_i];
 double east = row_centre[stock_i + 1];
@@ -36,22 +36,23 @@ out_row[stock_i] = centre + dt * change;
 ```
 
 - `row_centre`, `row_above` and `row_below` all point into `current`, the
-  old sheet, so every value the update reads comes from the previous step.
-- `out_row` points into `next`, the new sheet, and the only write in the
-  whole update is `out_row[stock_i]`.
+  buffer read this step, so every value the update reads comes from the
+  previous step.
+- `out_row` points into `next`, the buffer written this step, and the only
+  write in the whole update is `out_row[stock_i]`.
 
 Every timestep rewrites every interior cell from the nine cells around it
-in the previous sheet. Because a step only reads the old sheet and only
-writes the new one, no cell in a step depends on any other cell in the same
-step. That means the cells can be updated in any order, by any number of
-workers, and the answer does not change. This independence is what lets
-four cells share one AVX2 instruction, lets 24 threads each own a band of
-rows, and lets two machines each own half the rows.
+at the previous time level. Because a step only reads the old buffer and
+only writes the new one, no cell in a step depends on any other cell in the
+same step. That means the cells can be updated in any order, by any number
+of workers, and the answer does not change. This independence lets four
+cells share one AVX2 instruction, lets 24 threads each own a contiguous
+block of rows, and lets two machines each own half the rows.
 
-### Why an explicit scheme and not an implicit one?
+### Why an explicit scheme?
 
 ```cpp
-// src/stencil.cpp:120-121
+// src/stencil.cpp:121-122
 double change = stock_diffusion_term + cross_term + variance_diffusion_term + stock_drift_term + variance_drift_term - rate * centre;
 out_row[stock_i] = centre + dt * change;
 ```
@@ -81,18 +82,18 @@ void Grid::swap_buffers() {
 }
 ```
 
-- The two `assign` lines make two sheets of the same size, one to read and
+- The two `assign` lines make two buffers of the same size, one to read and
   one to write.
 - `std::swap(current_, next_)` exchanges the two vectors' internal pointers,
-  so the sheet just written becomes the sheet read next step. No numbers are
-  copied.
+  so the buffer just written becomes the buffer read in the next step. No
+  numbers are copied.
 
 If the solver wrote new values into the same array it was reading, a cell
 updated early in a step would be read as a neighbour by a later cell in the
 same step, and the answer would depend on the order of the loop. Two
-buffers keep every step a pure function of the previous sheet. That removes
-the dependency between cells, so the double buffer is what makes the
-parallel rungs possible. The swap costs nothing, because it only exchanges
+buffers keep every step a pure function of the previous time level. That
+removes the dependency between cells, and the parallel rungs rely on it. The
+swap copies no values, because it only exchanges the vectors' internal
 pointers.
 
 ### Why was the hot spot measured before anything was optimised?
@@ -118,7 +119,7 @@ step was a gprof flat profile on one thread (`slurm/profile_m2.sh`). It put
 99.9% of the baseline in its one solve function, 99.4% of the serial rung
 and 98.9% of the SIMD rung in the interior row update. That told me the
 interior update was the only thing worth attacking. Splitting the work into
-small named functions is also what made the profile useful, because the
+small named functions also made the profile useful, because the
 baseline's single function could only say that the time was somewhere in
 one loop nest.
 
@@ -126,7 +127,7 @@ one loop nest.
 
 ## 2. Memory layout
 
-### Why is the grid one flat array and not a 2-D array of rows?
+### Why is the grid one flat array?
 
 ```cpp
 // src/grid.cpp:24-26
@@ -153,8 +154,8 @@ also means a whole row can be handed to MPI as one message with no packing.
 int index(int stock_i, int var_j) const { return var_j * num_stock_nodes_ + stock_i; }
 ```
 
-- `var_j * num_stock_nodes_` jumps to the start of row `var_j`, so one step
-  in variance is a jump of a whole row, 16 KiB at 2048 nodes.
+- `var_j * num_stock_nodes_` is the offset of the start of row `var_j`, so
+  one step in variance is a stride of one row, 16 KiB at 2048 nodes.
 - `+ stock_i` moves along the row, so one step in stock price is the next
   double in memory, 8 bytes away.
 
@@ -176,8 +177,8 @@ export MALLOC_MMAP_THRESHOLD_=1048576
   memory of this size gets 2 MiB transparent huge pages from Linux.
 
 The processor translates every virtual address to a physical one, and it
-caches recent translations in the TLB. With normal 4 KiB pages the two
-16 MiB sheets need 4096 translations, far more than the 1024-entry
+caches recent translations in the TLB. With normal 4 KiB pages the 16 MiB
+of the two buffers need 4096 translations, far more than the 1024-entry
 second-level TLB holds. With 2 MiB huge pages they need only eight. In
 Milestone 1 the same binary ran at 134.8 Mcell-updates/s with huge pages and
 81.1 without, 1.66 times from page size alone. By default glibc only gives
@@ -185,7 +186,8 @@ huge pages to the first allocation of a run, so a median of five reps was
 mixing two memory regimes. Pinning the threshold makes every rep get huge
 pages. Experiment E11 removed the setting again with
 `env -u MALLOC_MMAP_THRESHOLD_` (`slurm/bench_m2_exp_c.sh:31`), and the
-OpenMP rung dropped to 0.68 times the pinned rate.
+OpenMP rung on 24 threads dropped to 0.63 times the pinned rate (4154
+against 6556 Mcell-updates/s).
 
 ---
 
@@ -202,7 +204,7 @@ double d2V_dS2 = (east - 2.0 * centre + west) / (grid.stock_spacing() * grid.sto
 inv_two_ds = 1.0 / (2.0 * stock_spacing);
 inv_ds_sq = 1.0 / (stock_spacing * stock_spacing);
 
-// src/stencil.cpp:106-107, after, every cell
+// src/stencil.cpp:107-108, after, every cell
 double dV_dS = (east - west) * inv_two_ds;
 double d2V_dS2 = (east - 2.0 * centre + west) * inv_ds_sq;
 ```
@@ -217,9 +219,12 @@ A division costs 5 to 14 cycles on this CPU and does not pipeline, where a
 multiplication costs about one. The compiler is not allowed to make this
 change itself, because multiplying by a reciprocal can change the last bits
 of the answer and `-ffast-math` is off. That one change took the rate from
-57 to 159 Mcell-updates/s, 2.81 times the baseline. The rule I took from
+57 to 159 Mcell-updates/s, 2.80 times the baseline. The rule I took from
 Milestone 1 is that at `-O2` the hand optimisations worth doing are the ones
-the compiler is forbidden to do.
+the compiler is forbidden to do. Experiment E1 confirmed it from the other
+side. Once `-ffast-math` permits it, the compiler makes this change itself,
+and the baseline's vectorised inner loop goes from 10 divide instructions
+to none.
 
 ### Why hoist the constants and the S and S² tables out of the time loop?
 
@@ -244,21 +249,21 @@ for (int var_j = 0; var_j < num_variance_nodes; ++var_j) {
 - Both run once, in the `StencilConstants` constructor, before the time
   loop starts.
 
-Anything that does not change during the solve should be computed once, not
-once per cell per step. These values depend only on the grid and the model,
+Anything that does not change during the solve should be computed once,
+before the time loop. These values depend only on the grid and the model,
 so they are built once. In Milestone 1 the tables were rebuilt every step,
 so this also removed one allocation per step.
 
 ### Why copy the constants into local variables inside the row function?
 
 ```cpp
-// src/stencil.cpp:67-70 and 90
+// src/stencil.cpp:68-71 and 91
 double dt = constants.dt;
 double rate = constants.rate;
 double stock_drift = constants.stock_drift;
 double inv_two_ds = constants.inv_two_ds;
 ...
-double* out_row = next.data() + var_j * num_stock_nodes;
+double* out_row = next + var_j * num_stock_nodes;
 ```
 
 - Each constant is read out of the `constants` struct once, at the top of
@@ -279,12 +284,12 @@ unrolling by four each measured inside run-to-run noise, because GCC at
 longer and harder to explain, so the serial rung keeps only the hoisting and
 the reciprocals, the two changes that moved the number.
 
-### Why did the serial rung leave SIMD as the only way forward?
+### Why was SIMD the next step after the serial rung?
 
 The serial rung runs at 96% of the measured scalar peak of 5.12 GFLOP/s on
 one core. A kernel that is already close to the arithmetic limit of one
 instruction at a time can only go faster by doing more work per
-instruction, which is what SIMD does.
+instruction, and one AVX2 instruction does the work of four scalar ones.
 
 ---
 
@@ -293,7 +298,7 @@ instruction, which is what SIMD does.
 ### Why does SIMD fit this stencil so well?
 
 ```cpp
-// src/stencil_avx.cpp:56-61 and 110-112
+// src/stencil_avx.cpp:55-60 and 109-112
 while (stock_i + 3 <= last_interior) {
     __m256d centre = _mm256_loadu_pd(row_centre + stock_i);
     __m256d east = _mm256_loadu_pd(row_centre + stock_i + 1);
@@ -309,8 +314,8 @@ while (stock_i + 3 <= last_interior) {
   columns `stock_i` to `stock_i + 3`, in one instruction.
 - `east` and `west` are the same four cells shifted one column right and
   left, so each lane gets its own neighbours.
-- `_mm256_storeu_pd` writes four new values at once, and `stock_i` moves on
-  by four.
+- `_mm256_storeu_pd` stores four new values in one instruction, and
+  `stock_i` moves on by four.
 
 Every cell in a row runs the same formula, and its neighbours in the stock
 direction sit next to each other in memory. So four neighbouring cells can
@@ -322,15 +327,15 @@ work.
 
 At `-O3` GCC 8's auto-vectoriser used two-lane SSE2, because the build does
 not enable AVX2 by default, and it gained 1.51 times on the serial rung. The
-hand-written AVX2 rung uses four lanes and FMA and reaches 379
-Mcell-updates/s, 1.59 times the `-O3` serial rung and 2.39 times the `-O2`
+hand-written AVX2 rung uses four lanes and FMA and reaches 456
+Mcell-updates/s, 1.91 times the `-O3` serial rung and 2.87 times the `-O2`
 serial rung. Writing it by hand also means I know exactly which instructions
 run, and I can check the answer against the scalar row.
 
 ### Why use FMA?
 
 ```cpp
-// src/stencil_avx.cpp:101-109
+// src/stencil_avx.cpp:100-108
 __m256d change = _mm256_mul_pd(stock_diffusion_factor, d2V_dS2);
 change = _mm256_fmadd_pd(cross_factor, d2V_dS_dv, change);
 change = _mm256_fmadd_pd(variance_diffusion, d2V_dv2, change);
@@ -350,16 +355,18 @@ __m256d new_value = _mm256_fmadd_pd(dt, change, centre);
 A fused multiply-add does a multiply and an add as one instruction with one
 rounding, so it does twice the arithmetic per instruction and is slightly
 more accurate. Eight of the 24 arithmetic instructions per four cells are
-FMAs. Because FMA rounds once instead of twice, the SIMD rung is not bit
-identical to the serial rung, but the gap is 1.1e-15, four orders of
+FMAs. Because FMA rounds once instead of twice, the SIMD rung differs from
+the serial rung in the last bits. The gap is 1.1e-15, four orders of
 magnitude inside the 1e-11 tolerance.
 
-### Why AVX2 and not AVX-512, and why is only one file built with the flags?
+### Why AVX2, and why is only one file built with the flags?
 
 ```make
-# Makefile:25-27 and 55-56
+# Makefile:23, 36-38 and 66-67
+  NOSPLIT   = -mno-avx256-split-unaligned-load -mno-avx256-split-unaligned-store
+...
 ifeq ($(shell uname -m),x86_64)
-  AVXFLAGS = -mavx2 -mfma
+  AVXFLAGS := -mavx2 -mfma $(NOSPLIT) $(AVXEXTRA)
 endif
 
 src/stencil_avx.o: src/stencil_avx.cpp
@@ -368,7 +375,15 @@ src/stencil_avx.o: src/stencil_avx.cpp
 
 - `AVXFLAGS` is set only on an x86_64 machine, so the arm64 Mac builds the
   scalar fallback.
-- `-mavx2 -mfma` turn on exactly the Haswell features, nothing newer.
+- `-mavx2 -mfma` turn on the AVX2 and FMA features that Haswell has, and
+  no later ones.
+- `NOSPLIT` is set only when the compiler is GCC. Given only `-mavx2`, g++ 8.5
+  tunes for a generic x86 and splits every unaligned 256-bit load and store
+  into two 128-bit loads or stores. The two flags keep each one as a single
+  256-bit instruction, which made the SIMD rung 1.19 times and the OpenMP rung
+  1.12 times faster with the same answers (experiment E2b). The shipped build
+  has used them since Phase 13.
+- `AVXEXTRA` is empty unless an experiment adds flags to this one file.
 - The rule for `stencil_avx.o` is the only one that adds `$(AVXFLAGS)`.
 
 The Xeon E5-2670 v3 is a Haswell chip, which supports AVX2 and FMA but not
@@ -383,7 +398,7 @@ the ladder would no longer show one change per rung.
 ### Why unaligned loads?
 
 ```cpp
-// src/stencil_avx.cpp:59-61
+// src/stencil_avx.cpp:58-60
 __m256d centre = _mm256_loadu_pd(row_centre + stock_i);
 __m256d east = _mm256_loadu_pd(row_centre + stock_i + 1);
 __m256d west = _mm256_loadu_pd(row_centre + stock_i - 1);
@@ -397,13 +412,15 @@ __m256d west = _mm256_loadu_pd(row_centre + stock_i - 1);
 Only one of three addresses 8 bytes apart can ever be 32-byte aligned, and
 an aligned load (`_mm256_load_pd`) on the other two would crash. On Haswell
 an unaligned load of data that happens to be aligned costs the same as an
-aligned load, so there was little to gain. Experiment E2 would have tested
-aligned buffers, and it was not run for that reason.
+aligned load, so there was little to gain. Experiment E2 later measured it.
+Once g++ 8.5 was stopped from splitting each unaligned 256-bit load into two
+128-bit loads, the aligned and the unaligned instruction ran at the same
+speed at the same address (477 Mcell-updates/s each, job 657498).
 
-### Why is the SIMD speedup 2.4 times and not 4?
+### Why is the SIMD speedup 2.9 times where four lanes allow 4?
 
 ```cpp
-// src/stencil_avx.cpp:62-67 and 116
+// src/stencil_avx.cpp:61-66 and 115
 __m256d north = _mm256_loadu_pd(row_above + stock_i);
 __m256d south = _mm256_loadu_pd(row_below + stock_i);
 __m256d north_east = _mm256_loadu_pd(row_above + stock_i + 1);
@@ -416,13 +433,13 @@ update_cells_scalar(constants, current, next, var_j, stock_i, last_interior + 1)
 
 - Together with `centre`, `east` and `west`, these are nine overlapping
   loads for every four cells, plus two more for the S and S² tables.
-- The last line hands the zero to three cells left at the end of the row to
-  the scalar code, one at a time.
+- The last line passes the zero to three cells left at the end of the row
+  to the scalar code, which updates them one at a time.
 
 The loads grow faster than the useful arithmetic, and the remainder runs at
-scalar speed. On the roofline the rung does 12 GFLOP/s against an AVX2
-ceiling of 43.4 on one core, so it is limited by the loads and the
-remainder, not by arithmetic.
+scalar speed. On the roofline the rung does 14 GFLOP/s against an AVX2
+ceiling of 43.4 on one core, so the loads and the remainder limit it before
+the arithmetic does.
 
 ---
 
@@ -445,18 +462,19 @@ for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
   each thread still does four cells per instruction.
 
 The 24 cores of one node share memory, so threads can all read the same old
-sheet without copying anything. OpenMP turns the row loop into a parallel
+buffer without copying anything. OpenMP turns the row loop into a parallel
 loop with one line, which keeps the change from the SIMD rung to one line.
-The answer is bit for bit identical to the SIMD rung, and it gave 15.1 times
+The answer is bit for bit identical to the SIMD rung, and it gave 14.0 times
 over SIMD on 24 threads, the largest single gain in the ladder.
 
-### Why parallelise over rows and not columns?
+### Why parallelise over rows?
 
-A row is a contiguous block of memory, so a thread that owns a band of rows
-streams through its own memory, and threads only meet at the edges of their
-bands. Splitting by columns would give each thread a narrow strip of every
-row, so neighbouring threads would write into the same cache lines and fight
-over them, which is called false sharing. Putting the pragma on the outer
+A row is a contiguous block of memory, so a thread that owns a contiguous
+block of rows streams through its own memory, and threads share data only
+at the edges of their blocks. Splitting by columns would give each thread a
+narrow strip of every row, so neighbouring threads would write into the same
+cache lines and each line would move back and forth between their cores,
+which is called false sharing. Putting the pragma on the outer
 loop also means one fork and one barrier per step, and the inner loop stays
 the AVX2 row, so SIMD and threads multiply.
 
@@ -474,7 +492,7 @@ nothing is summed across threads. So there is no data race, and there is no
 #pragma omp parallel for schedule(runtime) default(none) shared(constants, current, next, num_variance_nodes)
 ```
 
-- `schedule(static)` in the rung splits the rows into one equal band per
+- `schedule(static)` in the rung splits the rows into one equal block per
   thread, once, with no bookkeeping while the loop runs.
 - `schedule(runtime)` in the experiment reads the schedule from
   `OMP_SCHEDULE`, so one build could try `dynamic,1`, `dynamic,8` and
@@ -482,10 +500,9 @@ nothing is summed across threads. So there is no data race, and there is no
 
 Every row has the same number of cells and the same formula, so every row
 costs the same. Experiment E5 measured the alternatives. `dynamic,1` ran at
-0.60 times, `dynamic,8` at 0.72 times and `guided` at 0.84 times (0.62,
-0.73 and 0.77 in the rerun, job 656960), because
-dynamic scheduling hands out work at run time and breaks the contiguous
-bands, for no benefit when the load is already balanced.
+0.57 times, `dynamic,8` at 0.63 times and `guided` at 0.78 times (job
+659246), because dynamic scheduling hands out work at run time and breaks
+the contiguous blocks, for no benefit when the load is already balanced.
 
 ### Why `default(none)`?
 
@@ -513,13 +530,13 @@ The boundaries are about 5100 cells against about a million interior cells.
 Leaving them on the main thread kept the OpenMP change to one pragma.
 Experiment E8 (`OmpEdgesSolver`, `src/solver_experiments.cpp:176-184`) then
 measured what that cost by moving the zero row and the stock edges inside
-the parallel loop. It gained 1.05 times at 2048 by 512 and cut the serial
-share of the step from 8.2% to 1.9%.
+the parallel loop. It gained 1.06 times at 2048 by 512 and cut the serial
+share of the step from 9.4% to 2.3%.
 
-### Why does the OpenMP rung reach 15.8 times on 24 threads and not 24?
+### Why does the OpenMP rung reach 13.9 times on 24 threads?
 
 ```python
-# scripts/m2_figures.py:119-128
+# scripts/m2_figures.py:176-185
 def amdahl_fit(threads, speedups):
     top = 0.0
     bottom = 0.0
@@ -536,15 +553,17 @@ def amdahl_fit(threads, speedups):
 - `x` and `y` are the two sides of that line for each thread count.
 - `top / bottom` is the least squares slope, which is the serial fraction.
 
-The fit gives a serial fraction of 1.18%. The boundaries alone are 0.36% of
+The fit gives a serial fraction of 2.42%. The boundaries alone are 0.44% of
 a one-thread step, so most of the fraction is something else. One part is
 the fork and barrier on every step. Another is that the serial boundary time
 grows from 0.010 ms on one thread to 0.015 ms on 24, because the main thread
 then has to fetch rows that other cores have just written. The third is
-bandwidth. At 24 threads the AVX2 kernel moves about 138 GB/s through the
+bandwidth. At 24 threads the AVX2 kernel moves about 151 GB/s through the
 cache hierarchy, so it runs short of shared cache and memory bandwidth. The
-scalar row moves data at half the rate and scales better, 18.5 times on 24
-threads.
+scalar row moves data at less than half the rate and scales better, 18.5
+times on 24 threads. A faster row makes every step shorter while these costs
+stay the same, which is why the fraction doubled when the shipped build
+stopped splitting its 256-bit loads in Phase 13.
 
 ### Why one persistent parallel region was tried
 
@@ -572,12 +591,13 @@ threads.
 - `#pragma omp for` shares the rows inside that existing team, with no new
   fork.
 - `#pragma omp single` lets one thread do the boundaries and the swap while
-  the others wait at its end.
+  the others wait at the implicit barrier at its end.
 
 Experiment E4 tested whether starting the team once is faster than forking
-it every step. It gained 1.035 times at 2048 by 512 and 1.155 times at 512
-by 128. The rerun (job 656960) gave 1.04 and 1.05 times, so the gain at
-512 by 128 changes from run to run. The gain is small on the benchmark grid, and keeping the
+it every step. It gained 1.02 times at 2048 by 512, inside the spread of the
+reps, and 1.13 times at 512 by 128 (job 659246). Two earlier runs gave 1.16
+and 1.05 times at 512 by 128, so the size of that gain changes from run to
+run. The gain is small on the benchmark grid, and keeping the
 one-pragma rung made the step from SIMD to OpenMP easier to show.
 
 ### What happens if `OMP_NUM_THREADS` is larger than the number of cores?
@@ -594,7 +614,7 @@ The node has 24 cores and no hyper-threading, so a 25th thread has no core
 of its own. The operating system then time-slices two threads on one core,
 and because every step ends in a barrier, the whole team waits for the
 slowest thread every step. So asking for more threads than cores makes the
-solver slower, not faster. That is why every sweep stops at 24 threads.
+solver slower. That is why every sweep stops at 24 threads.
 
 ### Why does thread placement matter?
 
@@ -609,8 +629,8 @@ export OMP_PROC_BIND=${OMP_PROC_BIND:-close}
   operating system moving them, unless a sweep overrides it.
 
 The node has two sockets, each with its own L3 cache and memory controller.
-On the 4096 by 1024 grid, twelve threads on one socket ran at 1880
-Mcell-updates/s and the same twelve split over both sockets ran at 3319,
+On the 4096 by 1024 grid, twelve threads on one socket ran at 1894
+Mcell-updates/s and the same twelve split over both sockets ran at 3413,
 because they had two caches and two memory controllers. On these nodes the
 CPUs are numbered even on socket 0 and odd on socket 1, so `close`
 alternates sockets and `spread` below 24 threads stays on one socket. I
@@ -629,17 +649,19 @@ OMP_NUM_THREADS=24 RUN_PREFIX="numactl --interleave=all" run E7 "interleave_24_$
 ```
 
 - `assign` writes a zero into every element on the main thread, so the main
-  thread is the first to touch every page.
+  thread is the first to write every page.
 - `numactl --interleave=all` runs the same binary with its pages spread
   evenly over both sockets' memory.
 
-Linux places a page in the memory of the socket whose thread first writes
-it, and does not move it afterwards. So every page of the grid ends up on
-socket 0, and the threads on socket 1 read across the link between sockets.
+Linux places a page in the memory of the socket whose thread first writes it,
+and does not move it afterwards. So every page of the grid is placed in socket
+0's memory, and the threads on socket 1 read across the link between sockets.
 Fixing that in code would mean replacing the vectors in `Grid` with
 uninitialised storage in every rung. Running under `numactl` tests the same
-question without changing code. It gave 1.065 times at 2048 by 512 and
-1.28 times at 4096 by 1024, and much less spread between reps.
+question without changing code. It gave 1.10 times at 2048 by 512 and 1.74
+times at 4096 by 1024, and much less spread between reps. Without
+interleaving, the runs on the big grid come out either near 2800 or near 4000
+Mcell-updates/s, so that ratio has ranged from 1.28 to 1.74 over three runs.
 
 ---
 
@@ -648,14 +670,17 @@ question without changing code. It gave 1.065 times at 2048 by 512 and
 ### Why add MPI at all, when OpenMP already uses the whole node?
 
 ```cpp
-// src/main.cpp:106-110
-MPI_Init(&argc, &argv);
+// src/main.cpp:117-121
+MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &thread_level);
 ...
 int exit_code = run(argc, argv, rank);
 MPI_Finalize();
 ```
 
-- `MPI_Init` starts MPI in every process, and `MPI_Finalize` shuts it down.
+- `MPI_Init_thread` starts MPI in every process, and `MPI_Finalize` shuts it
+  down. `MPI_THREAD_FUNNELED` promises MPI that only the main thread makes
+  MPI calls, which `mpi_overlap` needs because its master thread posts
+  messages inside a parallel region.
 - The program body is in `run`, so `MPI_Finalize` is reached on every exit
   path, errors included.
 
@@ -664,10 +689,10 @@ MPI runs separate processes that share nothing and send messages, so it can
 span machines. Using MPI between processes and OpenMP inside each one keeps
 the number of messages small while still using every core.
 
-### Why split the grid into slabs of rows?
+### Why split the grid into blocks of rows?
 
 ```cpp
-// src/solver_mpi.cpp:25-39
+// src/solver_mpi.cpp:26-41
 static RowRange rows_for_rank(int num_rows, int rank, int num_ranks) {
     int rows_per_rank = num_rows / num_ranks;
     int extra_rows = num_rows % num_ranks;
@@ -688,16 +713,16 @@ static RowRange rows_for_rank(int num_rows, int rank, int num_ranks) {
   than one row more than another.
 - The `else` branch skips past the ranks that took an extra row.
 
-Each rank owns a contiguous slab of variance rows. A row is contiguous in
+Each rank owns a contiguous block of variance rows. A row is contiguous in
 memory, so the edge row a neighbour needs goes as one message straight out
 of the array with no packing. Rows also match the OpenMP split, so each
-rank runs the same parallel row loop over its own slab
-(`src/solver_mpi.cpp:136-139`).
+rank runs the same parallel row loop over its own block of rows
+(`src/solver_mpi.cpp:160-163`).
 
-### Why is the halo exactly one row, and why non-blocking messages with the receives first?
+### Why is exactly one row exchanged, and why non-blocking messages with the receives first?
 
 ```cpp
-// src/solver_mpi.cpp:46-49 and 57-80 (excerpt)
+// src/solver_mpi.cpp:49-52, 56-65 and 87 (excerpt)
 double* first_row = buffer.data() + owned_rows.begin * num_stock_nodes;
 double* last_row = buffer.data() + (owned_rows.end - 1) * num_stock_nodes;
 double* row_below = buffer.data() + (owned_rows.begin - 1) * num_stock_nodes;
@@ -713,14 +738,14 @@ MPI_Waitall((int)requests.size(), requests.data(), MPI_STATUSES_IGNORE);
 
 - `first_row` and `last_row` are this rank's own edge rows, which the
   neighbours need.
-- `row_below` and `row_above` are the rows just outside the slab, where
-  the neighbours' edge rows land.
-- `MPI_Irecv` posts the receive first and returns straight away, then
-  `MPI_Isend` starts the send and also returns straight away.
+- `row_below` and `row_above` are the copied rows just outside the block,
+  which receive the neighbours' edge rows.
+- `MPI_Irecv` posts the receive first and returns immediately, then
+  `MPI_Isend` starts the send and also returns immediately.
 - Each message is `num_stock_nodes` doubles, one whole row, 16 KiB at 2048
   nodes.
-- `MPI_Waitall` waits until every send and receive has finished, before
-  anything touches those rows.
+- `MPI_Waitall` blocks until every send and receive has completed, before
+  anything reads or writes those rows.
 
 The stencil reaches one cell in each direction, so to update its first and
 last rows a rank needs exactly one row from each neighbour. If two
@@ -728,7 +753,7 @@ neighbours both did a blocking send first, each could wait for the other to
 receive, and the program would deadlock. Non-blocking calls with one
 `Waitall` make the order the ranks arrive in irrelevant. Posting the
 receives before the sends means MPI already knows where an arriving row
-goes, so it can land straight in the array instead of in a temporary
+goes, so it can be received straight into the array instead of a temporary
 buffer.
 
 ### Why one rank per socket on a single node?
@@ -742,19 +767,20 @@ run_mpi M "1node_2x12_$SIZE" "-n 2 --map-by ppr:1:socket:PE=12 --bind-to core --
 - `--map-by ppr:1:socket:PE=12` places one process per socket and gives
   each one 12 cores.
 - `-x OMP_NUM_THREADS=12` gives each process 12 OpenMP threads.
-- `--report-bindings` prints where each process landed, so the placement is
-  in the job log.
+- `--report-bindings` prints the cores each process is bound to, so the
+  placement is in the job log.
 
-Each rank creates its own `Grid`, so its main thread first-touches its own
-copy and the pages land on its own socket. That fixes the page placement
-problem from the OpenMP rung without changing any code. Two ranks of 12
-threads beat one rank of 24 threads by 1.09 times on the 2048 grid and by
-2.16 times on the 4096 grid, where memory placement matters most.
+Each rank creates its own `Grid`, so its main thread is the first to write its
+own copy, and Linux places those pages in that rank's own socket's memory.
+That fixes the page placement problem from the OpenMP rung without changing
+any code. Two ranks of 12 threads beat one rank of 24 threads by 1.10 times on
+the 2048 grid and by 2.28 times on the 4096 grid, where memory placement
+matters most.
 
 ### Why does every rank keep the whole grid?
 
 ```cpp
-// src/solver_mpi.cpp:102 and 124-125
+// src/solver_mpi.cpp:126 and 148-149
 Grid grid(cfg.grid, cfg.option);
 ...
 int first_interior = std::max(owned_rows.begin, 1);
@@ -763,68 +789,85 @@ int end_interior = std::min(owned_rows.end, num_variance_nodes - 1);
 
 - Every rank makes a full-size grid, then only updates the rows from
   `first_interior` to `end_interior`.
-- `std::max(owned_rows.begin, 1)` and `std::min(owned_rows.end, num_variance_nodes - 1)`
-  cut off row 0 and the top row, which are boundaries.
+- `std::max(owned_rows.begin, 1)` and `std::min(owned_rows.end,
+  num_variance_nodes - 1)` cut off row 0 and the top row, which are
+  boundaries.
 
-Keeping the full grid on every rank means row indices are the same
-everywhere, so the shared stencil functions are reused unchanged. The cost
-is 16 MiB per rank at 2048 by 512, which is small on a node with plenty of
-memory. For a grid too big for one node I would allocate only the slab plus
-two halo rows and shift every index by the slab's first row.
+Keeping the full grid on every rank means row indices are the same everywhere,
+so the shared stencil functions are reused unchanged. The cost is 16 MiB per
+rank at 2048 by 512, which is small on a node with plenty of memory. For a
+grid too big for one node I would allocate only the block of rows plus two
+copied rows and shift every index by the block's first row.
 
 ### Why `MPI_Gatherv` at the end?
 
 ```cpp
-// src/solver_mpi.cpp:170-177
+// src/solver_mpi.cpp:96-100 and 104
 for (int other_rank = 0; other_rank < num_ranks; ++other_rank) {
     RowRange other_rows = rows_for_rank(num_variance_nodes, other_rank, num_ranks);
     counts[other_rank] = (other_rows.end - other_rows.begin) * num_stock_nodes;
     offsets[other_rank] = other_rows.begin * num_stock_nodes;
 }
 ...
-MPI_Gatherv(my_values, my_count, MPI_DOUBLE, next.data(), counts.data(), offsets.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+MPI_Gatherv(my_values, my_count, MPI_DOUBLE, grid.next().data(), counts.data(), offsets.data(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 ```
 
 - `counts` holds how many doubles each rank sends, which differs when the
   rows do not divide evenly.
-- `offsets` holds where each rank's rows go in rank 0's sheet.
-- `MPI_Gatherv` copies every slab into rank 0's spare sheet in one call.
+- `offsets` holds where each rank's rows go in rank 0's buffer.
+- `MPI_Gatherv` copies every block of rows into rank 0's spare buffer in one
+  call.
 
 Only rank 0 needs the finished grid to read off the price and Greeks. The
-`v` in `Gatherv` is what allows each rank to send a different amount. The
+`v` in `Gatherv` means each rank can send a different amount. The
 gather runs after the timer stops, so it is not part of any benchmark
 number.
 
-### Why is two-node efficiency only 70%?
+### Why is two-node efficiency only 61% on the small grid?
 
 ```cpp
-// src/solver_mpi.cpp:155-158
+// src/solver_mpi.cpp:179-182
 double exchange_start = omp_get_wtime();
 exchange_edge_rows(next, num_stock_nodes, owned_rows, rank, num_ranks);
 double exchange_end = omp_get_wtime();
 result.exchange_seconds += exchange_end - exchange_start;
 ```
 
-- The halo exchange is timed on its own and written to the `exchange_seconds`
-  column, so its share of each step can be measured.
+- The edge row exchange is timed on its own and written to the
+  `exchange_seconds` column, so its share of each step can be measured.
 
-Across two nodes the best layout is 1.41 times one node at 2048 by 512 and
-1.57 times at 4096 by 1024. The halo exchange takes about 45 microseconds
-per step, which is 38% of a 0.12 ms step on the small grid. Sending 64 KiB
-should take far less than that at any network speed, so the cost is the
-per-message latency and waiting for the slower neighbour, not bandwidth.
-The runs went over TCP because the job excludes Open MPI's fast transports
+Across two nodes the best layout is 1.21 times one node at 2048 by 512 and
+1.64 times at 4096 by 1024. The edge row exchange takes about 50 microseconds
+per step, which is 40% of a 0.126 ms step on the small grid. Sending 64 KiB
+should take far less than that at any network speed, so per-message latency
+and waiting for the slower neighbour dominate the cost. The runs went over TCP
+because the job excludes Open MPI's fast transports
 (`slurm/bench_common.sh:17-18`), as the matrixass MPI runs also needed. The
-bigger grid is more efficient because each step has more interior work to
-hide the same halo cost.
+bigger grid is more efficient because each step has more interior work, so the
+same exchange cost is a smaller share of the step. The small grid's two node
+layouts also vary between jobs. The E9 job, run minutes later with the same
+build, measured the best two node layout at 9364 Mcell-updates/s against 8310
+here, which would make the gain 1.33 times (67%).
 
-### Why was overlapping the halo with computation not done?
+### Why is overlapping the edge row exchange with computation only an experiment?
 
-Overlap would start the exchange, update the interior rows that do not need
-the halo, then wait and finish the edge rows. It is the obvious next step
-given that the halo is 38% of a short step. It was on the cut list because
-the rungs, sweeps and figures came first, and it needs `exchange_edge_rows`
-split into a start and a finish around the update.
+Experiment E9 built it as the `mpi_overlap` solver. Each step updates the two
+rows the neighbours need first, posts their messages from the master thread
+while the other threads update the rest, and calls `MPI_Waitall` only at the
+end of the step. It gained 1.41 times in one layout, one rank on each of two
+nodes on 2048 x 512, where the exchange fell from 39% of a step to 19%. In
+every other layout it moved less than 4%, including the best one (2 ranks x 12
+on each node), so the shipped `mpi` rung stays as it is.
+
+The likely reason is Open MPI's message protocol. Between nodes, TCP sends a
+message up to 64 KiB eagerly, as soon as `MPI_Isend` is called. Between two
+ranks on the same node, shared memory does that only up to 4 KiB, and a
+16 KiB row uses the rendezvous protocol, whose data is transferred only
+once the receiver enters an MPI call. With no progress thread that call is
+`MPI_Waitall`, so a layout with two ranks on a node cannot overlap. Overlap
+needs the transfer to progress while the cores compute, and here only the
+eager TCP path does that. This has not been tested by changing the eager
+limits.
 
 ---
 
@@ -848,7 +891,7 @@ build_and_validate() {
   failing test means no timings are written.
 
 A faster answer that is wrong is worth nothing, and a bug in a parallel
-rung often shows up as a small numerical change rather than a crash. Every
+rung often shows up as a small numerical change with no crash. Every
 rung must match the baseline to 1e-11 on price, delta, gamma and vega
 (`relative_tolerance`, `tests/test_ladder_matches.cpp:25`). The measured
 worst gap is 3.3e-15.
@@ -856,8 +899,8 @@ worst gap is 3.3e-15.
 ### Why must OpenMP and MPI match the SIMD rung exactly, to zero difference?
 
 ```cpp
-// tests/test_ladder_matches.cpp:21 and 125-128
-static const std::vector<std::string> same_bits_as_simd = {"omp", "mpi", "omp_persistent", "omp_runtime", "omp_edges"};
+// tests/test_ladder_matches.cpp:21 and 128-131
+static const std::vector<std::string> same_bits_as_simd = {"omp", "mpi", "omp_persistent", "omp_runtime", "omp_edges", "mpi_overlap"};
 ...
 double simd_diff = max_relative_diff(simd_reference, candidate);
 // Any difference at all means a bug.
@@ -867,30 +910,36 @@ if (simd_diff != 0.0) {
 
 - `same_bits_as_simd` lists every solver that must give exactly the SIMD
   rung's answer.
-- `simd_diff != 0.0` fails on any difference at all, not even in the last bit.
+- `simd_diff != 0.0` fails on any difference at all, even one in the last
+  bit.
 
 Each cell runs the same instructions in the OpenMP and MPI rungs as in the
-SIMD rung, a halo row is an exact copy of 64-bit values, and nothing is
+SIMD rung, a copied row is an exact copy of 64-bit values, and nothing is
 summed across threads or ranks. So any difference at all means a row was
 skipped, done twice, or raced. A tolerance of zero catches errors that a
-looser tolerance would hide. As a check of the check, removing the halo
+looser tolerance would hide. As a check of the check, removing the edge row
 exchange moved the two-rank answer by 2.0e-9 and the test failed.
 
 ### Why test at 7 threads and 3 ranks?
 
 ```make
-# Makefile:75 and 83
+# Makefile:87 and 98
 	@for n in 1 2 7; do echo "== tests/test_ladder_matches with OMP_NUM_THREADS=$$n"; OMP_NUM_THREADS=$$n ./tests/test_ladder_matches 2>/dev/null || exit 1; done
-	@for n in 2 3; do echo "== tests/test_ladder_matches on $$n processes"; OMP_NUM_THREADS=2 $(MPIEXEC) -n $$n ./tests/test_ladder_matches 2>/dev/null || exit 1; done
+	@for n in 2 3; do echo "== tests/test_ladder_matches on $$n processes"; OMP_PROC_BIND=false OMP_NUM_THREADS=2 $(MPIEXEC) -n $$n ./tests/test_ladder_matches 2>/dev/null || exit 1; done
 ```
 
 - `make test` runs the ladder test at 1, 2 and 7 threads, and `|| exit 1`
   stops at the first failure.
 - `make test-mpi` runs it as 2 and 3 processes with 2 threads each.
+- `OMP_PROC_BIND=false` keeps the threads unpinned even inside a bench job,
+  which exports `close`. Pinned, every process put its threads on cores 0 and
+  1, the waiting threads busy-waited on the cores their neighbour needed, and
+  validation grew to 14 minutes and timed out the E1 and E9 jobs (CHANGELOG
+  Phase 11).
 
 Seven threads do not divide the 30 interior rows of the test grid, and three
 ranks split its 32 rows into 11, 11 and 10. Uneven splits are where an off
-by one error at a band edge would show, so the tests deliberately use them.
+by one error at a block edge would show, so the tests deliberately use them.
 
 ---
 
@@ -899,7 +948,7 @@ by one error at a band edge would show, so the tests deliberately use them.
 ### Why benchmark only on compute nodes through sbatch?
 
 ```python
-# scripts/m2_figures.py:62-69
+# scripts/m2_figures.py:80-87
 def check_provenance(provenance):
     bad = []
     for path, lines in provenance.items():
@@ -923,7 +972,7 @@ machine gives the wrong answer.
 ### Why the median of five reps?
 
 ```python
-# scripts/m2_figures.py:98-102
+# scripts/m2_figures.py:127-131
 rates = [r["cups"] for r in group]
 out[label] = {
     "median": statistics.median(rates),
@@ -985,7 +1034,7 @@ Short benchmark runs leave many cells holding numbers below 2.2e-308, which
 this CPU handles through a slow microcode path. How many such cells there
 are depends on the grid and the number of steps, so rungs run with
 different step counts were being compared in different numerical regimes.
-Flushing gained up to 1.38 times on the SIMD rung and left every price
+Flushing gained up to 1.42 times on the SIMD rung and left every price
 identical to ten digits. It is the same idea as pinning the page regime.
 The thing being measured is the code, so every run has to happen under the
 same conditions.
@@ -1008,19 +1057,19 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 The home directory is shared between jobs. Twice in the first round of
 sweeps, a sync or a `make clean` from another job deleted files while a
 benchmark was running and killed it. A private copy per job means nothing
-outside the job can touch its files.
+outside the job can delete or change its files.
 
 ### Why measure the peaks instead of quoting the datasheet?
 
-A datasheet gives the peak under ideal conditions, not what this node
-actually delivers. `slurm/bench_peak.sh` measured a scalar peak of 5.12
+A datasheet gives the peak under ideal conditions, and this node may deliver
+less. `slurm/bench_peak.sh` measured a scalar peak of 5.12
 GFLOP/s, an AVX2 FMA peak of 43.4 GFLOP/s on one core and 971 on 24, and a
 triad memory bandwidth of 67.9 GB/s on 24 threads. Those are the ceilings
 the roofline uses, so every rung is compared against what is really
 achievable. The first triad run reported only 24.8 GB/s because its arrays
-were `std::vector`, zero-filled on the main thread, the same first-touch
-problem as the grid. Allocating them untouched and filling them in parallel
-gave 67.9.
+were `std::vector`, zero-filled on the main thread, the same page placement
+problem as the grid. Allocating them with `new double[n]`, which writes
+nothing, and filling them in parallel gave 67.9.
 
 ---
 
@@ -1031,13 +1080,13 @@ gave 67.9.
 Amdahl's law says the speedup on p threads is limited by the part of the
 work that stays serial. Fitting it to the strong scaling data (the
 `amdahl_fit` code in section 5) gives one number, the serial fraction, that
-summarises how well the code scales. Here it is 1.18%, which caps the
-speedup at about 85 however many threads are added.
+summarises how well the code scales. Here it is 2.42%, which caps the
+speedup at about 41 however many threads are added.
 
 ### Why also measure weak scaling with Gustafson's law?
 
 ```python
-# scripts/m2_figures.py:252 and 256-258
+# scripts/m2_figures.py:318 and 322-324
 scaled = [p * step_ms[0] / t for p, t in zip(threads, step_ms)]
 ...
 widest = points[-1][1]
@@ -1053,18 +1102,19 @@ gustafson = [p - serial_fraction * (p - 1) for p in threads]
 Strong scaling keeps the problem fixed, so on many threads each thread has
 very little work and the fixed costs dominate. Weak scaling grows the grid
 with the threads so each thread always has 21 rows. The step time rose
-from 0.142 ms on one thread to 0.179 ms on 24, a scaled speedup of 19.1
+from 0.112 ms on one thread to 0.166 ms on 24, a scaled speedup of 16.3
 against an ideal 24. That shows the code would use more cores well if the
 problem grew with them, which is how a real user would use more hardware.
 
 ### Why use a roofline?
 
 ```python
-# scripts/m2_figures.py:517-519 and 559
+# scripts/m2_figures.py:602-603 and 669-670
 FLOPS_PER_CELL = 31
 BYTES_PER_CELL = 24
 ...
-gflops = ladder[key]["median"] * FLOPS_PER_CELL / 1e9
+points = [(ladder[key]["median"] * FLOPS_PER_CELL / 1e9, key, GREY if key == "baseline" else BLUE)
+          for key in ("baseline", "serial", "simd") if key in ladder]
 ```
 
 - `FLOPS_PER_CELL` is the arithmetic in one cell update, counted off the
@@ -1073,34 +1123,34 @@ gflops = ladder[key]["median"] * FLOPS_PER_CELL / 1e9
   reads one double of `current` and writes one double of `next`, and the
   store first reads its cache line in (write-allocate), so 3 x 8 bytes. The
   neighbour rows are assumed to be reused from cache.
-- `gflops` turns a measured rate in cell updates per second into GFLOP/s so
-  it can be placed under the measured roofs.
+- The rate times `FLOPS_PER_CELL` turns a measured rate in cell updates per
+  second into GFLOP/s, so it can be placed under the measured roofs.
 
 The roofline compares a kernel's arithmetic intensity, flops per byte
 moved, with the machine's measured compute and memory ceilings. It tells me
 whether a rung is limited by arithmetic or by memory, and so what kind of
 change could make it faster. The intensity here is 31/24 = 1.29. On 24
-threads at 2048 by 512 the kernel reaches 177 GFLOP/s, twice the DRAM roof,
-because the grid fits in the two L3 caches. At 4096 by 1024 it falls to 97
-GFLOP/s, about the DRAM roof, because the grid no longer fits.
+threads at 2048 by 512 the kernel reaches 195 GFLOP/s, 2.2 times the DRAM
+roof, because the grid fits in the two L3 caches. At 4096 by 1024 it falls
+to 93 GFLOP/s, about the DRAM roof, because the grid no longer fits.
 
 ### Why does grid size change the result so much?
 
 Small grids lose to the fork and barrier every step, which costs the same
 whatever the size, so 512 by 128 only reaches 8 times serial. The 2048 grid
-fits in the two 30 MiB L3 caches and reaches 36 times serial. At 4096 by
-1024 the sheets spill to main memory and the rate halves. So the best
-speedup comes from a grid large enough to amortise the per-step costs and
-small enough to stay in cache.
+fits in the two 30 MiB L3 caches and reaches 40 times serial. At 4096 by 1024
+the buffers no longer fit in L3, so they are read from main memory, and the
+rate halves. So the best speedup comes from a grid large enough to amortise
+the per-step costs and small enough to stay in cache.
 
 ---
 
 ## 10. Experiments that were rejected
 
-### Why was float rejected when it was up to 4.46 times faster?
+### Why was float rejected when it was up to 4.82 times faster?
 
 ```cpp
-// src/stencil_avx.cpp:121 and 125
+// src/stencil_avx.cpp:341 and 345
 void update_row_avx_float(const FloatStencilConstants& constants, const std::vector<float>& current, std::vector<float>& next, int var_j) {
     __m256 dt = _mm256_set1_ps(constants.dt);
 ```
@@ -1110,8 +1160,8 @@ void update_row_avx_float(const FloatStencilConstants& constants, const std::vec
   and the `_ps` functions are the float versions of the `_pd` ones.
 
 Float halves the bytes per cell and doubles the lanes per register, so it
-was 1.75 times faster at 2048 by 512 and 4.46 times at 4096 by 1024, where
-the float sheets fit in cache and the double sheets do not. But on the
+was 1.73 times faster at 2048 by 512 and 4.82 times at 4096 by 1024, where
+the float buffers fit in cache and the double buffers do not. But on the
 reference grid it moved the price by $0.044 from the Fourier price, where
 double is $0.0008 away, and it moved gamma by 11.9%. Rounding every cell to
 float on every one of 980000 steps builds up error. A pricer that is fast
@@ -1120,8 +1170,8 @@ and wrong is not useful, so float stayed an experiment.
 ### Why not dynamic scheduling?
 
 Every row costs the same, so there is no imbalance for dynamic scheduling to
-fix, and it adds runtime overhead and breaks the contiguous bands. It lost
-up to 40% (experiment E5, the `schedule(runtime)` code in section 5).
+fix, and it adds runtime overhead and breaks the contiguous blocks. It lost
+up to 43% (experiment E5, the `schedule(runtime)` code in section 5).
 
 ### Why was `-ffast-math` not used?
 
@@ -1130,14 +1180,30 @@ answer in ways I cannot predict or test against the baseline. In Milestone 1
 it broke the bit-identical match between the first two levels, so it failed
 the correctness rule before it was timed.
 
+Experiment E1 timed it anyway. With `-O3 -mavx2 -mfma -ffast-math` the
+compiler replaces the baseline's divides by multiplications with reciprocals
+it computes once, and the naive baseline runs at 380 Mcell-updates/s, 0.85
+times the hand-written AVX2 rung. The scalar serial rung reaches 468, 1.04
+times the hand-written rung. The answers moved by only 1.1e-14 on the contract
+that was checked. The shipped build still leaves it off. It applies to every
+line of the program, and it lets the compiler assume no value is ever NaN or
+infinite, while the tests catch an unstable run by exactly such a value. E1
+shows that the compiler comes close to the hand-written rungs only when it is
+allowed to break the IEEE rules everywhere. Without `-ffast-math` its own AVX2
+code reaches at most 0.81 times the hand-written row.
+
 ---
 
 ## 11. What I would do next
 
 The measurements point at three changes, in order of expected value. First,
-overlap the halo exchange with the interior update, since the halo is 38% of
-a short step across two nodes. Second, first-touch the grid in parallel by
-replacing the zero-filled vectors with uninitialised storage, which E7
-showed is worth up to 28% on a large grid. Third, tile the time loop so
-several steps run on a block of rows while it is still in cache, which would
-attack the memory roof that the large grid sits on.
+make the edge row exchange overlap on every layout. E9 showed the overlap
+works only where the message goes eagerly over TCP, so the next try is to
+raise Open MPI's shared memory eager limit above the 16 KiB row
+(`OMPI_MCA_btl_vader_eager_limit`) or turn on a progress thread. Second,
+write the grid's first values in parallel, by replacing the zero-filled
+vectors with uninitialised storage, so Linux places each thread's pages in
+its own socket's memory. E7 showed that is worth 28% to 74% on a large grid.
+Third, tile the time loop so several steps run on a block of rows while it
+is still in cache, which would cut the memory traffic that limits the large
+grid.

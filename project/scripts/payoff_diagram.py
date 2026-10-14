@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The payoff diagram for the presentation's first Introduction beat.
 
-One curve, max(S − K, 0), the strike kink annotated, today's spot marked.
+One curve, max(S - K, 0), the strike kink annotated, today's share price marked.
 Styled to match the benchmark figures (same palette as bench_plot.py) so
 the deck reads as one set of figures rather than two.
 
@@ -30,35 +30,33 @@ def main():
     stock = np.linspace(4600, 5900, 400)
     payoff = np.maximum(stock - STRIKE, 0.0)
 
-    fig, ax = plt.subplots(figsize=(9, 5), dpi=160)
-    ax.plot(stock, payoff, color=BLUE, linewidth=3, zorder=3,
+    # Drawn at the size of the figure column on its slide, so the text keeps its size
+    fig, ax = plt.subplots(figsize=(4.0, 2.6), dpi=250)
+    ax.plot(stock, payoff, color=BLUE, linewidth=2.6, zorder=3,
             solid_capstyle="round")
 
-    # The two prices that define the story: the strike where the kink sits,
-    # and today's spot just below it.
-    ax.axvline(STRIKE, color=GREY, linestyle="--", linewidth=1.4, zorder=2)
-    ax.annotate(f"strike K = ${STRIKE:,.0f}\nthe kink: below it the option"
-                "\nexpires worthless",
-                xy=(STRIKE, 0), xytext=(STRIKE + 60, 260),
-                fontsize=11, color=DARK_GREY,
-                arrowprops=dict(arrowstyle="->", color=DARK_GREY, lw=1.2))
-    ax.plot([SPOT], [0], "o", color=TEXT, markersize=9, zorder=4)
-    ax.annotate(f"today's spot S = ${SPOT:,.0f}",
-                xy=(SPOT, 0), xytext=(4680, 120),
-                fontsize=11, color=TEXT,
-                arrowprops=dict(arrowstyle="->", color=TEXT, lw=1.2))
+    # The two prices that define the story, the strike where the kink sits,
+    # and today's share price just below it.
+    ax.axvline(STRIKE, color=GREY, linestyle="--", linewidth=1.2, zorder=2)
+    ax.annotate(f"strike K = ${STRIKE:,.0f}\nbelow it the call\npays nothing",
+                xy=(STRIKE, 0), xytext=(4620, 400),
+                fontsize=9, color=DARK_GREY,
+                arrowprops=dict(arrowstyle="->", color=DARK_GREY, lw=1.0))
+    ax.plot([SPOT], [0], "o", color=TEXT, markersize=7, zorder=4)
+    ax.annotate(f"today's share\nprice ${SPOT:,.0f}",
+                xy=(SPOT, 0), xytext=(4620, 130),
+                fontsize=9, color=TEXT,
+                arrowprops=dict(arrowstyle="->", color=TEXT, lw=1.0))
 
-    ax.set_title("European call at expiry: the right, not the obligation, "
-                 "to buy at K", fontsize=13, color=TEXT, pad=12)
-    ax.set_xlabel("share price at expiry ($)", fontsize=11, color=TEXT)
-    ax.set_ylabel("option payoff ($)", fontsize=11, color=TEXT)
+    ax.set_xlabel("share price at expiry ($)", fontsize=9.5, color=TEXT)
+    ax.set_ylabel("payoff ($)", fontsize=9.5, color=TEXT)
     ax.grid(True, color=GRID, linewidth=0.6, zorder=0)
     for spine in ("top", "right"):
         ax.spines[spine].set_visible(False)
-    ax.tick_params(colors=DARK_GREY)
+    ax.tick_params(colors=DARK_GREY, labelsize=8.5)
     ax.set_ylim(-40, 700)
 
-    fig.tight_layout()
+    fig.tight_layout(pad=0.4)
     fig.savefig(args.out)
     print(f"wrote {args.out}")
 

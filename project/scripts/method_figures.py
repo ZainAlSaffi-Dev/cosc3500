@@ -1,7 +1,7 @@
 # AI declaration
 # I used Claude, an AI assistant made by Anthropic, while working on this file.
 # It helped me debug the code, draft pseudocode and implement it.
-"""F13 and F14, the two method figures for a viewer who has not seen Milestone 1.
+"""F13, F14 and F18, the method figures for a viewer who has not seen Milestone 1.
 
 F13, one time step. The current sheet at expiry holds the payoff, and the
 nine cells around one cell give that cell's value in the next sheet, one dt
@@ -9,6 +9,8 @@ earlier. The next sheet fills row by row and its edges hold known values.
 F14, the Black-Scholes check. With xi = 0 and rho = 0 the variance never
 moves and Heston becomes Black-Scholes. The solver runs its full stencil on
 results/collapse_work and its price today is drawn over the closed form.
+F18, the value map. The time value over share price and variance half way
+through the solve of config/demo.cfg, from its snapshots in results/demo.
 
     arch -arm64 .venv/bin/python scripts/method_figures.py --out results/m2
 """
@@ -61,39 +63,43 @@ def option_shades(stock_values, variance_values, time_to_expiry):
     return shades
 
 
+# Slide sizes in inches, the same as WIDE and HALF in m2_figures.py
+WIDE = (6.6, 2.75)
+HALF = (4.0, 2.6)
+DEMO_SPOT = SPOT
+
+
 def grid_figure(out_dir):
-    """One time step, the current sheet at expiry feeding one cell of the next sheet."""
-    columns = 10
-    rows = 7
-    centre_col = 4
-    centre_row = 3
-    gap = 4.6
+    """One time step, the current buffer at expiry feeding one cell of the next buffer."""
+    columns = 8
+    rows = 6
+    centre_col = 3
+    centre_row = 2
+    gap = 5.0
     next_left = columns + gap
     stock_values = np.linspace(0.6 * STRIKE, 1.5 * STRIKE, columns)
     variance_values = np.linspace(0.01, 0.12, rows)
     payoff_shades = option_shades(stock_values, variance_values, 0.0)
 
-    fig, ax = plt.subplots(figsize=(11, 4.3))
+    fig, ax = plt.subplots(figsize=WIDE)
 
-    # Current sheet, t = T, every cell holds the payoff
+    # Current buffer, t = T, every cell holds the payoff
     for row in range(rows):
         for col in range(columns):
             cell(ax, col, row, payoff_shades[row][col])
     ax.add_patch(Rectangle((centre_col - 1, centre_row - 1), 3, 3, fill=False, edgecolor=RED, lw=2.2))
-    ax.text(2.0, rows - 0.5, "S < K, payoff 0", ha="center", va="center", fontsize=8.5, color=TEXT)
-    ax.text(8.0, rows - 0.5, "payoff S - K", ha="center", va="center", fontsize=8.5, color="white")
-    ax.text(columns / 2, rows + 1.05, "current, t = T", ha="center", fontsize=12, weight=600)
-    ax.text(columns / 2, rows + 0.3, "known, every cell holds the payoff max(S - K, 0)", ha="center", fontsize=10, color=DARK_GREY)
+    ax.text(columns / 2, rows + 1.0, "current, t = T", ha="center", fontsize=10.5, weight=600)
+    ax.text(columns / 2, rows + 0.25, "every cell holds the payoff", ha="center", fontsize=9, color=DARK_GREY)
     for offset, name in ((-1, "i-1"), (0, "i"), (1, "i+1")):
-        ax.text(centre_col + offset + 0.5, -0.3, name, ha="center", va="top", fontsize=10, color=TEXT)
+        ax.text(centre_col + offset + 0.5, -0.25, name, ha="center", va="top", fontsize=8.5, color=TEXT)
     for offset, name in ((-1, "j-1"), (0, "j"), (1, "j+1")):
-        ax.text(-0.2, centre_row + offset + 0.5, name, ha="right", va="center", fontsize=10, color=TEXT)
-    ax.add_patch(FancyArrowPatch((0, -1.2), (columns, -1.2), arrowstyle="-|>", mutation_scale=14, color=TEXT, lw=1.2))
-    ax.text(columns / 2, -1.45, "stock price S, column i", ha="center", va="top", fontsize=10.5, color=TEXT)
-    ax.add_patch(FancyArrowPatch((-1.4, 0), (-1.4, rows), arrowstyle="-|>", mutation_scale=14, color=TEXT, lw=1.2))
-    ax.text(-1.65, rows / 2, "variance v, row j", ha="right", va="center", rotation=90, fontsize=10.5, color=TEXT)
+        ax.text(-0.15, centre_row + offset + 0.5, name, ha="right", va="center", fontsize=8.5, color=TEXT)
+    ax.add_patch(FancyArrowPatch((0, -1.25), (columns, -1.25), arrowstyle="-|>", mutation_scale=12, color=TEXT, lw=1.1))
+    ax.text(columns / 2, -1.5, "share price S", ha="center", va="top", fontsize=9, color=TEXT)
+    ax.add_patch(FancyArrowPatch((-1.5, 0), (-1.5, rows), arrowstyle="-|>", mutation_scale=12, color=TEXT, lw=1.1))
+    ax.text(-1.75, rows / 2, "variance v", ha="right", va="center", rotation=90, fontsize=9, color=TEXT)
 
-    # Next sheet, t = T - dt, filled row by row along each row
+    # Next buffer, t = T - dt, filled row by row
     step_shades = option_shades(stock_values, variance_values, 0.02 * MATURITY)
     for row in range(rows):
         for col in range(columns):
@@ -108,43 +114,34 @@ def grid_figure(out_dir):
             else:
                 colour = LIGHT_GREY
             ax.add_patch(Rectangle((next_left + col, row), 1, 1, facecolor=colour, edgecolor="white", lw=1.0))
-    ax.text(next_left + columns / 2, rows + 1.05, "next, t = T - dt", ha="center", fontsize=12, weight=600)
-    ax.text(next_left + columns / 2, rows + 0.3, "filled row by row, along each row", ha="center", fontsize=10, color=DARK_GREY)
-    ax.text(next_left + columns / 2, 0.5, "v = 0, drift terms only", ha="center", va="center", fontsize=8, color=TEXT)
-    ax.text(next_left + columns / 2, rows - 0.5, "top v, copy of the row below", ha="center", va="center", fontsize=8, color=TEXT)
-    ax.text(next_left + 0.5, rows / 2, "S = 0, value 0", ha="center", va="center", rotation=90, fontsize=8, color=TEXT)
-    ax.text(next_left + columns - 0.5, rows / 2, "largest S, known", ha="center", va="center", rotation=-90, fontsize=8, color=TEXT)
-
-    # The nine cells of the current sheet give the one new cell at the same i and j
     ax.add_patch(Rectangle((next_left + centre_col, centre_row), 1, 1, fill=False, edgecolor=RED, lw=2.2))
-    arrow_y = rows - 1.6
-    ax.add_patch(FancyArrowPatch((columns + 0.4, arrow_y), (next_left - 0.4, arrow_y), arrowstyle="-|>", mutation_scale=16, color=TEXT, lw=1.6))
-    ax.text(columns + gap / 2, arrow_y + 0.3, "one step back, dt", ha="center", va="bottom", fontsize=10.5, color=TEXT)
-    ax.text(columns + gap / 2, arrow_y - 0.3, "red block of nine\ngives the red cell", ha="center", va="top", fontsize=10, color=RED)
+    ax.text(next_left + columns / 2, rows + 1.0, "next, t = T - dt", ha="center", fontsize=10.5, weight=600)
+    ax.text(next_left + columns / 2, rows + 0.25, "grey edges are known values", ha="center", fontsize=9, color=DARK_GREY)
+    ax.text(next_left + columns / 2, -1.5, "then the buffers swap and the step repeats", ha="center", va="top", fontsize=9, color=DARK_GREY)
+
+    # The nine cells of the current buffer give the one new cell at the same i and j
+    arrow_y = rows - 0.9
+    ax.add_patch(FancyArrowPatch((columns + 0.3, arrow_y), (next_left - 0.3, arrow_y), arrowstyle="-|>", mutation_scale=14, color=TEXT, lw=1.4))
+    ax.text(columns + gap / 2, arrow_y + 0.25, "one step back", ha="center", va="bottom", fontsize=9, color=TEXT)
 
     # Key, which derivative each of the nine cells feeds
     key_left = columns + gap / 2 - 1.5
-    key_bottom = 0.0
+    key_bottom = 0.3
     key_labels = {(-1, -1): "$V_{Sv}$", (1, -1): "$V_{Sv}$", (-1, 1): "$V_{Sv}$", (1, 1): "$V_{Sv}$",
-                  (-1, 0): "$V_S$\n$V_{SS}$", (1, 0): "$V_S$\n$V_{SS}$",
-                  (0, -1): "$V_v$\n$V_{vv}$", (0, 1): "$V_v$\n$V_{vv}$", (0, 0): "all"}
+                  (-1, 0): "$V_S$", (1, 0): "$V_S$", (0, -1): "$V_v$", (0, 1): "$V_v$", (0, 0): "$V$"}
     for (col_offset, row_offset), label in key_labels.items():
         ax.add_patch(Rectangle((key_left + 1 + col_offset, key_bottom + 1 + row_offset), 1, 1, facecolor="white", edgecolor=SPINE, lw=0.8))
-        ax.text(key_left + 1.5 + col_offset, key_bottom + 1.5 + row_offset, label, ha="center", va="center", fontsize=7.5, color=TEXT, linespacing=1.1)
-    ax.add_patch(Rectangle((key_left, key_bottom), 3, 3, fill=False, edgecolor=RED, lw=2.2))
-    ax.text(columns + gap / 2, key_bottom - 0.3, "the derivatives\neach cell feeds", ha="center", va="top", fontsize=9, color=DARK_GREY)
+        ax.text(key_left + 1.5 + col_offset, key_bottom + 1.5 + row_offset, label, ha="center", va="center", fontsize=8, color=TEXT)
+    ax.add_patch(Rectangle((key_left, key_bottom), 3, 3, fill=False, edgecolor=RED, lw=2.0))
+    ax.text(columns + gap / 2, key_bottom - 0.2, "the nine-point stencil,\nand where each cell is used", ha="center", va="top", fontsize=8.5, color=RED)
 
-    # The update for one cell, then the two swap and the step repeats back to today
-    ax.text(next_left + columns / 2, -0.35, "$V^{new}_{i,j} = V_{i,j} + dt \\times$ (the PDE terms from the nine cells)", ha="center", va="top", fontsize=10.5, color=TEXT)
-    ax.text(next_left + columns / 2, -1.15, "then current and next swap, and the same step\nrepeats back to t = 0, where the price is read", ha="center", va="top", fontsize=10, color=DARK_GREY)
-
-    ax.set_xlim(-2.4, next_left + columns + 0.4)
-    ax.set_ylim(-2.9, rows + 2.0)
+    ax.set_xlim(-2.4, next_left + columns + 0.3)
+    ax.set_ylim(-2.2, rows + 1.6)
     ax.set_aspect("equal")
     ax.axis("off")
-    fig.tight_layout()
     out = out_dir / "f13_grid.png"
-    fig.savefig(out, dpi=200, bbox_inches="tight", pad_inches=0.1)
+    fig.savefig(out, dpi=250, bbox_inches="tight", pad_inches=0.05)
+    plt.close(fig)
     print(f"wrote {out}")
 
 
@@ -152,7 +149,8 @@ def collapse_figure(out_dir, dump_dir):
     """Today's PDE slice at v = v0 over the closed form, and the gap between them."""
     snapshots = sorted(dump_dir.glob("snap_*.csv"))
     if not snapshots:
-        raise SystemExit(f"no snapshots in {dump_dir}, run make bs-collapse first")
+        print(f"skip f14_bs_collapse: no snapshots in {dump_dir}, run make collapse-anim first", file=sys.stderr)
+        return
     variance_spacing = V_MAX / (NUM_VARIANCE - 1)
     v0_row = int(round(V0 / variance_spacing))
     stock_axis = np.linspace(0.0, S_MAX, NUM_STOCK)
@@ -169,43 +167,80 @@ def collapse_figure(out_dir, dump_dir):
     max_gap = np.max(np.abs(pde - closed_form)[window])
     print(f"at S = {SPOT:.0f}: PDE {pde_price:.4f}  BS {bs_price:.4f}  relative {rel_err:.2e}  max gap in window {max_gap:.4f}")
 
-    fig, (top, bottom) = plt.subplots(2, 1, figsize=(11, 5.6), sharex=True, gridspec_kw={"height_ratios": [2.6, 1.0]})
+    fig, (top, bottom) = plt.subplots(2, 1, figsize=WIDE, sharex=True, gridspec_kw={"height_ratios": [2.4, 1.0]})
     s = stock_axis[window]
     top.plot(s, payoff[window], ":", color=DARK_GREY, lw=1.4, label="payoff at expiry")
-    top.plot(s, closed_form[window], color=GREY, lw=7, alpha=0.55, solid_capstyle="round", label="Black-Scholes closed form")
-    top.plot(s, pde[window], color=BLUE, lw=1.8, label="Heston solver with xi = 0, today")
+    top.plot(s, closed_form[window], color=GREY, lw=6, alpha=0.55, solid_capstyle="round", label="Black-Scholes formula")
+    top.plot(s, pde[window], color=BLUE, lw=1.6, label="solver with xi = 0, today")
     top.axvline(STRIKE, color=SPINE, lw=0.8)
-    top.text(STRIKE + 40, top.get_ylim()[1] * 0.92, "strike 5250", fontsize=9, color=DARK_GREY)
-    top.plot(SPOT, pde_price, "o", color=RED, ms=6)
-    top.annotate(f"at S = 5200\nsolver {pde_price:.2f}, closed form {bs_price:.2f}", (SPOT, pde_price), xytext=(SPOT - 1500, pde_price + 380),
-                 fontsize=9.5, color=TEXT, arrowprops=dict(arrowstyle="-", color=DARK_GREY, lw=0.8))
-    top.set_ylabel("option value, dollars")
-    top.legend(loc="upper left")
-    top.set_title("With no volatility of volatility the solver lands on Black-Scholes")
+    top.plot(SPOT, pde_price, "o", color=RED, ms=5)
+    top.annotate(f"S = 5200, solver {pde_price:.2f},\nformula {bs_price:.2f}", (SPOT, pde_price), xytext=(SPOT + 650, pde_price - 60),
+                 fontsize=8.5, color=TEXT, va="top", arrowprops=dict(arrowstyle="-", color=DARK_GREY, lw=0.8))
+    top.set_ylabel("value ($)")
+    top.legend(loc="upper left", fontsize=8.5)
 
-    bottom.plot(s, (pde - closed_form)[window], color=BLUE, lw=1.4)
+    bottom.plot(s, (pde - closed_form)[window], color=BLUE, lw=1.3)
     bottom.axhline(0.0, color=GREY, lw=0.8)
     bottom.set_ylim(-0.5, 0.5)
-    bottom.set_ylabel("solver minus\nclosed form, $")
-    bottom.set_xlabel("stock price S")
-    bottom.text(s[-1], 0.32, f"largest gap {max_gap:.3f} dollars", ha="right", fontsize=9.5, color=DARK_GREY)
+    bottom.set_ylabel("gap ($)")
+    bottom.set_xlabel("share price S")
+    bottom.text(s[-1], 0.25, f"largest gap {max_gap:.3f}", ha="right", fontsize=8.5, color=DARK_GREY)
     figstyle.finish_axes(top, bottom)
-    fig.tight_layout()
+    fig.tight_layout(pad=0.4)
     out = out_dir / "f14_bs_collapse.png"
-    fig.savefig(out, dpi=200)
+    fig.savefig(out, dpi=250)
+    plt.close(fig)
     print(f"wrote {out}")
+
+
+def value_map_figure(out_dir, demo_dir):
+    """F18, the time value over share price and variance half way through the solve of config/demo.cfg."""
+    snapshots = sorted(demo_dir.glob("snap_*.csv"))
+    if not snapshots:
+        print(f"skip f18_value_map: no snapshots in {demo_dir}, run the demo solve first", file=sys.stderr)
+        return
+    # demo.cfg has the same contract and grid as the collapse run, with xi = 0.35 and rho = -0.7
+    path = snapshots[max(len(snapshots) // 2 - 1, 0)]
+    values = np.loadtxt(path, delimiter=",")
+    stock = np.linspace(0.0, S_MAX, values.shape[1])
+    variance = np.linspace(0.0, V_MAX, values.shape[0])
+    # The time value, what the option is worth above what it would pay now. It shows how value
+    # grows with variance near the strike, which the value itself hides under the payoff
+    values = values - np.maximum(stock - STRIKE, 0.0)[np.newaxis, :]
+    s_window = (stock >= 3600) & (stock <= 7400)
+    v_window = variance <= 0.16
+    fig, ax = plt.subplots(figsize=HALF)
+    mesh = ax.pcolormesh(stock[s_window], variance[v_window], values[np.ix_(v_window, s_window)], cmap="viridis", shading="auto")
+    colourbar = fig.colorbar(mesh, ax=ax, pad=0.02)
+    colourbar.set_label("time value, V minus payoff ($)", fontsize=9)
+    colourbar.ax.tick_params(labelsize=8.5)
+    ax.axvline(STRIKE, color="white", lw=0.9, ls="--")
+    ax.text(STRIKE + 70, 0.15, "strike", color="white", fontsize=8.5, va="top")
+    ax.plot(DEMO_SPOT, V0, "o", mfc="none", mec="white", mew=1.6, ms=8)
+    ax.annotate("today's share price\nand variance", (DEMO_SPOT, V0), xytext=(DEMO_SPOT - 1500, V0 + 0.055), color="white",
+                fontsize=8.5, arrowprops=dict(arrowstyle="-", color="white", lw=0.9))
+    ax.set_xlabel("share price S")
+    ax.set_ylabel("variance v")
+    ax.grid(False)
+    fig.tight_layout(pad=0.4)
+    out = out_dir / "f18_value_map.png"
+    fig.savefig(out, dpi=250)
+    plt.close(fig)
+    print(f"wrote {out} from {path.name}")
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default="results/m2")
     parser.add_argument("--dump", default="results/collapse_work/dump")
+    parser.add_argument("--demo", default="results/demo", help="snapshots of config/demo.cfg, for the value map")
     args = parser.parse_args()
-    figstyle.apply()
+    figstyle.apply_slide()
     out_dir = pathlib.Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     grid_figure(out_dir)
     collapse_figure(out_dir, pathlib.Path(args.dump))
+    value_map_figure(out_dir, pathlib.Path(args.demo))
 
 
 if __name__ == "__main__":

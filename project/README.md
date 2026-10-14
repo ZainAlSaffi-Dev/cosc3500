@@ -1,79 +1,96 @@
-# Heston PDE Option Pricer — COSC3500 Milestone 1 (serial)
+# Heston PDE option pricer, COSC3500 Milestone 2
 
-A serial C++17 solver that prices a European option under the Heston
-stochastic-volatility model by marching a finite-difference grid backwards in
-time from expiry, plus the validation, benchmarking and optimisation study
-around it.
+This program prices a European call option under the Heston model, where the
+share price and its volatility both move randomly. It solves the Heston
+partial differential equation on a grid of share price by variance, stepping
+back in time from expiry, where every value is known, to today. Each step
+rewrites every cell from its nine neighbours in the previous step, and no cell
+in a step depends on another cell in the same step. The five versions of the
+solver use this independence, each adding one technique to the version
+before it, and every version gives the same price as the first.
+
+## The result
+
+Million cell updates per second on the 2048 x 512 grid, one exclusive rangpur
+r730 node (2 x 12 cores), each the median of 5 runs. The job id of every
+number is in [docs/RESULTS.md](docs/RESULTS.md).
+
+| Rung | What it adds | Rate | Over the rung below | Over the baseline |
+|---|---|---|---|---|
+| `baseline` | The original loop, with divisions inside it | 57 | | 1x |
+| `serial` | Divisions turned into multiplications, worked out once per solve | 159 | 2.8x | 2.8x |
+| `simd` | Four cells per AVX2 instruction, with fused multiply-add | 456 | 2.9x | 8.0x |
+| `omp` | The rows of each step shared between 24 threads | 6367 | 14.0x | 112x |
+| `mpi` | One process of 12 threads per socket, edge rows exchanged | 6984 | 1.10x | 123x |
+
+Across two nodes, two processes of 12 threads on each node reach 8310,
+which is 147 times the baseline and 1.21 times one node in the same job.
+On the 4096 x 1024 grid, which does not fit in the L3 caches, the second
+node gives 1.64 times. Every rung matches the baseline to within 3.3e-15
+on price, delta, gamma and vega, and the OpenMP and MPI rungs match the
+SIMD rung bit for bit.
+
+## Build, test and run
+
+The build needs an MPI C++ compiler (`mpicxx`) with OpenMP. On rangpur that
+is Open MPI 4.1 over g++ 8.5, loaded as in `slurm/bench_common.sh`.
 
 ```bash
-make          # builds ./heston and the three test binaries, no dependencies
-make test     # the validation gates; prints ALL TESTS PASS
-./heston --config config/reference.cfg
+make            # builds ./heston and the test programs
+make test       # every test, prints ALL TESTS PASS
+make test-mpi   # the ladder test on 2 and 3 MPI processes
+make avx-check  # the AVX2 row against the scalar row
+
+./heston --config config/bench.cfg --solver serial
+OMP_NUM_THREADS=24 ./heston --config config/bench.cfg --solver omp
+OMP_NUM_THREADS=12 mpiexec -n 2 ./heston --config config/bench.cfg --solver mpi
 ```
 
----
+Each run prints one CSV line with the price, the Greeks, the time and the
+rate. [COMMANDS.md](COMMANDS.md) has every command, the rangpur workflow and
+the benchmark sweeps.
 
-## Where things are
+## Where everything is
 
-| document | what it is for |
+| Path | What it holds |
 |---|---|
-| **[WALKTHROUGH.md](docs/WALKTHROUGH.md)** | **Start here.** The whole program explained in plain English, from the problem down to the individual loops. No finance or C++ background assumed. |
-| [COMMANDS.md](COMMANDS.md) | Every command to build, test, run and benchmark on rangpur. The single home for the slurm and cluster mechanics. |
-| [CHANGELOG.md](CHANGELOG.md) | Every Milestone 2 change in order, with the reason for each decision. |
-| [RESULTS.md](docs/RESULTS.md) | The measured findings, with the provenance behind each number. Tracked, unlike `results/`. |
-| [PRESENTATION.md](presentation/PRESENTATION.md) | The Milestone 1 video plan: rubric, time budget, beat sheet, submission checklist. |
-| [presentation/](presentation/) | The recording side of that plan. A timestamped shot table, notes on how each asset is shot, and the slide deck the video is recorded over. What to say stays in PRESENTATION.md. |
-| [PLAN.md](PLAN.md) | The design contract: numerical scheme, code style rules, optimisation ladder design, benchmark protocol. |
-| [STUDY_GUIDE.md](STUDY_GUIDE.md) | The maths and ideas, from the finance and the PDE through finite differences, validation, memory and benchmarking to the parallel plan. Interview preparation. |
-| [STUDY_CARDS.md](docs/STUDY_CARDS.md) | The study guide in short cards, plus what every C++ library call in the code does and why. The source of the Heston Pricer Study Guide page. |
-| [HPC_JUSTIFICATIONS.md](HPC_JUSTIFICATIONS.md) | Why each HPC technique was used, one question and answer per choice, with the number behind it. Interview preparation. |
-| [CODE_GUIDE.md](CODE_GUIDE.md) | The code, file by file and snippet by snippet, with what each block does and why. Interview preparation. |
-| [InitialSpecDesign.md](docs/InitialSpecDesign.md) | The original submitted brief. Frozen deliverable, deliberately not updated to match later decisions. |
-| [HANDOFF.md](docs/HANDOFF.md) | Session pickup notes and the outstanding learning backlog. |
+| `include/grid.h` | The grid, `index()` and the two buffers |
+| `src/solver_baseline.cpp` | Rung 0, the original loop nest. Every rung is checked against it |
+| `src/stencil.cpp` | The constants worked out once, the scalar row and the boundaries |
+| `src/stencil_avx.cpp` | The AVX2 row, the only file built with the AVX2 flags |
+| `src/solver_serial.cpp`, `solver_simd.cpp`, `solver_omp.cpp`, `solver_mpi.cpp` | Rungs 1 to 4, one time loop each |
+| `src/solver.cpp` | `make_solver`, the stability report and reading the price off the grid |
+| `src/solver_experiments.cpp`, `solver_align.cpp`, `solver_float.cpp` | The experiments, each the OpenMP rung with one change |
+| `tests/` | Four test programs, run before every benchmark |
+| `slurm/` | One job script per benchmark sweep, sharing `bench_common.sh` |
+| `scripts/` | Every figure, drawn from the CSVs the jobs wrote |
+| `presentation/` | The video deck `deck_m2.pdf` with backup slides after frame 35, and the script |
+| `docs/RESULTS.md` | Every measured number, with its job id |
 
-To avoid the same fact drifting apart in several places, each topic has one
-owner: the scheme and style live in PLAN.md, cluster operations in COMMANDS.md,
-measured numbers in RESULTS.md, explanation in WALKTHROUGH.md,
-STUDY_GUIDE.md and CODE_GUIDE.md. Everything else links rather than restates.
+## Documents
 
----
+| Document | What it is for |
+|---|---|
+| [docs/RESULTS.md](docs/RESULTS.md) | The measured findings, with the provenance behind each number |
+| [CHANGELOG.md](CHANGELOG.md) | Every Milestone 2 change in order, with the reason for each decision |
+| [COMMANDS.md](COMMANDS.md) | Every command to build, test, run and benchmark |
+| [HPC_JUSTIFICATIONS.md](HPC_JUSTIFICATIONS.md) | Why each HPC technique was used, with the number behind it |
+| [CODE_GUIDE.md](CODE_GUIDE.md) | The code, file by file, with what each block does and why |
+| [STUDY_GUIDE.md](STUDY_GUIDE.md) | The maths and ideas behind the code |
+| [docs/WALKTHROUGH.md](docs/WALKTHROUGH.md) | The whole program in plain English |
 
-## Layout
+## What the project shows
 
-```
-include/   headers: params, grid, solver interface, stencil, io, black_scholes
-src/       the solvers (baseline, serial), shared stencil, grid, io, main
-docs/      the written record: walkthrough, results, spec, handoff
-presentation/  the video: plan, shot list, timeline, slide deck
-tests/     three validation binaries, run by `make test`
-config/    reference.cfg (the real contract), bench.cfg (timing only),
-           demo.cfg (animations), smoke.cfg, unstable.cfg
-slurm/     the sbatch jobs, debug.sh and bench_peak.sh so far
-scripts/   figures and animations (Python, local only, never on rangpur)
-results/   gitignored: CSVs, figures, snapshots, animations
-```
-
-One binary, `heston`. Three test binaries reusing the same objects. No external
-C++ dependencies; the Python scripts are local-only and listed in
-`scripts/requirements.txt`.
-
----
-
-## What the project demonstrates
-
-- A correct explicit finite-difference solver for the Heston PDE, including the
-  `v = 0` transport boundary that most implementations get wrong by imposing a
-  value instead of solving the reduced equation.
-- Four independent correctness checks: collapse to Black-Scholes, put-call
-  parity, grid refinement, and two external prices from Fourier inversion and
-  Monte Carlo.
-- A seven-rung optimisation ablation in which each rung adds exactly one
-  technique, plus two negative controls that measure what the rungs which came
-  out null would have been worth.
-- Benchmarking on a rangpur compute node with the node reserved exclusively and
-  pinned, provenance stamped into every result file, and a build that refuses to
-  be benchmarked until it has re-proved itself against the reference solver.
-
-The headline is not the two-and-a-half-times speedup. It is that only one of
-the six techniques did anything, and it was the only one the compiler is
-forbidden to perform on your behalf.
+- A correct explicit finite-difference solver for the Heston PDE, checked
+  against the Black-Scholes closed form, put-call parity and Fourier
+  inversion.
+- A ladder of five rungs, each adding one technique, each checked against
+  the baseline's answer before it is timed.
+- Every benchmark run on an exclusive compute node through `sbatch`, after
+  the tests pass in the same job, with the node, compiler, flags and binding
+  written into the header of every result file.
+- The measured ceilings behind the ladder. The serial rung runs at the
+  scalar peak, the SIMD rung below the AVX2 ceiling, and the threaded rung
+  at the memory roof for grids larger than the L3 caches.
+- The experiments that were tried and measured, including the ones that were
+  rejected, in [docs/RESULTS.md](docs/RESULTS.md) M2.6.

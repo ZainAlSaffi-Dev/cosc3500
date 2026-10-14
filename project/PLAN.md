@@ -69,7 +69,7 @@ spends its time on the parallel rungs.
 | 1 | `serial` | The M1 optimisations that moved the number. Per-row constants and S, S² tables hoisted out of the time loop, reciprocals instead of divisions, row pointers. | `src/solver_serial.cpp` |
 | 2 | `simd` | AVX2. One `__m256d` holds 4 neighbouring cells, the stencil blend uses FMA, a scalar loop finishes the remainder. | `src/solver_simd.cpp` |
 | 3 | `omp` | OpenMP. `#pragma omp parallel for schedule(static)` over variance rows. Each thread owns a band of rows. | `src/solver_omp.cpp` |
-| 4 | `mpi` | Hybrid MPI+OpenMP. Rows split into one slab per rank, one halo row exchanged with each neighbour per step, OpenMP threads inside each rank. | `src/solver_mpi.cpp` |
+| 4 | `mpi` | Hybrid MPI+OpenMP. Rows split into one slab per rank, one edge row exchanged with each neighbour per step, OpenMP threads inside each rank. | `src/solver_mpi.cpp` |
 
 Why rung 1 drops M1 levels 3 to 6. In M1 only hoisting and strength reduction
 (levels 1 and 2) changed the throughput (53 to 131 Mcell-updates/s, +149%).
@@ -93,7 +93,7 @@ One shared file holds the maths, so each rung's file is only its time loop.
     `copy_top_row` for the boundaries.
 - Each solver's `solve()` is the time loop plus a row loop that calls one of
   those. The step from `simd` to `omp` is visibly one pragma line. The step
-  from `omp` to `mpi` is a row range plus the halo exchange. Those two diffs
+  from `omp` to `mpi` is a row range plus the edge row exchange. Those two diffs
   are the code shots for the video.
 - A shared protected `Solver::report_stability()` replaces the copy of the
   stability and Feller printout in every solver.
@@ -149,7 +149,7 @@ one interview answer in STUDY_GUIDE.md.
   keeps indexing identical to the other rungs and lets one `MPI_Gatherv` at the
   end hand rank 0 a complete sheet for the existing `extract_result`. The
   trade-off is memory, which is tiny here. A large-grid version would allocate
-  only the local slab plus two halo rows (T05 convention). Recorded as a
+  only the local slab plus two copied rows (T05 convention). Recorded as a
   trade-off, not hidden.
 - One binary. `heston` is built with `mpicxx` and always calls `MPI_Init` and
   `MPI_Finalize`, so the non-MPI rungs run as one rank. Only rank 0 prints.
@@ -159,7 +159,7 @@ one interview answer in STUDY_GUIDE.md.
   `OMPI_MCA_mtl` and `OMPI_MCA_btl` exclusions that the matrixass MPI script
   needed.
 - Communication time is accumulated separately so F6 can show compute vs
-  halo exchange per rank count.
+  edge row exchange per rank count.
 
 ### 2c. What changes in the shared code
 
@@ -206,7 +206,7 @@ script. The model is `../matrixass/matrixMultiply.cpp`.
 - No semicolons inside comments, no em dashes.
 - Descriptive names (`row_above`, `owned_rows`, `rows_per_rank`), never cryptic
   abbreviations. A name says what the thing is, not a metaphor for it
-  (`buffer` over sheet, `owned_rows` over slab, `row_below` over halo). The
+  (`buffer` over sheet, `owned_rows` over slab, `row_below` over ghost row). The
   textbook term goes once in a comment.
 - Each file opens with the same three-line AI declaration as matrixass.
 - The kept M1 files on the demo path are restyled to match (`main.cpp`,
@@ -266,7 +266,7 @@ overturned (the Reflection criterion rewards surprises).
    bandwidth. F6 separates these.
 5. Two ranks per node (one per socket) beat one rank with 24 threads, because
    each rank's memory stays on its own socket.
-6. Across two nodes the halo is 2 rows of 2048 doubles (32 KiB) per step, small
+6. Across two nodes the exchange is 2 rows of 2048 doubles (32 KiB) per step, small
    next to about 1 ms of compute per step, so 2-node strong scaling should be
    above 80% efficient at 2048x512 and better at larger grids.
 
@@ -288,7 +288,7 @@ played in M1.
 | E6 | `OMP_PROC_BIND` none / close / spread with `OMP_PLACES=cores` | 3 | throughput at 6, 12, 24 threads | Two sockets. Placement decides which L3 and which memory a thread uses. |
 | E7 | first-touch initialisation (each thread touches the rows it will update) | 3 | throughput at 4096x1024, 24 threads | NUMA page placement. Matters only when the grid spills L3. |
 | E8 | parallel boundaries vs serial boundaries | 3 | throughput, serial fraction | Shrinks the Amdahl serial term. Probably too small to see, which is itself a result. |
-| E9 | overlapping the halo exchange with interior rows (post Irecv/Isend, update interior, wait, update edge rows) | 4 | throughput on 2 nodes | L06 overlap pattern. |
+| E9 | overlapping the edge row exchange with interior rows (post Irecv/Isend, update interior, wait, update edge rows) | 4 | throughput on 2 nodes | L06 overlap pattern. |
 | E10 | ranks per node 1 vs 2 (per socket) | 4 | throughput on 1 and 2 nodes | Hypothesis 5. |
 | E11 | `MALLOC_MMAP_THRESHOLD_` page regime re-checked at 24 threads | all | throughput | M1 found page size worth 1.66x serially. Checks whether it still matters when threaded. |
 
@@ -356,20 +356,20 @@ the bottom. Each figure exists to highlight one HPC change and its impact.
 | F3 | **Weak scaling.** Time per step vs threads with work per thread fixed, and scaled speedup against the Gustafson line. | weak | OpenMP | With more cores we can solve a proportionally bigger grid in the same time. |
 | F4 | **Throughput against grid size.** serial, simd and omp(24) lines across grid sizes, with shaded bands for "fits in L2", "fits in one L3", "fits in both L3s", "DRAM", the same way M1 shaded the page regime. Right panel, speedup of omp(24) over serial per size. | size | memory hierarchy vs parallelism | Small grids lose to overhead, large grids hit memory bandwidth. |
 | F5 | **Roofline v2.** M1 roofline extended with the AVX2 per-core peak, the 24-core AVX2 peak, and measured 1-thread and 24-thread bandwidth roofs. Points for baseline, serial, simd, omp(24), mpi, coloured by rung. | peak, ladder, size | SIMD lifts the compute roof, threads move the kernel toward the memory roof | Shows whether hypothesis 3 held, the kernel changed from compute-bound to memory-bound. |
-| F6 | **Where the time goes.** Stacked bars of time per step split into stencil update, boundaries (the serial part), halo exchange, and idle wait, for omp at 1, 12, 24 threads and mpi at 1, 2, 4 ranks. | strong, mpi | hotspot and bottleneck identification | The serial part is X%, the halo exchange is Y%, here is what limits scaling. |
+| F6 | **Where the time goes.** Stacked bars of time per step split into stencil update, boundaries (the serial part), edge row exchange, and idle wait, for omp at 1, 12, 24 threads and mpi at 1, 2, 4 ranks. | strong, mpi | hotspot and bottleneck identification | The serial part is X%, the edge row exchange is Y%, here is what limits scaling. |
 | F7 | **Thread placement and NUMA.** Grouped bars for binding none, close, spread, and first-touch on and off, at 12 and 24 threads, at 2048x512 and 4096x1024. | experiments | OpenMP on a two-socket node | Where threads and pages live matters as much as how many threads there are. |
 | F8 | **Hybrid layouts.** Bars for 1 node x 1 rank x 24 threads, 1 node x 2 ranks x 12, 2 nodes x 1 x 24, 2 nodes x 2 x 12, with the communication fraction printed. Second panel, 2-node strong-scaling efficiency at two grid sizes. | mpi | MPI, then hybrid | Splitting by socket, then by node, and what the network costs. |
 | F9 | **Every rung gives the same answer.** Max relative difference vs baseline per rung on a log axis with the test tolerance as a line. float32 shown if E3 runs, far above the line. | test output | correctness of each parallel change | Faster and still right, and the one variant that was faster but not right enough. |
 | F11 | **What the compiler gives.** baseline and serial built at -O0, -O1, -O2, -O3, one thread. Added from the M1 feedback. | optlevels | the compiler before our changes | -O3's own vectoriser gives 1.5x on serial, the hand AVX2 rung 2.4x. |
 | F12 | **Where the time goes.** gprof flat profile of baseline, serial and simd on one thread. Added from the M1 feedback. | profile | hotspot identification | 99% of the time is the interior update, the boundaries under half a percent. |
-| F10 | **Who updates what.** Static diagram of the grid with rows coloured by thread (OpenMP), then slabs by rank with halo rows highlighted (MPI), and four cells in one AVX register. Optional animation in the `memory_anim.py` style. | none (diagram) | how the problem was structured and parallelised | Optimisation criterion asks for the structure explicitly. |
+| F10 | **Who updates what.** Static diagram of the grid with rows coloured by thread (OpenMP), then slabs by rank with the copied rows highlighted (MPI), and four cells in one AVX register. Optional animation in the `memory_anim.py` style. | none (diagram) | how the problem was structured and parallelised | Optimisation criterion asks for the structure explicitly. |
 
 Kept from M1 for the Introduction: weather map, BS collapse, payoff diagram.
 The M1 ladder figure (`results/bench_ladder_hugepage.png`) appears for one
 slide as the serial backstory.
 
 Code shots (`scripts/code_shots.py`, as in M1). One per rung: the scalar row
-update, the four FMA lines of the AVX row, the one-line pragma, and the halo
+update, the four FMA lines of the AVX row, the one-line pragma, and the edge row
 exchange. Plus the CSV provenance header.
 
 Scripts. `scripts/bench_plot.py` is extended for F1 to F4 and F6 to F9 and
@@ -404,7 +404,7 @@ CODE_GUIDE.md, copied from the real file, followed by one sentence on what
 the block does and one on why we do it. New ideas behind the code (SIMD,
 OpenMP, MPI, scaling) go in STUDY_GUIDE.md. A diagram is added or updated
 wherever a picture explains it faster than text (data layout, which worker
-owns which rows, halo exchange, timing breakdowns). Snippets that no longer
+owns which rows, edge row exchange, timing breakdowns). Snippets that no longer
 match the code are fixed or removed, never left stale.
 
 **P0. Setup** (done this session unless marked)
@@ -430,7 +430,7 @@ match the code are fixed or removed, never left stale.
 - Done when tests pass at 1, 2 and 7 threads locally and on rangpur.
 
 **P4. `mpi` rung** (rung done 2026-10-11, see CHANGELOG Phase 4. E9 runs with the P5 sweeps)
-- `MpiSolver`, halo exchange, Gatherv, comm timer, `make test-mpi`. Then E9.
+- `MpiSolver`, edge row exchange, Gatherv, comm timer, `make test-mpi`. Then E9.
 - Done when tests pass at `-n 1, 2, 3` locally and on rangpur across two nodes.
 
 **P5. Benchmarks on rangpur** (done 2026-10-11, see CHANGELOG Phase 5. Every sweep re-run with denormals flushed, jobs 651294 to 651303, 651474. E2 and E9 not run)
@@ -507,7 +507,7 @@ open any file, explain any line, and run the code live.
 - STUDY_GUIDE practice questions cover at least these. Why rows and not
   columns for threads. Why no locks are needed. What `default(none)` does and
   why. What happens if `OMP_NUM_THREADS` exceeds the cores. Why unaligned
-  loads. What FMA changes. Why the halo is one row. Why `Irecv` before
+  loads. What FMA changes. Why one row is exchanged. Why `Irecv` before
   `Isend`. Why every rank holds the full grid and what you would change for a
   huge grid. What Amdahl's fit says about this code. Strong vs weak scaling.
   Why the kernel became memory-bound. What the roofline shows.
@@ -522,7 +522,7 @@ open any file, explain any line, and run the code live.
 
 | Risk | Mitigation |
 |---|---|
-| r730-3 busy or down, so no 2-node runs | 1-node 2-rank MPI still demonstrates decomposition and halo exchange. Two-node runs submitted early and retried. |
+| r730-3 busy or down, so no 2-node runs | 1-node 2-rank MPI still demonstrates decomposition and edge row exchange. Two-node runs submitted early and retried. |
 | GCC 8.5 rejects the `default(none)` shared list | Non-const shared variables, compile on rangpur in P3 before benchmarking. |
 | AVX path only testable on rangpur | Rosetta x86_64 build locally, `debug.sh` on rangpur for every AVX change. |
 | Queue congestion near the deadline | Sweeps written in P5 but `debug.sh` submitted from P2 onwards. |

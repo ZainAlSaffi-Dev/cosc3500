@@ -396,7 +396,7 @@ Mcell-updates/s.
 ### Where this leaves the project
 
 The OpenMP rung is in place and matches. The MPI rung splits the rows into
-one slab per process, swaps one halo row with each neighbour per step, and
+one slab per process, swaps one edge row with each neighbour per step, and
 runs the OpenMP loop inside each slab.
 
 ## Phase 4. The MPI rung
@@ -407,7 +407,7 @@ There is a new rung, `--solver mpi`, in `src/solver_mpi.cpp`. It is hybrid.
 Each MPI rank owns one slab of variance rows, runs the OpenMP loop over its
 own rows, and swaps one edge row with each neighbour per step. `main.cpp` now
 starts and stops MPI, and only rank 0 prints. `SolveResult` gained
-`halo_seconds`, printed as a new last CSV column. `test_ladder_matches`
+`exchange_seconds`, printed as a new last CSV column. `test_ladder_matches`
 starts MPI, checks `mpi` against the baseline and bit for bit against
 `simd`, and only rank 0 judges. `make test-mpi` runs it as 2 and 3 ranks.
 `slurm/debug.sh` runs an `mpi` smoke solve and `make test-mpi`, and the new
@@ -422,30 +422,30 @@ rank 0 owns the v = 0 row and the last rank owns the top row, and each
 boundary is updated by exactly one rank. Each rank's interior rows are its
 slab with row 0 and the top row cut off (`first_interior`,
 `end_interior`). Rows were chosen over columns because a row is contiguous
-in memory, so a halo row goes as one message straight out of the array with
+in memory, so an edge row goes as one message straight out of the array with
 no packing.
 
 The rung refuses to run with fewer than two rows per rank, because the last
 rank's `copy_top_row` reads row `nv - 2`, which must be its own. Every rank
 makes the same check, so they all stop together.
 
-### Decision 2. The halo exchange runs on `next` at the end of each step
+### Decision 2. The edge row exchange runs on `next` at the end of each step
 
 PLAN §2b put the exchange before the update. It is at the end instead, after
 the boundaries and before `swap_buffers`, and it works on `next`. The effect
-is the same, because the next step finds fresh halos in `current` either
+is the same, because the next step finds fresh copied rows in `current` either
 way. Doing it on `next` means the exchange writes into a sheet the solver is
 allowed to write, since `grid.current()` hands back a read-only reference,
 and no new non-const accessor was needed on `Grid`. At step 1 every rank has
 the whole payoff, so no exchange is needed before the first update.
 
-`exchange_halo_rows` posts `MPI_Irecv` for each neighbour before
+`exchange_edge_rows` posts `MPI_Irecv` for each neighbour before
 `MPI_Isend`, then one `MPI_Waitall`. Non-blocking calls make deadlock
 impossible whatever order the ranks arrive in, and posting the receives first
 lets the arriving row land straight in place. Both directions between a pair
 use tag 0, which is safe because MPI matches on source as well as tag.
 
-The exchange is timed on its own and added to `halo_seconds`, which is also
+The exchange is timed on its own and added to `exchange_seconds`, which is also
 included in `seconds`.
 
 ### Decision 3. Every rank keeps the whole grid
@@ -455,7 +455,7 @@ its own rows. Row indices are then the same on every rank, so
 `update_row_avx`, `update_zero_row`, `apply_stock_edges` (which already took
 a row range for this) and `copy_top_row` are reused unchanged. The cost is
 16 MiB per rank at 2048 by 512. A large-grid version would allocate only the
-slab plus two halo rows and shift every index by `slab.begin - 1`.
+slab plus two copied rows and shift every index by `slab.begin - 1`.
 
 ### Decision 4. One gather at the end into rank 0's spare sheet
 
@@ -481,9 +481,9 @@ would hold only its own rows.
 ### Decision 6. The MPI rung must match the SIMD rung exactly
 
 `mpi` joined `omp` in `kSameBitsAsSimd`. Every cell runs the same
-instructions, a halo row is an exact copy of the 64-bit values, and nothing
+instructions, a copied row is an exact copy of the 64-bit values, and nothing
 is summed across ranks, so the answer must be bit-identical. As a check of
-the check, commenting out the halo exchange made the two-rank answer move by
+the check, commenting out the edge row exchange made the two-rank answer move by
 2.0e-9 and the test fail on both legs.
 
 In the test, every rank runs every solver because the MPI rung needs all
@@ -580,12 +580,12 @@ binary under `numactl --interleave=all`, which spreads the pages evenly over
 both sockets' memory. That tests the same question, whether page placement
 matters, without changing any code.
 
-### Decision 3. E2 aligned loads and E9 halo overlap are not run yet
+### Decision 3. E2 aligned loads and E9 exchange overlap are not run yet
 
 E2 needs 32-byte aligned buffers. `std::vector` only guarantees the
 alignment of a double, so it needs an aligned allocator in `Grid`, and even
 then at most one of the three loads per row (§15.4 of the study guide) can be
-aligned. E9 needs the halo exchange split into a start and a finish around
+aligned. E9 needs the edge row exchange split into a start and a finish around
 the interior update. Both are left for after the main sweeps. E9 is on the
 PLAN §13 cut list.
 
@@ -756,7 +756,7 @@ efficiency (6) did not.
 ### Where this leaves the project
 
 All sweeps are measured. Not run are E2 (aligned loads, needs an aligned
-allocator in `Grid`), E9 (halo overlap) and E3 (float32, phase P7).
+allocator in `Grid`), E9 (exchange overlap) and E3 (float32, phase P7).
 
 ## Phase 6. Figures
 
@@ -773,9 +773,9 @@ every median it plotted.
 | F3 | `f3_weak.png` | time per step with fixed work per thread, and scaled speedup against Gustafson |
 | F4 | `f4_size.png` | serial, simd and omp 24 against working set with the cache bands, and omp over serial per size |
 | F5 | `f5_roofline.png` | the measured scalar, AVX2 and DRAM roofs with every rung and the omp size points |
-| F6 | `f6_breakdown.png` | time per step split into parallel rows, serial boundaries and halo exchange |
+| F6 | `f6_breakdown.png` | time per step split into parallel rows, serial boundaries and edge row exchange |
 | F7 | `f7_placement.png` | binding and page placement at 6, 12 and 24 threads on two grids |
-| F8 | `f8_layouts.png` | the four hybrid layouts on two grids with the halo share |
+| F8 | `f8_layouts.png` | the four hybrid layouts on two grids with the exchange share |
 | F9 | `f9_correctness.png` | worst relative difference from the baseline per rung against the test tolerance |
 | F10 | `f10_decomposition.png` | which cells each SIMD lane, thread and rank owns |
 
@@ -807,7 +807,7 @@ made from the code at tag `milestone1` and are left alone.
 | `shot_serial_row.png` | the scalar derivatives, five terms and time step in `src/stencil.cpp` |
 | `shot_simd_fma.png` | the five scalar terms beside the FMA chain in `src/stencil_avx.cpp` |
 | `shot_omp_pragma.png` | the simd row loop beside the same loop with the `parallel for` pragma |
-| `shot_mpi_halo.png` | the `Irecv`, `Isend` and `Waitall` lines of `exchange_halo_rows` |
+| `shot_mpi_exchange.png` | the `Irecv`, `Isend` and `Waitall` lines of `exchange_edge_rows` |
 | `shot_iron_rule.png` | `build_and_validate` in `slurm/bench_common.sh` |
 | `shot_csv_header.png` | the provenance header of the ladder CSV, job 651295 |
 | `shot_ladder_test.png` | the call rows of `test_ladder_matches` at 24 threads on r730, from the job 651295 log |
@@ -896,7 +896,7 @@ Mcell-updates/s,
 
 ### Where this leaves the project
 
-P7 is done. E2 (aligned loads) and E9 (halo overlap) still have not run.
+P7 is done. E2 (aligned loads) and E9 (exchange overlap) still have not run.
 The guides cover the float solver in CODE_GUIDE §9e and STUDY_GUIDE §15.9.
 
 ## Phase 8. Documents
@@ -1320,26 +1320,26 @@ the thing is.
 | Before | After | Where |
 |---|---|---|
 | `RowSlab`, `slab_for_rank`, `slab` | `RowRange`, `rows_for_rank`, `owned_rows` | `solver_mpi.cpp` |
-| `exchange_halo_rows` | `exchange_edge_rows` | `solver_mpi.cpp` |
-| `halo_below`, `halo_above` | `row_below`, `row_above` | `solver_mpi.cpp` |
-| `halo_tag` | `message_tag` | `solver_mpi.cpp` |
-| `halo_start`, `halo_end`, `halo_seconds` | `exchange_start`, `exchange_end`, `exchange_seconds` | `solver_mpi.cpp`, `solver.h`, `io.cpp` |
+| the exchange function | `exchange_edge_rows` | `solver_mpi.cpp` |
+| its two received row names | `row_below`, `row_above` | `solver_mpi.cpp` |
+| its message tag | `message_tag` | `solver_mpi.cpp` |
+| its timer start, end and total | `exchange_start`, `exchange_end`, `exchange_seconds` | `solver_mpi.cpp`, `solver.h`, `io.cpp` |
 | `my_rows` (the Gatherv send pointer) | `my_values` | `solver_mpi.cpp` |
 | `sheet` parameter | `buffer` | `solver_mpi.cpp` |
 | `blend_cell` | `bilinear_interpolate` | `solver.cpp` |
 
-Comments that said sheet now say buffer, matching `swap_buffers`. Halo and
-ghost row are the standard HPC terms, so the comment above
-`exchange_edge_rows` names them once. The north, south, east and west
+Comments that said sheet now say buffer, matching `swap_buffers`. The
+comment above `exchange_edge_rows` names the standard HPC term for the
+received rows once. The north, south, east and west
 neighbour names in the stencil stayed, because they are the usual textbook
 labels for a stencil's neighbours and a comment says which way each points.
 
-The CSV column `halo_seconds` is now `exchange_seconds` in the header that
+The CSV column for the exchange time is now `exchange_seconds` in the header that
 `slurm/bench_common.sh` writes and in `scripts/m2_figures.py`. The figure
 script names the columns itself, so older CSVs still read. The F6 and F8
-labels and the code shot `shot_mpi_halo.png` (now `shot_mpi_exchange.png`)
-follow the new names. The study guides keep sheet, slab and halo in their
-prose, with a note in `STUDY_GUIDE.md` §6.1, §17.2, §17.3, `CODE_GUIDE.md`
+labels and the MPI code shot (now `shot_mpi_exchange.png`) follow the new
+names. The study guides keep sheet and slab in their prose, with a note in
+`STUDY_GUIDE.md` §6.1, §17.2, §17.3, `CODE_GUIDE.md`
 §9c and `docs/STUDY_CARDS.md` §I5.6 giving the code name for each.
 
 ### Validation
@@ -1445,7 +1445,7 @@ rewrite and the renames. `deck_m2.tex` already pointed at
 compiled. `scripts/code_shots.py` looked for the old comment
 "Every interior row, four cells at a time", and now looks for "Update every
 interior row, four cells at a time.". `make code-shots` drew all eight
-shots from the current source, and `shot_mpi_halo.png` was deleted.
+shots from the current source, and the old MPI code shot was deleted.
 `make slides-m2` now builds the 25 frames with no errors or overfull boxes.
 The Grid size and Hybrid MPI frames were rendered and checked.
 
@@ -1615,3 +1615,447 @@ simd about 1.19x and omp about 1.12x faster. Every M2 number, figure and the
 deck were measured with the split on, though, so adopting it means rerunning
 the sweeps. That is the user's call. RESULTS M2.6 reports E2 and E2b as
 experiments and says the rungs stand as measured.
+
+## Phase 11. Experiments E1 and E9, and the slow MPI test
+
+### What changed
+
+E1 rebuilds the whole program under other compiler flags, to ask whether the
+compiler could have written the AVX2 rung by itself. The earlier `-O3` bars
+(M2.11) used only two-lane SSE2, because no `-mavx2` was given, so they did
+not answer that. `slurm/bench_m2_exp_compiler.sh` takes `vector` or
+`fastmath`, because the two halves do not fit in one 15 minute job. Each
+build times the baseline, serial and simd rungs on one thread at
+2048 x 512. The compiler's vectorisation report and an instruction count of
+the three hot functions go to `results/e1_vectorised_<part>_<job>.txt`. The
+new `--digits D` flag prints the price and the Greeks to D significant
+digits. The script prints all four to 17 digits on `config/smoke.cfg` for
+every build and rung, which is enough to tell any two doubles apart
+(`results/e1_answers_<part>_<job>.csv`).
+
+E9 adds the `mpi_overlap` solver (`MpiOverlapSolver` in
+`src/solver_mpi.cpp`). In each step the threads holding the two rows the
+neighbours need update those rows first. After a barrier the master thread
+applies their stock edges and posts the non-blocking sends and receives,
+while the other threads carry on with the rest of their rows. The rows that
+were not sent get their boundaries after the parallel region, and only then
+does the rank wait for the messages. The master thread calls MPI inside a
+parallel region, which MPI allows only from thread level FUNNELED up, so
+`main` and the ladder test now start MPI with `MPI_Init_thread` at that
+level. The solver refuses to run below it. `test_ladder_matches` holds
+`mpi_overlap` to the baseline tolerance and to simd bit for bit, like `mpi`.
+`slurm/bench_m2_exp_overlap.sh` runs `mpi` and `mpi_overlap` back to back in
+the four layouts of the hybrid sweep (M2.9).
+
+### The first jobs timed out (jobs 657626, 657627, 657628)
+
+All three jobs ran out of their 14 minutes before a single benchmark
+finished. The two E1 jobs passed every test and were killed during their
+first timed run. The E9 job was killed inside `make test-mpi`. Each CSV
+header is written the moment validation ends, and it shows that
+`build_and_validate` alone took 13 min 54 s and 13 min 57 s in the E1 jobs.
+In the E2 jobs a few hours earlier it took 8 min 20 s to 8 min 27 s.
+
+A diagnostic job (659141) timed one solve of the 128 x 32 test grid with
+5200 steps, run as 3 processes of 2 threads, under the environment the bench
+scripts export and under two alternatives.
+
+| Solver | `close` binding on cores (as exported) | `OMP_WAIT_POLICY=passive` | no binding |
+|---|---|---|---|
+| simd | 1.05 s | 1.04 s | 0.62 s |
+| omp | 1.04 s | 1.12 s | 0.59 s |
+| mpi | 14.24 s | 1.16 s | 0.58 s |
+| mpi_overlap | 14.66 s | 1.17 s | 0.60 s |
+
+The whole 3 process ladder test took 124.4 s with the binding and 4.9 s
+without it. On 1 process with 7 threads every solver took 0.57 s, so
+`make test` was never the problem.
+
+`make test-mpi` passes `--bind-to none` so that each process's threads can
+spread out (Phase 4, Change 1). But `slurm/bench_common.sh` exports
+`OMP_PROC_BIND=close` and `OMP_PLACES=cores` before it validates, and with
+those every process pins its two threads to the first two cores of the node.
+All the threads of all the processes then share cores 0 and 1. A thread
+that waits does not sleep. OpenMP threads spin at the end of a parallel
+region, and MPI spins while it waits for a message. One rank's spinning
+threads hold the cores its neighbour needs to finish the update that sends
+the message, so every step waits for the scheduler to swap them. Letting
+OpenMP threads sleep while they wait (`OMP_WAIT_POLICY=passive`) removes
+nearly all of it, so the spinning OpenMP threads are most of the cost. The
+solvers that never exchange messages only pay for sharing the cores. Each
+test run solves with `mpi` four times (the
+call and the put, against the baseline and against simd). Before E9,
+`make test-mpi` took about six of the eight validation minutes, and the four
+`mpi_overlap` solves doubled it.
+
+### Change 1. `make test-mpi` sets `OMP_PROC_BIND=false`
+
+The test line now sets `OMP_PROC_BIND=false` next to `OMP_NUM_THREADS=2`,
+which overrides any binding the caller exported and makes the
+`--bind-to none` intent hold inside the bench jobs. A second diagnostic job
+(659152) timed `build_and_validate` with the change. The build took 9 s,
+`make test` 127 s, `make test-mpi` 10 s and `make avx-check` 3 s, so
+validation now takes about 2.5 minutes instead of 14. Only the test target
+changed, so no benchmark is affected.
+
+### Validation
+
+The three jobs were resubmitted as 659153 (E1 `vector`), 659154 (E1
+`fastmath`) and 659155 (E9), and finished in 6 min 23 s, 6 min 25 s and
+5 min 55 s. Each passed `make test`, `make test-mpi` and `make avx-check`
+before it benchmarked. In E9 both solvers gave the same price in every
+layout.
+
+### E1 result (jobs 659153 and 659154, r730-2, one thread, 2048 x 512)
+
+Median of five reps in Mcell-updates/s. The last column is the largest
+relative change of the price, delta, gamma or vega from the `-O2` build of
+the same rung, over all three rungs. Each job ran its own `-O2` control,
+and the two agree within 3% (simd 370 and 381).
+
+| Build | baseline | serial | simd | largest change |
+|---|---|---|---|---|
+| `-O2` (shipped) | 57.6 | 158.4 | 370.2 | 0 |
+| `-O3` | 112.5 | 241.5 | 377.0 | 0 |
+| `-O3 -mavx2 -mfma` | 107.4 | 348.7 | 381.1 | 1.1e-14 |
+| `-O3 -march=native` | 106.0 | 265.5 | 455.4 | 1.1e-14 |
+| `-O2 -ffast-math` | 58.4 | 177.2 | 382.5 | 1.1e-14 |
+| `-O3 -ffast-math` | 189.6 | 271.2 | 386.8 | 1.1e-14 |
+| `-O3 -mavx2 -mfma -ffast-math` | 381.0 | 482.2 | 378.4 | 1.1e-14 |
+
+`-O3` repeats M2.11 (112.5 and 238.6 there). Given AVX2 and FMA, the
+compiler vectorises the scalar row four lanes wide and reaches 349, which is
+0.94 times the hand-written row at the shipped flags. Its report says every
+loop was "versioned for vectorization because of possible aliasing". The
+compiler cannot prove the input and output rows do not overlap, so it emits
+a run-time check and keeps a scalar copy of the loop for the case where they
+do. The baseline gains nothing from AVX2 (112.5 to 107.4) because it is
+bound by its divisions, and Haswell executes a 256 bit divide as two 128 bit
+halves.
+
+`-ffast-math` lets the compiler treat floating point arithmetic as if it
+were exact. It may then reorder sums and replace a division by a
+multiplication with the reciprocal. The baseline divides by the grid
+spacings inside its inner loop. The disassembly of `src/solver_baseline.cpp`
+built by rangpur's g++ 8.5 shows 10 divide instructions in the vectorised
+inner loop under `-O3 -mavx2 -mfma` and none once `-ffast-math` is added,
+because the reciprocals are computed once before the loop. That is the whole
+jump from 107 to 381, which matches the hand-written rung. The serial rung
+already multiplies by precomputed reciprocals, so its gain from 349 to 482
+comes from regrouping the arithmetic. Its vectorised loop shrinks from 51
+instructions to 46. The simd rung does not move under any flag, because its
+intrinsics fix the instructions.
+
+`-march=native` tunes for Haswell, which stops g++ splitting unaligned
+256 bit loads (Phase 10). The hand-written row gains as it did in E2b (455
+against 460). The auto-vectorised serial rung loses (265 against 349), even
+though, built with `-march=haswell`, its loop is still four lanes wide, has
+no split loads and is shorter (34 to 45 instructions against 51). Why it is
+slower has not been found. A trap for anyone repeating the disassembly is
+that `-march=native` on the rangpur login node targets its AMD EPYC 7542,
+for which g++ 8.5 prefers 128 bit vectors. The check above therefore used
+`-march=haswell` and not `native`.
+
+### E9 result (job 659155, r730-2 and r730-3)
+
+Median of five reps in Mcell-updates/s. The share is the exchange's part of
+a step, the time to post plus the time spent waiting.
+
+| Layout | grid | mpi | mpi_overlap | gain | exchange share |
+|---|---|---|---|---|---|
+| 1 node, 1 rank x 24 | 2048 x 512 | 5731 | 5482 | 0.96x | 0% |
+| 1 node, 2 ranks x 12 | 2048 x 512 | 6069 | 6121 | 1.01x | 19% to 20% |
+| 2 nodes, 1 rank x 24 each | 2048 x 512 | 5567 | 8135 | 1.46x | 38% to 15% |
+| 2 nodes, 2 ranks x 12 each | 2048 x 512 | 8672 | 8309 | 0.96x | 37% to 35% |
+| 1 node, 1 rank x 24 | 4096 x 1024 | 2821 | 2900 | 1.03x | 0% |
+| 1 node, 2 ranks x 12 | 4096 x 1024 | 6298 | 6114 | 0.97x | 10% to 10% |
+| 2 nodes, 1 rank x 24 each | 4096 x 1024 | 8519 | 8843 | 1.04x | 28% to 28% |
+| 2 nodes, 2 ranks x 12 each | 4096 x 1024 | 9833 | 9868 | 1.00x | 28% to 30% |
+
+The `mpi` column is within 4% of M2.9 in every layout. One layout gains, by
+a lot. With one rank of 24 threads on each of two nodes, the small grid runs
+1.46 times faster and the exchange falls from 38% of a step to 15%. The reps
+do not overlap (5493 to 5801 against 7884 to 8383), and 8135 is above
+anything `mpi` reached in that layout in M2.9 or its rerun. Every other
+layout moves by less than 5%, and its exchange share stays where it was.
+Without neighbours the reordered loop costs 4% on the small grid.
+
+The likely reason is how Open MPI 4.1.1 moves a message, read from
+`ompi_info` on rangpur. Between nodes it uses TCP, where a message up to
+64 KiB is sent eagerly, so the data leaves as soon as `MPI_Isend` is called.
+Between two ranks on one node it uses shared memory (the `vader`
+transport), where the eager limit is 4 KiB. A row is 16 KiB on the small
+grid and 32 KiB on the big one, so on one node it goes by the rendezvous
+protocol. The sender only announces the message, and the data moves once the
+receiver is inside an MPI call. This Open MPI has no progress thread, so
+nothing moves while the threads compute, and the transfer still happens in
+`MPI_Waitall`. The two node 1 x 24 layout is the only one with no pair of
+ranks on the same node, which fits. The same layout on the big grid gains
+only 1.04 times, which this does not explain. A 32 KiB row is larger than
+the 16 KiB a Linux TCP socket buffer starts with (`net.ipv4.tcp_wmem`), so
+part of it may wait for `MPI_Waitall` as well. Neither idea has been tested.
+Raising `OMPI_MCA_btl_vader_eager_limit` above the row size, or turning on
+`btl_tcp_progress_thread`, would test them.
+
+### Decision 5. Nothing shipped changes
+
+The shipped build keeps `-O2` and the hand-written rungs. `-ffast-math`
+gives up the IEEE rules for the whole program, not one loop. It also lets
+the compiler assume no value is ever NaN or infinite, and the tests catch an
+unstable run by exactly such a value. The fast-math builds were checked on
+one contract, not by the test suite. Whether to ship any of it is the
+user's call. `mpi_overlap` stays an experiment, because the best layouts
+(2 ranks x 12 per node) do not gain from it.
+
+## Phase 12. Plainer words for the edge row exchange
+
+The user asked for the textbook word for the rows a rank borrows from its
+neighbours to be dropped from every document, in favour of direct terms. The
+docs now use the names the code already had since Phase 9i.
+
+| Thing | Word in the docs | Name in the code |
+|---|---|---|
+| sending each rank's first and last rows to its neighbours | edge row exchange | `exchange_edge_rows` |
+| the neighbour's rows a rank receives and keeps a copy of | copied rows | `row_below`, `row_above` |
+| the exchange's part of a step | exchange share | `exchange_seconds` |
+
+The change covers PLAN, STUDY_GUIDE, STUDY_CARDS, CODE_GUIDE,
+DESIGN_DECISIONS, HPC_JUSTIFICATIONS, COMMANDS, RESULTS, HANDOFF,
+InitialSpecDesign, this changelog, `presentation/M2_SCRIPT.md` and
+`presentation/deck_m2.tex`. The ASCII diagrams in STUDY_GUIDE §6 and §17.3
+keep their column widths. The rename table in Phase 9i now describes the old
+names instead of spelling them out. `presentation/deck_m2.pdf` still has the
+old wording on two frames, because tectonic is not installed on the WSL
+machine. `make slides-m2` on the Mac rebuilds it. The local xelatex fails on
+the unchanged deck as well (line 249), so it cannot stand in for tectonic.
+
+The code was not touched. The comment above the received rows in
+`src/solver_mpi.cpp` still names the textbook term once, and
+`scripts/m2_figures.py` uses it in two variable names. No figure shows it.
+
+## Phase 13. The shipped build keeps unaligned loads whole, and every sweep reruns
+
+### The question
+
+E2b (Phase 10, jobs 657498 and 657499) showed that g++ 8.5, given only
+`-mavx2`, tunes for a generic x86 and splits every unaligned 256 bit load in
+the AVX2 row into a 128 bit load and a `vinsertf128`, and every unaligned
+store into two 128 bit stores. Turning the split off made simd 1.19 times
+faster (387 to 460 Mcell-updates/s) and omp 1.12 times faster (5744 to
+6431), with identical answers. Every sweep until then, including the
+Phase 9k reruns (656955 to 656968) and the E1 and E9 jobs (659153 to
+659155), was measured with the split on. The user decided to ship the two
+flags and rerun the sweeps, so that the deck shows numbers from the final
+build.
+
+### What changed
+
+The Makefile now gives the AVX2 file
+`-mno-avx256-split-unaligned-load -mno-avx256-split-unaligned-store`
+whenever the compiler is GCC. The flags sit in a new variable `NOSPLIT`,
+which the existing clang test sets in its GCC branch, because they are GCC
+options. `AVXFLAGS` became a simply expanded variable (`:=`).
+`make -p` prints a recursive variable without expanding it, so the CSV
+headers had recorded `$(AVXEXTRA)` literally. They now record every flag in
+full. `AVXEXTRA` still comes last and stays the opt-in hook for experiments.
+The `test-mpi` line with `OMP_PROC_BIND=false` is unchanged.
+
+`slurm/bench_m2_exp_align.sh` (E2) now exports the positive forms
+`-mavx256-split-unaligned-load -mavx256-split-unaligned-store` through
+`AVXEXTRA`. They come after the shipped flags and win, so a rerun of E2
+still measures the build that splits its loads. A local g++ 13 build
+confirmed the order rule. The positive forms placed last bring back exactly
+the 11 `vinsertf128` and the one `vextractf128` that E2 found in the shipped
+row. `slurm/bench_m2_exp_nosplit.sh` (E2b) was left alone. It only repeats
+the shipped flags, so it still measures the same build.
+
+`slurm/bench_m2_exp_compiler.sh` (E1) gained one build in each part,
+`O3avx2nosplit` and `O3avx2fastnosplit`, which append the two flags to the
+whole-program `-mavx2` builds. Under generic tuning g++ also splits the
+loads in the code it vectorises itself, so the comparison with the
+hand-written row is fair only when those builds keep their loads whole as
+well. The original builds stay, because they show what the compiler does by
+default. The instruction count in `results/e1_vectorised_<part>_<job>.txt`
+now also counts `vinsertf128` and `vextractf128` in each function.
+
+`make avx-check` still compiles its own copy of the AVX2 file with plain
+`-mavx2 -mfma`. It compares the arithmetic of the row with the scalar row,
+and the split does not change the arithmetic. `make test` runs the shipped
+object through `test_ladder_matches`.
+
+### Validation
+
+The AVX2 file compiled locally under g++ 13 with the two flags, and
+`make -n` showed them on the `stencil_avx.o` line. On the rangpur login node
+the exact Makefile command under g++ 8.5 gave an `update_row_avx` with no
+`vinsertf128` and no `vextractf128`. That check only compiled, and nothing
+was timed there. The tree was synced once, without `--delete` and with
+`.venv` excluded, and the remote `.venv` survived.
+
+Every job below passed `make test`, `make test-mpi` and `make avx-check`
+before it timed anything, and validation took about 2.5 minutes in each, as
+Phase 11 predicted. Every CSV header reads
+`avx_flags=-mavx2 -mfma -mno-avx256-split-unaligned-load -mno-avx256-split-unaligned-store`,
+and every job log shows the two flags on the `stencil_avx.o` line. Every
+price, delta, gamma and vega matches the earlier run of the same sweep to
+every printed digit, and the E1 answers move from the `-O2` build by the
+same 1.1e-14 at most as before. exp_a (659246) finished in 9 minutes with
+all 60 rows. Its earlier runs had hit the time limit when validation took 8
+minutes. No job failed or timed out.
+
+The E1 jobs checked the machine code built on the compute node. In all ten
+builds `update_row_avx` has 48 ymm instructions and no `vinsertf128` or
+`vextractf128`, where job 659153 had found 57 ymm and 12 packed xmm
+instructions with the split on. The compiler's own AVX2 loop in
+`update_cells_scalar` has 33 `vinsertf128` and 3 `vextractf128` in
+`O3avx2` and none in `O3avx2nosplit`.
+
+| Sweep | Split on | Split off | Elapsed |
+|---|---|---|---|
+| ladder | 651295 | 659238 | 4:53 |
+| strong omp | 651296 | 659239 | 5:19 |
+| weak | 651298 | 659240 | 5:05 |
+| size | 656959 | 659241 | 6:48 |
+| mpi | 651303 | 659242 | 4:20 |
+| exp_overlap (E9) | 659155 | 659243 | 5:44 |
+| exp_b (E6, E7) | 651301 | 659244 | 7:40 |
+| exp_c (E11) | 651474 | 659245 | 4:56 |
+| exp_a (E4, E5, E8) | 651300 | 659246 | 9:00 |
+| exp_float (E3) | 652647 | 659247 | 8:05 |
+| E1 vector | 659153 | 659248 | 7:02 |
+| E1 fastmath | 659154 | 659249 | 6:45 |
+| denormal (E12) | 651294 | 659436 | 7:26 |
+| size with the split turned back on, a control | | 659437 | 7:04 |
+
+The omp_scalar sweep (651297), the optimisation levels (652696) and the
+peak (651302) never use the AVX2 row, so they were not rerun. The profile
+(652697) was not rerun either, so its simd row still comes from the build
+with the split on.
+
+### What was measured
+
+Median Mcell-updates/s unless a row says otherwise. The split-on column
+holds the numbers RESULTS quoted before this phase.
+
+| Measurement | Split on | Split off |
+|---|---|---|
+| ladder baseline, serial | 57, 159 | 57, 159 |
+| ladder simd | 379 | 456 (1.20x) |
+| ladder omp, 24 threads | 5729 | 6367 (1.11x) |
+| ladder mpi, 2 ranks x 12 on one node | 6019 | 6984 (1.16x) |
+| strong omp on 1, 12 and 24 threads | 363, 3781, 5733 | 454, 4354, 6311 |
+| strong speedup on 12 and 24 threads | 10.4, 15.8 | 9.6, 13.9 |
+| Amdahl serial fraction of the AVX2 row | 1.18% | 2.42% |
+| boundary share of a 24 thread step | 8.2% | 9.1% |
+| weak step time on 1 and 24 threads | 0.142, 0.179 ms | 0.112, 0.166 ms |
+| weak scaled speedup on 24 threads | 19.1 | 16.3 |
+| size simd, 512 x 128 up to 8192 x 1024 | 327, 377, 382, 171, 334, 323 | 422, 451, 454, 169, 392, 348 |
+| size omp on 24 threads, same grids | 1250, 4104, 5711, 6499, 3141, 1709 | 1228, 4264, 6278, 3288, 2990, 2259 |
+| roofline omp at 2048 x 512 and 4096 x 1024 | 177, 97 GFLOP/s | 195, 93 GFLOP/s |
+| roofline simd at the same grids | 11.8, 10.4 GFLOP/s | 14.1, 12.1 GFLOP/s |
+| mpi 1 node 1 x 24, small and big grid | 5714, 2926 | 6233, 2907 |
+| mpi 1 node 2 x 12, with exchange share | 6232 (18%), 6314 (10%) | 6843 (20%), 6624 (17%) |
+| mpi 2 nodes 1 x 24 | 5617 (36%), 8483 (29%) | 7064 (28%), 9002 (30%) |
+| mpi 2 nodes 2 x 12 | 8769 (37%), 9900 (28%) | 8310 (40%), 10863 (28%) |
+| one rank per socket over one rank of 24 | 1.09x, 2.16x | 1.10x, 2.28x |
+| best two node gain over the best one node layout | 1.41x (70%), 1.57x (78%) | 1.21x (61%), 1.64x (82%) |
+| E3 float over double, 1 thread, 24 on 2048, 24 on 4096 | 1.92x, 1.75x, 4.46x | 1.92x, 1.73x, 4.82x |
+| E3 reference solve, double and float | 170.2 s, 95.6 s | 149.9 s, 88.0 s |
+| E4 persistent region, 2048 x 512 and 512 x 128 | 1.035x, 1.155x | 1.02x, 1.13x |
+| E5 dynamic 1, dynamic 8 and guided | 0.60x, 0.72x, 0.84x | 0.57x, 0.63x, 0.78x |
+| E8 boundaries in parallel, 2048 x 512 and 512 x 128 | 1.05x, 1.07x | 1.06x, 1.10x |
+| E8 serial share of a step | 8.2% to 1.9% | 9.4% to 2.3% |
+| E6 12 threads spread against close, 4096 x 1024 | 1880, 3319 | 1894, 3413 |
+| E6 unbound threads, 2048 x 512 and 4096 x 1024 | 1.165x, 1.141x | 1.11x, 1.13x |
+| E7 interleaved pages, 2048 x 512 and 4096 x 1024 | 1.065x, 1.28x | 1.10x, 1.74x |
+| E11 default allocator, omp and serial | 0.68x, 0.56x | 0.63x, 0.56x |
+| E12 flushing gain, baseline, serial, simd, omp | 1.08x, 1.29x, 1.38x, 1.26x | 1.07x, 1.28x, 1.42x, 1.33x |
+| E1 `-O2` baseline, serial, simd | 57.6, 158.4, 370.2 | 57.6, 157.0, 449.6 |
+| E1 `-O3 -mavx2 -mfma` serial | 348.7 | 345.6, and 362.7 without split loads |
+| E1 `-O3 -march=native` serial, simd | 265.5, 455.4 | 266.3, 455.8 |
+| E1 `-O3 -mavx2 -mfma -ffast-math` baseline, serial, simd | 381.0, 482.2, 378.4 | 380.1, 468.2, 478.0 |
+| the same build without split loads | | 376.8, 399.3, 478.2 |
+| E9 on 2 nodes 1 x 24, 2048 x 512, mpi and mpi_overlap | 5567, 8135 (1.46x) | 5693, 8009 (1.41x) |
+| E9 exchange share in that layout | 38% to 15% | 39% to 19% |
+| E9 every other layout | within 5% | within 4% |
+
+M2.9 had printed 38%, 38% and 28% for three of the old exchange shares.
+The calculation F8 draws from gives 36%, 37% and 29%, and the table above
+and RESULTS now use it throughout.
+
+### What it shows
+
+The flags did what E2b promised. simd gained 1.08 to 1.29 times on every
+grid except 2896 x 724, and 1.18 to 1.25 times on the benchmark grid across
+the jobs. omp and mpi on one node gained 1.09 to 1.16 times on the
+benchmark grid. Rungs that do not use the AVX2 row did not move.
+
+A faster row scales worse. The serial boundaries and the fork and barrier
+cost the same per step, while each step got shorter. The Amdahl fraction of
+the AVX2 row doubled to 2.42%, the speedup on 24 threads fell from 15.8 to
+13.9 and the weak scaled speedup from 19.1 to 16.3. PLAN §5 hypothesis 2 is
+weaker, at 80% efficiency on 12 threads against 87%, and RESULTS M2.10 now
+says it mostly held.
+
+PLAN §5 hypothesis 6 moved. On the small grid the best two node layout now
+gains 1.21 times (61%), down from 1.41 times (70%), because 2 ranks x 12 on
+each node did not speed up while every one node layout did. On the big grid
+it gains 1.64 times (82%), up from 1.57 times (78%), which clears the 80%
+line. The small grid's two node layouts also vary between jobs. The `mpi`
+column of the E9 job, run minutes after the M2.9 job with the same build,
+gave 9364 for 2 ranks x 12 on each node and 5693 for 1 rank x 24 on each
+node, against 8310 and 7064. With the E9 numbers the gain would be 1.33
+times (67%). RESULTS M2.9 quotes both.
+
+E1's answer changed. With the hand-written row at 450, the compiler's own
+AVX2 code reaches 0.77 times it, or 0.81 times with its own loads kept
+whole, where it had reached 0.94 times the split row. With `-ffast-math` the
+naive baseline reaches 0.85 times the hand-written row, where before it
+matched it, and the serial row reaches 1.04 times, down from 1.27 times. Two
+results are new and unexplained. The fast-math serial row slows from 468 to
+399 when its loads are kept whole, while the plain AVX2 build gains from 346
+to 363. And the hand-written row gains 5% to 6% under `-ffast-math` (449 to
+between 473 and 478), where its machine code loses three ymm instructions
+(48 to 45). The
+Phase 11 remark that the simd rung does not move under any flag held only
+while its loads were split.
+
+omp on 24 threads at 2896 x 724 halved, from 6499 to 3288, with all five
+reps between 3281 and 3328. The question was whether the flags caused it.
+The control job 659437 reran the whole size sweep on the same day with
+`AVXEXTRA` set to the positive forms, which turns the split back on. It gave
+3267 at 2896 x 724 and matched the earlier split-on runs everywhere else
+(omp 5712 against 5711 and simd 383 against 382 at 2048 x 512). So the drop
+does not come from the flags. It is the same kind of change that hit serial
+at this grid between jobs 651299 and 656959 (Phase 9k), on the grid whose
+two buffers sit exactly 2^24 bytes apart (RESULTS M2.8), and its cause was
+not found. RESULTS M2.4 and M2.8 now say so. F4 still draws this omp point on
+the line, because `scripts/m2_figures.py` treats only serial and simd as
+slow at that grid.
+
+E7 on the big grid now reads 1.74 times, up from 1.28 times. The interleaved
+runs sat at about 5050 in all three runs. The default runs land either near
+2800 or near 4000 in every run, and this time their median fell on the low
+side. The other experiments kept their conclusions. Static scheduling still
+wins E5, E4 and E8 are still small wins, and E9 still gains only with one
+rank on each of two nodes on the small grid. The same layout on the big
+grid now gains 1.01 times, down from 1.04 times.
+
+The faster simd row also sits closer to what one core can stream. At 454
+Mcell-updates/s it moves about 10.9 GB/s against the 12.4 GB/s one-thread
+triad, and it loses 14% at 4096 x 1024 and 23% at 8192 x 1024. RESULTS M2.4
+now says that instead of saying simd barely cares about size.
+
+### Documents
+
+`docs/RESULTS.md` has a note at the top of the Milestone 2 section about the
+split, and every number in M2.1 to M2.11 that changed. E2 and E2b keep their
+split-on numbers. `HPC_JUSTIFICATIONS.md` quotes the new numbers, shows the
+new Makefile lines, and no longer says E2 was never run. In the Makefile,
+`M2_CSVS` points at the new CSVs and `m2-figures` takes its test log from
+`slurm-659247.out`. omp_scalar 651297, optlevels 652696, profile 652697 and
+peak 651302 stay. `make m2-figures` was run once into a scratch folder to
+check the list, and it drew every figure without an error. STUDY_GUIDE,
+CODE_GUIDE, STUDY_CARDS, DESIGN_DECISIONS, README, `presentation/` and
+`scripts/` were left for the sessions that own them, and several of their
+numbers are now out of date.
