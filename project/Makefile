@@ -10,7 +10,9 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Iinclude
 # makes g++ 8.5 print warnings under -Wextra, and nothing here uses it
 MPIFLAGS = -DOMPI_SKIP_MPICXX
 
-# Apple clang needs Homebrew libomp passed by hand, GCC only needs -fopenmp
+# Apple clang needs Homebrew libomp passed by hand, GCC only needs -fopenmp.
+# GCC also gets the two flags that keep 256 bit loads and stores whole, used in AVXFLAGS below.
+# They are GCC options, so a clang build leaves them out
 ifneq ($(shell $(CXX) --version 2>/dev/null | grep -c clang),0)
   LIBOMP   := $(shell brew --prefix libomp 2>/dev/null)
   OMPFLAGS  = -Xpreprocessor -fopenmp -I$(LIBOMP)/include
@@ -18,16 +20,22 @@ ifneq ($(shell $(CXX) --version 2>/dev/null | grep -c clang),0)
 else
   OMPFLAGS  = -fopenmp
   OMPLIBS   = -fopenmp
+  NOSPLIT   = -mno-avx256-split-unaligned-load -mno-avx256-split-unaligned-store
 endif
 
-# AVX2 and FMA only on x86_64 machines such as rangpur.
-# Only the SIMD row file gets them, so the other rungs compile exactly as before
-ifeq ($(shell uname -m),x86_64)
-  AVXFLAGS = -mavx2 -mfma $(AVXEXTRA)
-endif
 # Extra flags for the AVX2 file only, empty unless a job sets it.
-# Experiment E2b sets -mno-avx256-split-unaligned-load and -store
+# They come last, so they win. Experiment E2 sets the positive split flags to measure the old build
 AVXEXTRA ?=
+
+# AVX2 and FMA only on x86_64 machines such as rangpur.
+# Only the SIMD row file gets them, so the other rungs compile exactly as before.
+# Given only -mavx2, g++ 8.5 tunes for a generic x86 and splits every unaligned 256 bit load
+# and store into two 128 bit halves. NOSPLIT keeps them whole, which made simd 1.19x and
+# omp 1.12x faster with the same answers (experiment E2b, jobs 657498 and 657499).
+# The := expands the flags here, so the CSV header of every bench job records them in full
+ifeq ($(shell uname -m),x86_64)
+  AVXFLAGS := -mavx2 -mfma $(NOSPLIT) $(AVXEXTRA)
+endif
 
 # GCC 8 keeps std::filesystem in a separate library, newer compilers reject it
 FSLIB := $(shell echo 'int main(){}' | $(CXX) -x c++ -std=c++17 - -lstdc++fs \
@@ -81,10 +89,13 @@ test: $(TESTS)
 
 # The ladder test again as 2 and 3 processes.
 # 3 does not divide the test grid's 32 rows, so the row blocks come out uneven.
-# Two threads per process, and no core pinning so the threads can spread out
+# Two threads per process, and no core pinning so the threads can spread out.
+# OMP_PROC_BIND=false overrides the close binding the bench jobs export. With it every
+# process pinned its threads to cores 0 and 1, and the threads spinning while they waited
+# held the cores the neighbouring rank needed, so one mpi solve took 14 s instead of 0.6 s
 MPIEXEC = mpiexec --oversubscribe --bind-to none
 test-mpi: tests/test_ladder_matches
-	@for n in 2 3; do echo "== tests/test_ladder_matches on $$n processes"; OMP_NUM_THREADS=2 $(MPIEXEC) -n $$n ./tests/test_ladder_matches 2>/dev/null || exit 1; done
+	@for n in 2 3; do echo "== tests/test_ladder_matches on $$n processes"; OMP_PROC_BIND=false OMP_NUM_THREADS=2 $(MPIEXEC) -n $$n ./tests/test_ladder_matches 2>/dev/null || exit 1; done
 	@echo "MPI TESTS PASS"
 
 # Checks the AVX2 row against the scalar row on random data.
@@ -105,11 +116,16 @@ smoke: heston
 	./heston --config config/smoke.cfg
 
 # ---- local-only figures and animations (need scripts/requirements.txt) ----
-# This Mac's system python mixes arm64 and x86_64 wheels, so the venv is
+# The Mac's system python mixes arm64 and x86_64 wheels, so there the venv is
 # pinned to arm64. Rebuild it with:
 #   arch -arm64 /usr/bin/python3 -m venv .venv && \
 #   arch -arm64 .venv/bin/python -m pip install -r scripts/requirements.txt
-PY = arch -arm64 .venv/bin/python
+# On Linux and WSL the venv's own python is enough
+ifeq ($(shell uname -s),Darwin)
+  PY = arch -arm64 .venv/bin/python
+else
+  PY = .venv/bin/python
+endif
 
 # The weather map, rendered so the motion is actually visible (STUDY_GUIDE
 # P6b): time value, cropped to the reachable region, sqrt-warped frames.
@@ -178,20 +194,36 @@ check-heston: heston
 bench-plot:
 	$(PY) scripts/bench_plot.py results/bench_*.csv --out results/
 
-# The Milestone 2 figures F1 to F10, from the final rangpur sweeps (denormals flushed).
-# Every CSV is named by its job id, so the figures can always be traced to a run
-M2_CSVS = results/bench_m2_ladder_651295.csv results/bench_m2_strong_omp_651296.csv \
-          results/bench_m2_strong_omp_scalar_651297.csv results/bench_m2_weak_651298.csv \
-          results/bench_m2_size_656959.csv results/bench_m2_exp_a_651300.csv \
-          results/bench_m2_exp_b_651301.csv results/bench_m2_exp_c_651474.csv \
-          results/bench_m2_exp_float_652647.csv results/bench_m2_optlevels_652696.csv \
-          results/bench_m2_mpi_651303.csv results/bench_m2_denormal_651294.csv
+# The Milestone 2 figures F1 to F18, from the final rangpur sweeps (denormals flushed).
+# Every CSV is named by its job id, so the figures can always be traced to a run.
+# The AVX2 rungs come from the Phase 13 reruns with whole 256 bit loads (jobs 659238 to 659436).
+# omp_scalar, optlevels, peak and profile were not rerun, because only the AVX2 file changed
+M2_CSVS = results/bench_m2_ladder_659238.csv results/bench_m2_strong_omp_659239.csv \
+          results/bench_m2_strong_omp_scalar_651297.csv results/bench_m2_weak_659240.csv \
+          results/bench_m2_size_659241.csv results/bench_m2_exp_a_659246.csv \
+          results/bench_m2_exp_b_659244.csv results/bench_m2_exp_c_659245.csv \
+          results/bench_m2_exp_float_659247.csv results/bench_m2_optlevels_652696.csv \
+          results/bench_m2_mpi_659242.csv results/bench_m2_denormal_659436.csv
+# The experiments with figures of their own. E1 rebuilds the program under other flags (F15),
+# E2 and E2b compare split and whole loads (F16), and E9 overlaps the edge row exchange (F17)
+M2_EXP_CSVS = results/bench_m2_exp_compiler_vector_659248.csv results/bench_m2_exp_compiler_fastmath_659249.csv \
+              results/bench_m2_exp_align_one_657421.csv results/bench_m2_exp_align_many_657422.csv \
+              results/bench_m2_exp_nosplit_one_657498.csv results/bench_m2_exp_nosplit_many_657499.csv \
+              results/bench_m2_exp_overlap_659243.csv
+# F14 and F18 read local snapshots from make collapse-anim and make demo-snapshots,
+# and are skipped with a message when those are missing
 m2-figures:
-	$(PY) scripts/m2_figures.py $(M2_CSVS) --peak results/peak_651302.txt \
-	  --test-log results/logs/slurm-652647.out --out results/m2 \
+	$(PY) scripts/m2_figures.py $(M2_CSVS) $(M2_EXP_CSVS) --peak results/peak_651302.txt \
+	  --test-log results/logs/slurm-659247.out --out results/m2 \
 	  --profile results/profile_baseline_652697.txt results/profile_serial_652697.txt results/profile_simd_652697.txt
 	$(PY) scripts/decomposition_diagram.py --out results/m2/f10_decomposition.png
 	$(PY) scripts/method_figures.py --out results/m2
+	$(PY) scripts/payoff_diagram.py --out results/payoff.png
+
+# The four snapshots of config/demo.cfg that the value map F18 reads, without the
+# animations of demo-anim. Needs a local build of heston
+demo-snapshots: heston
+	./heston --config config/demo.cfg --dump-every 6000 --dump-dir results/demo
 
 # Why layout and loop order dominate: the cache-line sweep (row-major vs the
 # ctl-order control, with a modelled LRU cache) and the double-buffer
@@ -232,9 +264,13 @@ stills:
 slides: stills
 	tectonic presentation/deck.tex
 
-# The Milestone 2 deck, one frame per on-screen item in presentation/M2_SCRIPT.md.
+# The Milestone 2 deck, one frame per take in presentation/M2_SCRIPT.md, then the appendix.
+# tectonic when it is installed, otherwise pdflatex twice so the frame count in the footer is
+# right. pdflatex writes its errors to presentation/deck_m2.log
 slides-m2:
-	tectonic presentation/deck_m2.tex
+	cd presentation && if command -v tectonic >/dev/null 2>&1; then tectonic deck_m2.tex; \
+	  else pdflatex -interaction=batchmode -halt-on-error deck_m2.tex && \
+	       pdflatex -interaction=batchmode -halt-on-error deck_m2.tex; fi
 
 clean:
 	rm -f heston $(TESTS) src/*.o tests/*.o tests/test_avx_row
@@ -313,4 +349,4 @@ fetch:
 .PHONY: default all test test-mpi avx-check smoke clean sync remote-debug remote-peak \
         queue fetch demo-anim collapse-anim mc-check check-heston \
         package \
-        convergence bench-plot memory-anim roofline m2-figures slides-m2
+        convergence bench-plot memory-anim roofline m2-figures demo-snapshots slides-m2

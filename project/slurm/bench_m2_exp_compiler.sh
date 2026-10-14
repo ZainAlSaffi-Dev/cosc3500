@@ -14,8 +14,12 @@
 #   Whether the compiler vectorised the scalar row, from its own report and from the machine code.
 #
 # The cosc3500 QOS allows 15 minutes, so the sweep runs as two jobs.
-#   sbatch slurm/bench_m2_exp_compiler.sh vector     -O2, -O3, -O3 with AVX2 and FMA, -O3 -march=native
-#   sbatch slurm/bench_m2_exp_compiler.sh fastmath   -O2, then -ffast-math on top of -O2, -O3, and -O3 with AVX2 and FMA
+#   sbatch slurm/bench_m2_exp_compiler.sh vector     -O2, -O3, -O3 with AVX2 and FMA, the same without split loads, -O3 -march=native
+#   sbatch slurm/bench_m2_exp_compiler.sh fastmath   -O2, then -ffast-math on top of -O2, -O3, -O3 with AVX2 and FMA, and the same without split loads
+#
+# Since Phase 13 the Makefile gives the hand-written AVX2 file two flags that keep unaligned 256 bit loads and stores whole.
+# Given only -mavx2, g++ 8.5 splits the loads in the code it vectorises itself as well,
+# so each part also runs its AVX2 build with the same two flags, to compare with the hand-written row on equal terms.
 #
 #SBATCH --job-name=heston_m2_exp_compiler
 #SBATCH --partition=cosc3500
@@ -40,11 +44,13 @@ write_header
 echo "# note=each row was built with the flags named in its label, see the BUILD lines in the job log" >> "$OUT"
 
 BASE="-std=c++17 -Wall -Wextra -Iinclude"
+# The two flags the Makefile gives the AVX2 file under GCC
+NOSPLIT="-mno-avx256-split-unaligned-load -mno-avx256-split-unaligned-store"
 # Each entry is a short label, a colon, then the flags that replace -O2
 if [ "$PART" = "vector" ]; then
-  BUILDS=("O2:-O2" "O3:-O3" "O3avx2:-O3 -mavx2 -mfma" "O3native:-O3 -march=native")
+  BUILDS=("O2:-O2" "O3:-O3" "O3avx2:-O3 -mavx2 -mfma" "O3avx2nosplit:-O3 -mavx2 -mfma $NOSPLIT" "O3native:-O3 -march=native")
 else
-  BUILDS=("O2:-O2" "O2fast:-O2 -ffast-math" "O3fast:-O3 -ffast-math" "O3avx2fast:-O3 -mavx2 -mfma -ffast-math")
+  BUILDS=("O2:-O2" "O2fast:-O2 -ffast-math" "O3fast:-O3 -ffast-math" "O3avx2fast:-O3 -mavx2 -mfma -ffast-math" "O3avx2fastnosplit:-O3 -mavx2 -mfma -ffast-math $NOSPLIT")
 fi
 
 export OMP_NUM_THREADS=1
@@ -63,17 +69,20 @@ VECTOR_LOG=$SUBMIT_DIR/results/e1_vectorised_${PART}_${SLURM_JOB_ID}.txt
 : > "$VECTOR_LOG"
 
 # Counts the instructions of one function in the disassembly that use 256-bit (ymm) registers,
-# that work on packed doubles in 128-bit (xmm) registers, and that work on one double at a time
+# that work on packed doubles in 128-bit (xmm) registers, and that work on one double at a time.
+# It also counts the vinsertf128 and vextractf128 that join or split the halves of a 256 bit load or store
 count_instructions() {
   local name=$1
   objdump -d -C --no-show-raw-insn heston | awk -v name="$name" '
     /^[0-9a-f]+ <.*>:$/ { inside = (index($0, "<" name) > 0) }
     inside && /\t/ {
+      if ($0 ~ /vinsertf128/) insert++
+      if ($0 ~ /vextractf128/) extract++
       if ($0 ~ /ymm/) ymm++
       else if ($0 ~ /pd[ \t]/ && $0 ~ /xmm/) xmm_packed++
       else if ($0 ~ /sd[ \t]/) scalar++
     }
-    END { printf "  %-28s ymm %d, packed xmm %d, scalar double %d\n", name, ymm, xmm_packed, scalar }'
+    END { printf "  %-28s ymm %d, packed xmm %d, scalar double %d, vinsertf128 %d, vextractf128 %d\n", name, ymm, xmm_packed, scalar, insert, extract }'
 }
 
 for ENTRY in "${BUILDS[@]}"; do
@@ -117,7 +126,7 @@ awk -F, 'NR > 1 {
     diff = a - b; if (diff < 0) diff = -diff
     if (scale > 0 && diff / scale > worst) worst = diff / scale
   }
-  printf "  %-11s %-9s %.3e\n", $1, $2, worst
+  printf "  %-18s %-9s %.3e\n", $1, $2, worst
 }' "$DRIFT"
 
 echo "done: $OUT"

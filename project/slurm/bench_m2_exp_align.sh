@@ -30,6 +30,8 @@ if [ "$PART" != "one" ] && [ "$PART" != "many" ]; then
   exit 1
 fi
 SWEEP_NAME=m2_exp_align_${PART}
+# E2 measured the build that split unaligned loads, so these turn the split back on. They come after the shipped no-split flags, so they win
+export AVXEXTRA="-mavx256-split-unaligned-load -mavx256-split-unaligned-store"
 source slurm/bench_common.sh
 build_and_validate
 write_header
