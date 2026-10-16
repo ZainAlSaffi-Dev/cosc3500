@@ -20,6 +20,3 @@ presentation/*.out
 presentation/*.snm
 presentation/*.toc
 presentation/*.vrb
-
-# The rendered Quarto deck, rebuilt by quarto render presentation/deck_m2.qmd
-presentation/deck_m2.html
