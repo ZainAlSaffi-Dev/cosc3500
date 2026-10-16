@@ -287,6 +287,32 @@ arch -arm64 .venv/bin/python -m pip install -r scripts/requirements.txt
 | `make m2-figures` | F1 to F14 and `summary.txt` in `results/m2/`, drawn from the final sweep CSVs the Makefile names by job id, and the grid and Black-Scholes figures from `results/collapse_work/dump` |
 | `make code-shots` | the Milestone 2 code screenshots in `results/m2/code_shots/`, the data layout, one per rung, the test gate, the CSV header and the test output |
 
+### 4a. The Quarto deck
+
+The Milestone 2 slides as one self-contained HTML file. Press S for the
+speaker notes, F for full screen and O for the slide overview.
+
+```bash
+python3 scripts/deck_m2_svgs.py
+quarto render presentation/deck_m2.qmd
+open presentation/deck_m2.html
+```
+
+The first line redraws the animated SVG diagrams and charts inside
+`deck_m2.qmd`, and puts in the two manim videos with their section end times.
+Run it after changing a number or a drawing in the script.
+
+The two manim videos in the appendix are rendered from
+`presentation/anim_m2/scenes.py`. The exact commands, the copy step and the
+step that writes each json file of section end times are in the comment at
+the top of that file. Manim runs through uv, with LaTeX on the PATH.
+
+```bash
+cd presentation/anim_m2
+export PATH=/Library/TeX/texbin:$PATH
+uv run --python 3.12 --with manim manim -qh -r 1600,900 --fps 30 --save_sections --media_dir /tmp/manim_media scenes.py Derivation
+```
+
 ## 5. Interview demo runbook
 
 The demo takes about five minutes. Connect to the UQ VPN and open the shared

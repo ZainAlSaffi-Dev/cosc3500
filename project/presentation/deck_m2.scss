@@ -1,0 +1,362 @@
+/*-- scss:defaults --*/
+
+// The beamer palette from deck_m2.tex.
+$sig-blue: #2563EB;
+$sig-ink: #1F2937;
+$sig-navy: #111827;
+$sig-slate: #6B7280;
+$sig-mist: #F0F3F9;
+$sig-card: #FFFFFF;
+$sig-line: #D1D5DB;
+$sig-green: #059669;
+$sig-amber: #D97706;
+$sig-red: #DC2626;
+
+$body-bg: $sig-mist;
+$body-color: $sig-ink;
+$link-color: $sig-blue;
+$font-family-sans-serif: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+$font-family-monospace: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+$presentation-font-size-root: 30px;
+$presentation-line-height: 1.35;
+$presentation-heading-color: $sig-navy;
+$presentation-heading-font-weight: 700;
+$presentation-h2-font-size: 1.45em;
+$code-block-bg: $sig-card;
+$code-block-border-color: $sig-line;
+$code-block-font-size: 0.6em;
+
+/*-- scss:rules --*/
+
+.reveal .slides section h2 {
+  margin-bottom: 0.05em;
+}
+
+// The grey line under each title, the beamer frame subtitle.
+.reveal .slides section .sub {
+  display: block;
+  color: $sig-slate;
+  font-size: 0.78em;
+  margin: 0 0 0.6em 0;
+}
+
+.reveal .slides section ul {
+  margin-top: 0;
+}
+
+.reveal .slides section li {
+  margin-bottom: 0.35em;
+}
+
+// The callout band across the foot of a slide. It stops at 74 percent of the
+// width so the bottom-right corner stays empty for the webcam.
+.reveal .slides section .band {
+  position: absolute;
+  left: 0;
+  bottom: 46px;
+  width: 74%;
+  box-sizing: border-box;
+  background: $sig-card;
+  border: 1px solid $sig-line;
+  border-left: 10px solid $sig-blue;
+  border-radius: 8px;
+  padding: 0.4em 0.8em;
+  font-size: 0.74em;
+  line-height: 1.35;
+}
+
+.reveal .slides section .band p {
+  margin: 0;
+}
+
+// The small grey source line, for ideas that are not in the lectures.
+.reveal .slides section .band .cite {
+  display: block;
+  margin-top: 0.35em;
+  font-size: 0.66em;
+  color: $sig-slate;
+}
+
+.reveal .slides section .em {
+  color: $sig-blue;
+  font-weight: 700;
+}
+
+.reveal .slides section .note {
+  color: $sig-slate;
+  font-size: 0.66em;
+  text-align: center;
+  margin-top: 0.2em;
+}
+
+// A titled block, the beamer block environment.
+.reveal .slides section.roomy .blk {
+  font-size: 1em;
+}
+
+.reveal .slides section .blk {
+  background: $sig-card;
+  border: 1px solid $sig-line;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 0.82em;
+  margin-bottom: 0.6em;
+}
+
+.reveal .slides section .blk > p {
+  margin: 0.45em 0.8em;
+}
+
+.reveal .slides section .blk > ul {
+  margin: 0.45em 0.8em 0.45em 1.6em;
+}
+
+.reveal .slides section .blk > p:first-child {
+  margin: 0;
+}
+
+.reveal .slides section .blk .bt {
+  display: block;
+  background: $sig-blue;
+  color: #FFFFFF;
+  font-weight: 600;
+  padding: 0.25em 0.8em;
+}
+
+.reveal .slides section .blk.amber .bt {
+  background: $sig-amber;
+}
+
+.reveal .slides section .blk.green .bt {
+  background: $sig-green;
+}
+
+.reveal .slides section .grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 0.8em;
+}
+
+// A row of big numbers with captions, the beamer sigstats.
+.reveal .slides section .stats {
+  display: flex;
+  gap: 1.2em;
+  margin-top: 0.4em;
+}
+
+.reveal .slides section .stats > div {
+  flex: 1;
+  font-size: 0.7em;
+  color: $sig-slate;
+}
+
+.reveal .slides section .stats b {
+  display: block;
+  color: $sig-blue;
+  font-size: 1.9em;
+}
+
+.reveal .slides section table {
+  font-size: 0.78em;
+}
+
+.reveal .slides section .small table,
+.reveal .slides section .tiny table {
+  font-size: 0.92em;
+}
+
+.reveal .slides section table th {
+  border-bottom: 2px solid $sig-ink;
+}
+
+.reveal .slides section table td {
+  border-bottom: 1px solid $sig-line;
+  padding: 0.25em 0.6em;
+}
+
+.reveal .slides section tr.hl td {
+  background: rgba(37, 99, 235, 0.12);
+  font-weight: 700;
+}
+
+.reveal .slides section .small {
+  font-size: 0.86em;
+}
+
+.reveal .slides section .tiny {
+  font-size: 0.62em;
+}
+
+.reveal div.code-with-filename {
+  margin-bottom: 0.45em;
+}
+
+.reveal div.code-with-filename .code-with-filename-file {
+  background: #E5E9F2;
+  border: 1px solid $sig-line;
+  border-bottom: none;
+  padding: 0.1em 0.6em;
+}
+
+.reveal div.code-with-filename .code-with-filename-file pre {
+  font-size: 0.5em;
+  color: $sig-slate;
+}
+
+.reveal pre.sourceCode {
+  margin-top: 0;
+}
+
+// The title slide and the closing slide.
+.reveal .slides section.titleslide h2 {
+  font-size: 2.3em;
+  margin-top: 1.6em;
+}
+
+.reveal .slides section.titleslide .sub {
+  font-size: 1em;
+}
+
+.reveal .slides section.closing {
+  text-align: center;
+}
+
+.reveal .slides section.closing h2 {
+  margin-top: 2.6em;
+  font-size: 1.6em;
+}
+
+// The animated diagrams are inline SVG. Each step is a reveal fragment.
+.reveal .slides section svg.anim {
+  width: 100%;
+  height: auto;
+  font-family: $font-family-sans-serif;
+}
+
+.reveal .slides section svg.anim text {
+  fill: $sig-ink;
+}
+
+.reveal .slides section svg.anim text.dim {
+  fill: $sig-slate;
+}
+
+.reveal .slides section svg.anim text.red {
+  fill: $sig-red;
+}
+
+.reveal .slides section svg.anim text.blue {
+  fill: $sig-blue;
+}
+
+.reveal .slides section svg.anim text.amber {
+  fill: $sig-amber;
+}
+
+// A fragment that slides into place. Each element sets --tx and --ty.
+.reveal .slides section .fragment.go {
+  opacity: 1;
+  visibility: inherit;
+  transform: none;
+  transition: transform 0.9s ease;
+}
+
+.reveal .slides section .fragment.go.visible {
+  transform: translate(var(--tx), var(--ty));
+}
+
+// A slide whose code block needs more lines than usual.
+.reveal .slides section.dense pre {
+  font-size: 0.48em;
+}
+
+// The last row of the conclusion table is the headline.
+.reveal .slides section .ladder tr:last-child td {
+  background: rgba(37, 99, 235, 0.12);
+  font-weight: 700;
+}
+
+// The bars under a code change, the rate before and after it.
+.reveal .slides section .impact {
+  width: 74%;
+  margin-top: 0.2em;
+}
+
+// The code blocks keep their real line numbers in the file name line, so the
+// gutter numbers that start at 1 are hidden.
+.reveal .slides pre.numberSource code > span > a:first-child::before {
+  display: none;
+}
+
+.reveal .slides pre.numberSource {
+  margin-left: 0;
+  border-left: none;
+  padding-left: 0;
+}
+
+.reveal .slides pre.numberSource code > span {
+  left: 0;
+}
+
+// Charts that draw themselves each time their slide opens. Each element sets
+// its start delay in --d.
+.reveal .slides section.present svg.anim .bar {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: deck-grow-up 0.8s ease both;
+  animation-delay: var(--d);
+}
+
+.reveal .slides section.present svg.anim .pop {
+  animation: deck-pop 0.5s ease both;
+  animation-delay: var(--d);
+}
+
+.reveal .slides section.present svg.anim .draw {
+  stroke-dasharray: 1;
+  animation: deck-draw 0.9s ease both;
+  animation-delay: var(--d);
+}
+
+@keyframes deck-grow-up {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes deck-pop {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes deck-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+// A bar inside a fragment grows from the left when the fragment shows.
+.reveal .slides section .fragment .grow-x {
+  transform-box: fill-box;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  transition: transform 1s ease;
+}
+
+.reveal .slides section .fragment.visible .grow-x {
+  transform: scaleX(1);
+}
+
+// The title slide.
+.reveal .slides section.titleslide {
+  border-left: 14px solid $sig-blue;
+  padding-left: 1em;
+  box-sizing: border-box;
+}
+
+// The stepped manim videos in the appendix.
+.reveal .slides section video.stepped {
+  display: block;
+  height: 690px;
+  margin: 0 auto;
+  border: 1px solid $sig-line;
+  border-radius: 8px;
+}

@@ -2059,3 +2059,58 @@ check the list, and it drew every figure without an error. STUDY_GUIDE,
 CODE_GUIDE, STUDY_CARDS, DESIGN_DECISIONS, README, `presentation/` and
 `scripts/` were left for the sessions that own them, and several of their
 numbers are now out of date.
+
+## Phase 14. The Milestone 2 deck as Quarto slides
+
+### What changed
+
+`presentation/deck_m2.qmd` is a Quarto revealjs version of the beamer deck
+`presentation/deck_m2.tex`, with its theme in `presentation/deck_m2.scss`.
+`quarto render presentation/deck_m2.qmd` writes one self-contained file,
+`presentation/deck_m2.html`, at 1600 by 900. The recorded slides keep the
+beamer titles, subtitles, callouts and source lines, and each one carries
+its take from `presentation/M2_SCRIPT.md` as speaker notes (press S). The
+callout band still stops at 74 percent of the width, so the bottom-right
+corner stays empty for the webcam. Every benchmark number is defined once in
+the front matter under `n`, from `docs/RESULTS.md`, the same way the beamer
+deck defines its macros.
+
+The code screenshots are replaced by the code itself, with the file and the
+real line numbers above each block. The serial, SIMD, OpenMP and MPI code
+slides are pairs. The first slide shows the rung below, and the next press
+changes it into the new code with reveal.js auto-animate, then a bar grows
+from the old rate to the new one. The grid step, the data layout, the SIMD
+row, the OpenMP row bands and the MPI edge rows are drawn as SVG and step
+forward one press at a time. The ladder and the two rooflines are redrawn
+from the RESULTS numbers and draw themselves when their slide opens. The
+other charts are the beamer figures, cut from `deck_m2.pdf` into
+`presentation/assets_m2/` because `results/m2/` is not in git.
+
+`scripts/deck_m2_svgs.py` draws every SVG and writes it into the deck between
+`<!-- svg:name -->` markers, so it can be run again after a change.
+
+The appendix opens with two manim videos in `presentation/anim_m2/`, drawn by
+`presentation/anim_m2/scenes.py`. The first goes from the Heston model to the
+PDE, one explicit Euler step, the central differences, the reciprocals and
+lines 121 and 122 of `src/stencil.cpp`. The second works one cell of the
+test grid with its real numbers, ending at 0.04959, the value the solver's
+own snapshot holds. Each press plays one section and stops on its last
+frame, from the section end times in the json file next to each video. They
+sit in the appendix because the recorded takes already run 9 minutes 43
+seconds.
+
+### Why
+
+The beamer deck shows code as images and every figure as a still. In the
+video and the interview the step from one rung's code to the next, and the
+rate that step bought, is the thing to explain, so the slides now show that
+change happening.
+
+### What to know
+
+The morph pairs and the stepped diagrams add presses, so the deck has 39
+recorded slides against the beamer's 35 frames, and the take numbers in
+`M2_SCRIPT.md` no longer match the slide numbers. The notes on each slide say
+how many presses it has. On the SIMD code slide the take now says the serial
+loop turns into the AVX2 loop, because the two loops are no longer shown one
+above the other.
