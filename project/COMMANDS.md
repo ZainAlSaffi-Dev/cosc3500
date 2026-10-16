@@ -299,18 +299,23 @@ open presentation/deck_m2.html
 ```
 
 The first line redraws the animated SVG diagrams and charts inside
-`deck_m2.qmd`, and puts in the two manim videos with their section end times.
+`deck_m2.qmd`, and puts in the four manim videos with their section end times.
 Run it after changing a number or a drawing in the script.
 
-The two manim videos in the appendix are rendered from
-`presentation/anim_m2/scenes.py`. The exact commands, the copy step and the
-step that writes each json file of section end times are in the comment at
-the top of that file. Manim runs through uv, with LaTeX on the PATH.
+The four manim videos in the opening of the deck are rendered from
+`presentation/anim_m2/scenes.py`. The comment at the top of that file has
+the exact render commands, the copy step and the step that writes each json
+file of section end times. Manim runs through uv, with LaTeX on the PATH.
+The full run animation reads solver snapshots of the test grid from
+`presentation/anim_m2/snapshots/`, which git ignores. Make them first, from
+the project folder.
 
 ```bash
+./heston --config presentation/anim_m2/full_run.cfg --solver serial --dump-every 560 --dump-dir presentation/anim_m2/snapshots/dump
+./heston --config presentation/anim_m2/full_run.cfg --solver serial --nt 60 --maturity 0.00026785714285714287 --dump-every 1 --dump-dir presentation/anim_m2/snapshots/early
 cd presentation/anim_m2
 export PATH=/Library/TeX/texbin:$PATH
-uv run --python 3.12 --with manim manim -qh -r 1600,900 --fps 30 --save_sections --media_dir /tmp/manim_media scenes.py Derivation
+uv run --python 3.12 --with manim manim -qh -r 1600,900 --fps 30 --save_sections --media_dir /tmp/manim_media scenes.py ModelToPde
 ```
 
 ## 5. Interview demo runbook

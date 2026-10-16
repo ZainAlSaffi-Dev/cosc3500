@@ -2089,15 +2089,25 @@ other charts are the beamer figures, cut from `deck_m2.pdf` into
 `scripts/deck_m2_svgs.py` draws every SVG and writes it into the deck between
 `<!-- svg:name -->` markers, so it can be run again after a change.
 
-The appendix opens with two manim videos in `presentation/anim_m2/`, drawn by
-`presentation/anim_m2/scenes.py`. The first goes from the Heston model to the
-PDE, one explicit Euler step, the central differences, the reciprocals and
-lines 121 and 122 of `src/stencil.cpp`. The second works one cell of the
-test grid with its real numbers, ending at 0.04959, the value the solver's
-own snapshot holds. Each press plays one section and stops on its last
-frame, from the section end times in the json file next to each video. They
-sit in the appendix because the recorded takes already run 9 minutes 43
-seconds.
+The recorded part opens with four manim videos in `presentation/anim_m2/`,
+drawn by `presentation/anim_m2/scenes.py`. `model_pde` goes from the two
+Heston processes through the expected discounted payoff and Itô's lemma to
+the PDE. `pde_code` takes one explicit Euler step with its stability limit,
+the central differences, the reciprocals and lines 121 and 122 of
+`src/stencil.cpp`. `differences` works one cell of the 421 by 51 test grid
+with its real numbers, ending at 0.04959, the value the solver's own
+snapshot holds. `full_run` is drawn from snapshots of a local run of the
+same test grid with `--dump-every`, 56,000 steps to a price of 195.6355.
+Each press plays one section and stops on its last frame, from the section
+end times in the json file next to each video. These numbers are prices
+from the test grid, so they are not benchmark numbers.
+
+Detail from the backup slides now sits on the main slides as a short note
+under a figure or an extra bullet, such as the Amdahl fit on strong scaling,
+the eager limits on the E9 slide, the float price on the rejected slide and
+the four tests on the Black-Scholes check. The profile and the optimisation
+levels share one slide. The problem, the equation table, the compiler
+alone, E1 and the step breakdown moved to the start of the appendix.
 
 ### Why
 
@@ -2108,9 +2118,10 @@ change happening.
 
 ### What to know
 
-The morph pairs and the stepped diagrams add presses, so the deck has 39
-recorded slides against the beamer's 35 frames, and the take numbers in
-`M2_SCRIPT.md` no longer match the slide numbers. The notes on each slide say
-how many presses it has. On the SIMD code slide the take now says the serial
-loop turns into the AVX2 loop, because the two loops are no longer shown one
-above the other.
+The deck has 38 recorded slides against the beamer's 35 frames, so the take
+numbers in `M2_SCRIPT.md` follow the Quarto slides now, and the notes under
+each slide hold the same words as its take. The takes are timed at 150 words
+per minute, a little faster than the 140 before because the animations carry
+the working, and the 1375 words come to 9 minutes 48 seconds. On the SIMD code slide the take says the
+serial loop turns into the AVX2 loop, because the two loops are no longer
+shown one above the other.

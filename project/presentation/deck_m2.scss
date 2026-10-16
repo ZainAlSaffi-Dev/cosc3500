@@ -258,7 +258,7 @@ $code-block-font-size: 0.6em;
   opacity: 1;
   visibility: inherit;
   transform: none;
-  transition: transform 0.9s ease;
+  transition: transform 0.6s ease;
 }
 
 .reveal .slides section .fragment.go.visible {
@@ -303,18 +303,18 @@ $code-block-font-size: 0.6em;
 .reveal .slides section.present svg.anim .bar {
   transform-box: fill-box;
   transform-origin: 50% 100%;
-  animation: deck-grow-up 0.8s ease both;
+  animation: deck-grow-up 0.5s ease both;
   animation-delay: var(--d);
 }
 
 .reveal .slides section.present svg.anim .pop {
-  animation: deck-pop 0.5s ease both;
+  animation: deck-pop 0.3s ease both;
   animation-delay: var(--d);
 }
 
 .reveal .slides section.present svg.anim .draw {
   stroke-dasharray: 1;
-  animation: deck-draw 0.9s ease both;
+  animation: deck-draw 0.5s ease both;
   animation-delay: var(--d);
 }
 
@@ -338,7 +338,7 @@ $code-block-font-size: 0.6em;
   transform-box: fill-box;
   transform-origin: 0 50%;
   transform: scaleX(0);
-  transition: transform 1s ease;
+  transition: transform 0.6s ease;
 }
 
 .reveal .slides section .fragment.visible .grow-x {
@@ -355,8 +355,30 @@ $code-block-font-size: 0.6em;
 // The stepped manim videos in the appendix.
 .reveal .slides section video.stepped {
   display: block;
-  height: 690px;
+  height: 640px;
   margin: 0 auto;
   border: 1px solid $sig-line;
   border-radius: 8px;
+}
+
+// Detail woven in from the backup slides, under a figure. It stops at 74
+// percent of the width, like the band, so the webcam corner stays empty.
+.reveal .slides section .detail {
+  width: 74%;
+  font-size: 0.6em;
+  line-height: 1.35;
+  color: $sig-ink;
+  margin-top: 0.3em;
+}
+
+.reveal .slides section .detail p {
+  margin: 0;
+}
+
+// The source line under a video.
+.reveal .slides section .vcite {
+  width: 74%;
+  font-size: 0.42em;
+  color: $sig-slate;
+  margin-top: 0.3em;
 }

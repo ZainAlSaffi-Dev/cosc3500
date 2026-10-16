@@ -346,14 +346,14 @@ def ladder_chart():
     bar_width = slot * 0.62
     for k, (name, detail, rate, total, gain) in enumerate(LADDER):
         centre = plot_left + slot * (k + 0.5)
-        delay = 0.3 + 0.55 * k
+        delay = 0.15 + 0.3 * k
         colour = GREY if k == 0 else BLUE
         top = y_of(rate)
         out.append(rect(centre - bar_width / 2, top, bar_width, plot_bottom - top, colour, "none", 0, f'class="bar" style="--d:{delay:.2f}s"'))
         labels = text(centre, top - 34, f"{rate:,}", 22, weight="700") + text(centre, top - 10, total, 20, "middle", "dim")
         if gain:
             labels += text(centre, top + 30, gain, 21, weight="700", extra='style="fill:#FFFFFF"')
-        out.append(f'<g class="pop" style="--d:{delay + 0.45:.2f}s">{labels}</g>')
+        out.append(f'<g class="pop" style="--d:{delay + 0.3:.2f}s">{labels}</g>')
         out.append(text(centre, plot_bottom + 30, name, 21))
         if detail:
             out.append(text(centre, plot_bottom + 56, detail, 19, "middle", "dim"))
@@ -389,20 +389,20 @@ def roofline(node):
     vector_peak = AVX2_PEAK_NODE if node else AVX2_PEAK_CORE
     ridge = min(vector_peak / bandwidth, x_high)
     memory_end = bandwidth * ridge
-    roofs = [(x_low, bandwidth * x_low, ridge, memory_end, INK, f"memory, {bandwidth} GB/s", 0.2)]
+    roofs = [(x_low, bandwidth * x_low, ridge, memory_end, INK, f"memory, {bandwidth} GB/s", 0.1)]
     if ridge < x_high:
-        roofs.append((ridge, vector_peak, x_high, vector_peak, INK, "", 0.7))
+        roofs.append((ridge, vector_peak, x_high, vector_peak, INK, "", 0.35))
     else:
-        roofs.append((x_low * 3, vector_peak, x_high, vector_peak, INK, "", 0.7))
+        roofs.append((x_low * 3, vector_peak, x_high, vector_peak, INK, "", 0.35))
     for x1, y1, x2, y2, colour, label, delay in roofs:
         out.append(f'<line x1="{x_of(x1):.1f}" y1="{y_of(y1):.1f}" x2="{x_of(x2):.1f}" y2="{y_of(y2):.1f}" stroke="{colour}" stroke-width="4" pathLength="1" class="draw" style="--d:{delay}s"/>')
-    out.append(f'<g class="pop" style="--d:0.9s">' + text(plot_right - 6, y_of(vector_peak) - 12, f"AVX2 FMA peak, {vector_peak:g}", 20, "end") + "</g>")
-    out.append(f'<g class="pop" style="--d:0.5s">' + text(x_of(x_low) + 12, y_of(bandwidth * x_low) - 30, f"memory roof, {bandwidth} GB/s", 20, "start",
+    out.append(f'<g class="pop" style="--d:0.5s">' + text(plot_right - 6, y_of(vector_peak) - 12, f"AVX2 FMA peak, {vector_peak:g}", 20, "end") + "</g>")
+    out.append(f'<g class="pop" style="--d:0.3s">' + text(x_of(x_low) + 12, y_of(bandwidth * x_low) - 30, f"memory roof, {bandwidth} GB/s", 20, "start",
                                                           extra=f'transform="rotate({-math.degrees(math.atan2(y_of(1) - y_of(10), x_of(10) - x_of(1))):.1f} {x_of(x_low) + 12:.1f} {y_of(bandwidth * x_low) - 30:.1f})"') + "</g>")
     if not node:
         scalar_start = SCALAR_PEAK / bandwidth
-        out.append(f'<line x1="{x_of(scalar_start):.1f}" y1="{y_of(SCALAR_PEAK):.1f}" x2="{x_of(x_high):.1f}" y2="{y_of(SCALAR_PEAK):.1f}" stroke="{SLATE}" stroke-width="3" stroke-dasharray="10 7" class="pop" style="--d:1.1s"/>')
-        out.append(f'<g class="pop" style="--d:1.1s">' + text(plot_right - 6, y_of(SCALAR_PEAK) + 26, f"scalar peak, {SCALAR_PEAK}", 20, "end", "dim") + "</g>")
+        out.append(f'<line x1="{x_of(scalar_start):.1f}" y1="{y_of(SCALAR_PEAK):.1f}" x2="{x_of(x_high):.1f}" y2="{y_of(SCALAR_PEAK):.1f}" stroke="{SLATE}" stroke-width="3" stroke-dasharray="10 7" class="pop" style="--d:0.6s"/>')
+        out.append(f'<g class="pop" style="--d:0.6s">' + text(plot_right - 6, y_of(SCALAR_PEAK) + 26, f"scalar peak, {SCALAR_PEAK}", 20, "end", "dim") + "</g>")
     kernel_x = x_of(FLOPS_PER_BYTE)
     out.append(f'<line x1="{kernel_x:.1f}" y1="{plot_top}" x2="{kernel_x:.1f}" y2="{plot_bottom}" stroke="{GREY}" stroke-width="2.5" stroke-dasharray="6 6"/>')
     out.append(text(kernel_x + 8, plot_bottom - 12, "31 / 24 = 1.29", 19, "start", "dim"))
@@ -472,7 +472,7 @@ BUILDERS = {
 
 
 # The manim videos in presentation/anim_m2/, each with a json file of section end times.
-VIDEOS = ["derivation", "differences"]
+VIDEOS = ["model_pde", "pde_code", "differences", "full_run"]
 
 
 def main():
@@ -490,7 +490,11 @@ def main():
     # The manim videos. Each one gets one empty fragment per section after the first.
     deck_folder = os.path.dirname(args.deck)
     for name in VIDEOS:
-        with open(os.path.join(deck_folder, "anim_m2", name + ".json")) as stops_file:
+        stops_path = os.path.join(deck_folder, "anim_m2", name + ".json")
+        if not os.path.exists(stops_path):
+            print(f"skipped the {name} video, {stops_path} does not exist yet")
+            continue
+        with open(stops_path) as stops_file:
             stops = json.load(stops_file)["stops"]
         stop_list = ",".join(f"{stop:.3f}" for stop in stops)
         player = f'<video class="stepped" src="anim_m2/{name}.mp4" data-stops="{stop_list}" muted playsinline preload="auto"></video>'

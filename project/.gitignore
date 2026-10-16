@@ -20,3 +20,6 @@ presentation/*.out
 presentation/*.snm
 presentation/*.toc
 presentation/*.vrb
+
+# Solver snapshots for the FullRun animation, remade from presentation/anim_m2/full_run.cfg
+presentation/anim_m2/snapshots/
