@@ -627,10 +627,9 @@ still below the serial rung's 159 at -O2.
 :::
 
 ::: {.notes}
-Before changing anything we profiled with gprof, and one function, the
-update of the interior rows, takes 99 percent of the time. The compiler alone
-takes the baseline from 11 million updates a second at O0 to 58 at O2, and
-every benchmark builds at O2, so each version measures only our change.
+Profiling with gprof shows one function, the interior row update, takes 99
+percent of the time. Every benchmark builds at O2, where the baseline runs at
+58 million updates a second, so each version measures only our change.
 :::
 
 ## The ladder
@@ -939,7 +938,9 @@ serial.
 
 ::: {.small}
 With only `-mavx2`, g++ 8.5 tunes for a generic x86 and compiles every
-unaligned 256 bit load as two 128 bit loads.
+unaligned 256 bit load as two 128 bit loads. With the same flags, the
+compiler's own vectorised serial row reaches 77 percent of the hand-written
+AVX2 row.
 :::
 
 ```{.makefile filename="Makefile, line 23"}
@@ -957,11 +958,9 @@ in this video uses them.
 ::: {.notes}
 *Point at the two bars, then at the vinsertf128 lines.*
 
-Our first build ran this at 387, and the disassembly showed that g++ 8.5,
-with only the AVX2 flag, splits every unaligned 256 bit load into two 128
-bit loads. Two extra flags make each a single load, for 1.19 times the
-speed, and every number here uses them. Given the same AVX2 flags, the
-compiler's own version of the serial row only reaches 77 percent of ours.
+Our first build ran this at 387, because g++ 8.5 split every unaligned 256
+bit load into two 128 bit loads. Two flags make each a single load, for 1.19
+times the speed, and every number here uses them.
 :::
 
 ## SIMD on the roofline
@@ -1322,10 +1321,9 @@ memory, Red Hat, 2007, section 5 on NUMA.]{.cite}
 ::: {.notes}
 *Point at the 4096 pair on the left, then the two pairs on the right.*
 
-On the big grid, 12 threads gave 1894 on one socket and 3413 on both.
-Linux places each page in the memory of the socket whose thread first
-writes it, and our main thread fills the grid, so every page is on socket 0.
-Interleaving the pages made 24 threads 1.74 times faster.
+On the big grid, 12 threads gave 1894 on one socket and 3413 on both. The
+main thread writes every page first, so all of them sit on socket 0, and
+interleaving them made 24 threads 1.74 times faster.
 :::
 
 ## MPI, one block of rows per process
@@ -1385,7 +1383,7 @@ Interleaving the pages made 24 threads 1.74 times faster.
 ::: {.small}
 - Each process owns a block of rows and keeps its own copy of the grid.
 - To update its first and last rows it needs one row from each neighbour,
-  held in its copied rows.
+  held in its copied rows, called ghost rows.
 - So every step each process sends its edge rows and receives its
   neighbours'.
 - `rows_for_rank` gives the first processes one extra row when the rows do
@@ -1668,16 +1666,18 @@ the price by 4 cents and gamma by 12 percent, so we rejected it.
 ::: {.small}
 - Serial reached the scalar peak, so the next gain came from SIMD, and
   unsplit 256 bit loads added {{< meta n.split_gain_one >}}x.
-- Threads took the big grid onto the memory roof of 68 GB/s.
-- Across nodes the exchange is the limit, and overlapping it only helps when
-  the library sends the row immediately.
+- On 24 threads the 4096 x 1024 grid reached the DRAM bandwidth roof of
+  68 GB/s, so it is memory bound.
+- Across nodes the ghost row exchange is the limit, and overlapping it helps
+  only when Open MPI sends the row eagerly at `MPI_Isend`.
 :::
 :::
 ::::
 
 ::: {.band}
-Of the six hypotheses four held, two nodes were efficient only on the big
-grid, and the serial boundary grew with the threads.
+Four of the six hypotheses held. Two nodes were above 80 percent efficient
+only on 4096 x 1024, and the serial boundary update grew to
+{{< meta n.boundary_share >}} percent of a step at 24 threads.
 :::
 
 ::: {.notes}
@@ -1694,35 +1694,42 @@ exchange is the main limit. Four of our six hypotheses held.
 ::: {.blk}
 [What surprised me]{.bt}
 
-- g++ split every unaligned AVX2 load into two 128 bit loads, and the two
-  flags that stop this made simd {{< meta n.split_gain_one >}}x faster.
-- Serial and simd ran up to 2.7x slower on a grid whose two buffers sit
-  exactly $2^{24}$ bytes apart.
-- Huge pages, denormals and page placement moved the rates as much as some
-  optimisations did.
+- With only `-mavx2`, g++ 8.5 compiled every unaligned 256 bit load as two
+  128 bit loads. Adding `-mno-avx256-split-unaligned-load` and its store
+  partner made simd {{< meta n.split_gain_one >}}x faster.
+- Serial and simd ran up to 2.7x slower on grids whose `current` and `next`
+  buffers start exactly $2^{24}$ bytes (16 MiB) apart. The hardware cause is
+  still unknown.
+- Transparent huge pages, flushing denormal numbers to zero and NUMA
+  first-touch page placement each moved the rates as much as some code
+  changes did.
 :::
 
 ::: {.blk}
 [What I would do next]{.bt}
 
-- Keep only each process's own rows in memory, so the grid can outgrow one
-  node.
-- Raise Open MPI's shared memory eager limit, to test why E9 only helped
-  across nodes.
-- Try an implicit scheme for longer timesteps, and a GPU version of the row
-  update.
+- Every rank allocates the whole grid today, so one node's memory caps the
+  grid size. Allocating only the rank's own rows plus one ghost row on each
+  side lets the grid grow with the number of nodes.
+- Set `OMPI_MCA_btl_vader_eager_limit` above the 16 KiB row size, so rows
+  inside a node are sent eagerly, to test why E9 helped only between nodes.
+- An implicit or ADI scheme has no explicit stability limit on $\Delta t$,
+  at the cost of linear solves each step. A CUDA kernel for the row update.
 :::
 :::
 
 ::: {.band}
-Settings outside the code changed the results as much as some code changes,
-so every result file records the node, compiler and flags.
+Compiler flags, the memory allocator and the floating point control register
+changed the rates as much as some code changes, so every result file records
+the node, compiler and flags.
 :::
 
 ::: {.notes}
-Looking back, I was surprised how much build and system settings changed
-the results, from split loads to huge pages. Next I'd store only each
-process's own rows, test our E9 explanation, and try a GPU version.
+Build and system settings moved the rates as much as some code changes, from
+split loads to huge pages. Next, each rank would allocate only its own rows
+plus two ghost rows, so the grid can be bigger than one node's memory. We'd
+also test the eager limit behind E9, and try an implicit scheme and a GPU
+version.
 :::
 
 ## {{< meta n.x_mpi_one >}}x on one node, {{< meta n.x_mpi_two >}}x on two, the same answer on every rung {.closing}

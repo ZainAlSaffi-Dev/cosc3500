@@ -9,8 +9,8 @@ start time and the length of the take, worked out from its word count at 150
 words per minute plus a second for each slide in it. That is a little faster
 than the 140 words per minute used before, because the animations show the
 working while the take is spoken, although the Milestone 1 marker found the
-delivery fast, so the numbers still need to be said slowly. The 1375
-words come to 9:48, and the assessors stop watching at 10 minutes. If a
+delivery fast, so the numbers still need to be said slowly. The 1339
+words come to 9:34, and the assessors stop watching at 10 minutes. If a
 take runs long when spoken, cut words from it and keep the pace.
 
 The takes are written to be spoken. They use "we" for the work, as a paper
@@ -151,16 +151,15 @@ sbatch, after the tests pass in the same job. We discarded our
 first sweeps because denormal numbers slowed some versions, and reran
 everything with them flushed to zero.
 
-## 3:06 Where the time goes (0:22)
+## 3:06 Where the time goes (0:16)
 
 On screen, slide 11.
 
-Before changing anything we profiled with gprof, and one function, the
-update of the interior rows, takes 99 percent of the time. The compiler alone
-takes the baseline from 11 million updates a second at O0 to 58 at O2, and
-every benchmark builds at O2, so each version measures only our change.
+Profiling with gprof shows one function, the interior row update, takes 99
+percent of the time. Every benchmark builds at O2, where the baseline runs at
+58 million updates a second, so each version measures only our change.
 
-## 3:28 The ladder (0:13)
+## 3:22 The ladder (0:13)
 
 On screen, slide 12. The bars grow on their own. Point along them from left to right.
 
@@ -168,7 +167,7 @@ The ladder adds one technique per version, and each version must match the
 baseline before it's timed, while the number in each bar is the gain over
 the version below.
 
-## 3:41 The serial rung (0:22)
+## 3:35 The serial rung (0:22)
 
 On screen, slides 13 to 14. Point at a division, then press next. The code changes into the serial rung, then one more press grows the bar. On slide 14, press next for the bar.
 
@@ -177,7 +176,7 @@ turn that into a multiplication by the reciprocal, because the rounding can
 differ in the last bit, so we did it by hand, once per solve, for 159 million updates a
 second, 2.8 times the baseline.
 
-## 4:02 SIMD, four cells per instruction (0:15)
+## 3:56 SIMD, four cells per instruction (0:15)
 
 On screen, slide 15. Four clicks: the loads, then each group of four, then the scalar cell.
 
@@ -185,7 +184,7 @@ Serial was already at 96 percent of the scalar peak, so next we used vector
 instructions. An AVX2 register holds four doubles, and neighbouring cells
 use the same formula, so one instruction updates four cells.
 
-## 4:17 SIMD code, before and after (0:17)
+## 4:11 SIMD code, before and after (0:17)
 
 On screen, slides 16 to 17. Point at the loads, then press next. The serial loop turns into the AVX2 loop. Three more presses highlight the loads, the fused multiply-add and store, and the counter, and the last press grows the bar.
 
@@ -193,17 +192,15 @@ The serial loop turns into the AVX2 loop. Each scalar load
 becomes a load of four doubles, the update becomes one fused multiply-add, and the counter
 goes up by four. This runs at 456, 2.9 times serial.
 
-## 4:34 The compiler was splitting the loads (0:28)
+## 4:28 The compiler was splitting the loads (0:17)
 
 On screen, slide 18. Point at the two bars, then at the vinsertf128 lines.
 
-Our first build ran this at 387, and the disassembly showed that g++ 8.5,
-with only the AVX2 flag, splits every unaligned 256 bit load into two 128
-bit loads. Two extra flags make each a single load, for 1.19 times the
-speed, and every number here uses them. Given the same AVX2 flags, the
-compiler's own version of the serial row only reaches 77 percent of ours.
+Our first build ran this at 387, because g++ 8.5 split every unaligned 256
+bit load into two 128 bit loads. Two flags make each a single load, for 1.19
+times the speed, and every number here uses them.
 
-## 5:02 SIMD on the roofline (0:13)
+## 4:45 SIMD on the roofline (0:13)
 
 On screen, slide 19. The roofs draw on their own. Press next for serial, next for simd rising above it, next for the big grid.
 
@@ -211,7 +208,7 @@ On the one-core roofline, serial is at the scalar peak. SIMD reaches 14
 gigaflops, a third of the AVX2 ceiling and just below the memory roof of
 one core.
 
-## 5:15 OpenMP, one block of rows per thread (0:16)
+## 4:57 OpenMP, one block of rows per thread (0:16)
 
 On screen, slide 20. Four clicks: the bands, the barrier, the boundaries, the swap.
 
@@ -219,14 +216,14 @@ With OpenMP each thread gets a contiguous block of rows. The threads read
 the old buffer and write only their own rows, so there are no data races
 and no locks. Then the main thread updates the boundaries.
 
-## 5:31 OpenMP code (0:11)
+## 5:14 OpenMP code (0:11)
 
 On screen, slides 21 to 22. Press next and the pragma appears above the same loop. One more press grows the bar.
 
 The code change is one pragma above the row loop. On 24 cores this gives
 6367 million updates a second, 14 times SIMD.
 
-## 5:42 Strong scaling (0:23)
+## 5:25 Strong scaling (0:23)
 
 On screen, slide 23.
 
@@ -235,7 +232,7 @@ serial fraction of 2.4 percent. The boundaries are only 0.4 percent of a
 one-thread step, so most of that is the fork and barrier every step and the
 shared caches, while at 24 threads the boundaries grow to 9 percent.
 
-## 6:05 Weak scaling (0:16)
+## 5:47 Weak scaling (0:16)
 
 On screen, slide 24.
 
@@ -243,7 +240,7 @@ For weak scaling each thread keeps 21 rows, so the grid grows with the
 threads. The step time goes from 0.11 to 0.17 milliseconds, a scaled
 speedup of 16 on 24 threads, below Gustafson's prediction of 22.
 
-## 6:21 Grid size (0:16)
+## 6:03 Grid size (0:16)
 
 On screen, slide 25.
 
@@ -251,7 +248,7 @@ Small grids are dominated by the fixed cost of each step. While both
 buffers fit in the two L3 caches, 24 threads run 40 times serial, and at
 4096 by 1024, where they don't fit, the rate halves.
 
-## 6:37 After threads, memory bandwidth (0:13)
+## 6:19 After threads, memory bandwidth (0:13)
 
 On screen, slide 26. Press next for one core of simd, next for 24 threads rising, next for the big grid on the memory roof.
 
@@ -259,16 +256,15 @@ On the node roofline the small grid runs above the memory roof, because it
 fits in L3. The big grid is on the memory roof, so it's
 limited by memory bandwidth.
 
-## 6:50 Placement (0:22)
+## 6:33 Placement (0:17)
 
 On screen, slide 27. Point at the 4096 pair on the left, then the two pairs on the right.
 
-On the big grid, 12 threads gave 1894 on one socket and 3413 on both.
-Linux places each page in the memory of the socket whose thread first
-writes it, and our main thread fills the grid, so every page is on socket 0.
-Interleaving the pages made 24 threads 1.74 times faster.
+On the big grid, 12 threads gave 1894 on one socket and 3413 on both. The
+main thread writes every page first, so all of them sit on socket 0, and
+interleaving them made 24 threads 1.74 times faster.
 
-## 7:13 MPI, one block of rows per process (0:18)
+## 6:49 MPI, one block of rows per process (0:18)
 
 On screen, slide 28. Four clicks: the owned rows, the edge rows, the exchange, the wait.
 
@@ -277,7 +273,7 @@ and last rows to its neighbours and receives theirs into its copied rows.
 With one process per socket, each fills its own grid, so its pages are
 local.
 
-## 7:31 MPI code, the time loop (0:23)
+## 7:08 MPI code, the time loop (0:23)
 
 On screen, slides 29 to 31. Press next and the loop changes into the MPI loop. Then one press per marked line, and a last press for the bars. On slide 31, three presses, the receive, the send, the wait.
 
@@ -286,7 +282,7 @@ those rows and its own boundaries. The exchange is non-blocking, with MPI
 Irecv posted before MPI Isend, and MPI Waitall blocks until both finish, then
 at the end MPI Gatherv collects the blocks onto process 0.
 
-## 7:54 Hybrid layouts (0:20)
+## 7:31 Hybrid layouts (0:20)
 
 On screen, slide 32.
 
@@ -295,7 +291,7 @@ process of 24 threads. Two nodes give
 1.21 times one node on the small grid and 1.64 on the big one, and on the
 small grid the exchange takes 40 percent of each step.
 
-## 8:14 Overlapping the exchange with the update (0:23)
+## 7:51 Overlapping the exchange with the update (0:23)
 
 On screen, slide 33. Point at the tall blue bar.
 
@@ -305,14 +301,14 @@ with one process per node, at 1.41 times. We suspect that within a node
 Open MPI waits for the receiver to call MPI Waitall before it transfers a
 16 kibibyte row.
 
-## 8:37 Same answer on every rung (0:13)
+## 8:14 Same answer on every rung (0:13)
 
 On screen, slide 34.
 
 No version was timed until it matched the baseline. Every version is within
 3.3 times 10 to the minus 15, and OpenMP and MPI match SIMD bit for bit.
 
-## 8:50 Tried and rejected (0:15)
+## 8:26 Tried and rejected (0:15)
 
 On screen, slide 35.
 
@@ -320,7 +316,7 @@ We tested these variants against OpenMP. Dynamic scheduling was slower,
 because every row costs the same. Float was faster, but it moved
 the price by 4 cents and gamma by 12 percent, so we rejected it.
 
-## 9:05 Conclusion (0:17)
+## 8:42 Conclusion (0:17)
 
 On screen, slide 36.
 
@@ -328,15 +324,17 @@ To conclude, we reached 123 times the baseline on one node and 147 on two.
 Most of that is the result of SIMD and threads, and across nodes the
 exchange is the main limit. Four of our six hypotheses held.
 
-## 9:22 What surprised me, and what I would do next (0:16)
+## 8:59 What surprised me, and what I would do next (0:25)
 
 On screen, slide 37.
 
-Looking back, I was surprised how much build and system settings changed
-the results, from split loads to huge pages. Next I'd store only each
-process's own rows, test our E9 explanation, and try a GPU version.
+Build and system settings moved the rates as much as some code changes, from
+split loads to huge pages. Next, each rank would allocate only its own rows
+plus two ghost rows, so the grid can be bigger than one node's memory. We'd
+also test the eager limit behind E9, and try an implicit scheme and a GPU
+version.
 
-## 9:38 Close (0:10)
+## 9:23 Close (0:10)
 
 On screen, slide 38.
 

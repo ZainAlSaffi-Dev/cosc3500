@@ -2122,6 +2122,13 @@ The deck has 38 recorded slides against the beamer's 35 frames, so the take
 numbers in `M2_SCRIPT.md` follow the Quarto slides now, and the notes under
 each slide hold the same words as its take. The takes are timed at 150 words
 per minute, a little faster than the 140 before because the animations carry
-the working, and the 1375 words come to 9 minutes 48 seconds. On the SIMD code slide the take says the
+the working, and the 1339 words come to 9 minutes 34 seconds. The takes on where the time goes, the split loads and placement were cut by about 20 seconds, and the detail they dropped stays on screen, with the compiler's 77 percent moved onto the split loads slide. On the SIMD code slide the take says the
 serial loop turns into the AVX2 loop, because the two loops are no longer
 shown one above the other.
+
+The reflection slide names each item by its technical term. Every rank
+allocates the whole grid, so one node's memory caps the grid size, and the
+next step is allocating only the rank's own rows plus one ghost row on each
+side. The E9 test is setting `OMPI_MCA_btl_vader_eager_limit` above the
+16 KiB row. The MPI rows slide gives the copied rows their textbook name,
+ghost rows, once, so the conclusion and the reflection slide can use it.
