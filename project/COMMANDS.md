@@ -302,6 +302,19 @@ The first line redraws the animated SVG diagrams and charts inside
 `deck_m2.qmd`, and puts in the four manim videos with their section end times.
 Run it after changing a number or a drawing in the script.
 
+On Windows through WSL, run these from the project folder of the clone. The
+last line opens the deck in the default Windows browser, because `wslpath -w`
+turns the Linux path into a Windows path for `explorer.exe`. The render line
+is only needed after changing `deck_m2.qmd`, and it needs the Linux Quarto
+package from quarto.org installed first with `sudo apt install
+./quarto-*-linux-amd64.deb`, and an internet connection for MathJax.
+
+```bash
+cd presentation
+quarto render deck_m2.qmd
+explorer.exe "$(wslpath -w deck_m2.html)"
+```
+
 The four manim videos in the opening of the deck are rendered from
 `presentation/anim_m2/scenes.py`. The comment at the top of that file has
 the exact render commands, the copy step and the step that writes each json
@@ -376,3 +389,10 @@ Have these files open in the editor, in this order. They are
 `src/stencil.cpp` (`update_cells_scalar`), `src/stencil_avx.cpp` (the FMA
 lines), `src/solver_omp.cpp` (the pragma), `src/solver_mpi.cpp`
 (`exchange_edge_rows`) and `results/m2/f1_ladder.png`.
+
+
+## To run the whole deck (mac)
+
+```bash
+open -a Safari /Users/zer0/Documents/Documents/courses/cosc3500/project/presentation/deck_m2.html
+```
