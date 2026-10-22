@@ -1073,17 +1073,32 @@ window.addEventListener("load", function () {
     var run = (video.runNumber || 0) + 1;
     video.runNumber = run;
     clearInterval(video.checkTimer);
-    video.currentTime = start;
-    video.play();
-    video.checkTimer = setInterval(function () {
+    // Seek only when the video is away from the section start, because Safari stops drawing new frames after a seek to the spot it already shows.
+    if (Math.abs(video.currentTime - start) > 0.05) {
+      video.currentTime = start;
+    }
+    // Starts playback and pauses at the end of the section.
+    // A newer call changes runNumber, so this one does nothing.
+    function startPlaying() {
       if (video.runNumber !== run) {
-        clearInterval(video.checkTimer);
-      } else if (video.currentTime >= end) {
-        clearInterval(video.checkTimer);
-        video.pause();
-        video.currentTime = end;
+        return;
       }
-    }, 20);
+      video.play();
+      video.checkTimer = setInterval(function () {
+        if (video.runNumber !== run) {
+          clearInterval(video.checkTimer);
+        } else if (video.currentTime >= end || video.ended) {
+          clearInterval(video.checkTimer);
+          video.pause();
+        }
+      }, 20);
+    }
+    // Wait for a running seek to finish before playing.
+    if (video.seeking) {
+      video.addEventListener("seeked", startPlaying, { once: true });
+    } else {
+      startPlaying();
+    }
   }
   function playCurrentStep(slide) {
     var video = slide.querySelector("video.stepped");

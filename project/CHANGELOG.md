@@ -2132,3 +2132,26 @@ next step is allocating only the rank's own rows plus one ghost row on each
 side. The E9 test is setting `OMPI_MCA_btl_vader_eager_limit` above the
 16 KiB row. The MPI rows slide gives the copied rows their textbook name,
 ghost rows, once, so the conclusion and the reflection slide can use it.
+
+The stepped videos froze in Safari 26.6 on slide 5, One cell with real
+numbers, during the fourth section, the new value. The video clock kept
+running but the picture stopped. Every key press set `currentTime` to the
+section start and called `play()` straight away, while the video already sat
+at that time from the end of the last section. In a test in Safari that drew
+the video into a canvas every 50 ms, the fourth section showed 12 different
+pictures this way, against 66 when the seek was skipped. The video file and
+the Mac were checked too. One core decodes the 1600 by 900 video at about
+1760 frames a second, and the video played through without a stall when
+nothing seeked.
+
+`playSection` now seeks only when the video is more than 0.05 s from the
+section start, and it waits for the `seeked` event before playing when a seek
+is running. It no longer sets `currentTime` back to the section end after the
+pause, because that was a second seek. The section end check also accepts
+`ended`, because the last stop of `differences.mp4`, 17.533 s, is a fraction
+past the end of the video at 17.5327 s. Three passes over slide 5 in Safari
+gave 66 to 67 pictures in the fourth section, finishing in 4.4 s.
+
+`differences.mp4` also has frame times that drift 10 ticks of 1/15360 s off
+the 30 frames a second grid from frame 174 on. It played through cleanly in
+Safari, so the file was left as it is.
