@@ -1061,7 +1061,7 @@ margin-right: 0; }
 <p>Zain Al-Saffi, 48008361</p>
 <p><span class="sub">COSC3500 Milestone 2, October 2026</span></p>
 <aside class="notes">
-<p>Hi, I’m Zain. In this video I’ll show how we price an option on a grid, and how we made it 123 times faster on one rangpur node, with the same answer from every version.</p>
+<p>Hi, I’m Zain. This video shows how we price an option on a grid, and how we made it 123 times faster on one rangpur node.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1276,7 +1276,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Four presses, the share price terms, the volatility terms, the last two, then the steps back from expiry.</em></p>
-<p>In the Heston model the share price and its volatility both move randomly, and the option value V follows this PDE. These terms come from the share price, these from the volatility, and the last two say the two move together and that money later is worth less. We only know V at expiry, where it’s the payoff, so we start there and step back to today.</p>
+<p>In the Heston model the share price and its volatility both move randomly, and the option value V follows this PDE. These terms come from the share price, these from the volatility, and the last two say the two move together and that money later is worth less. We only know V at expiry, the payoff, so we step back from there to today.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1372,7 +1372,7 @@ display:block!important;
 <!-- /svg:differences -->
 <aside class="notes">
 <p><em>The PDE moves to the top. Four presses, the slope, the curvature, north and south, the corners.</em></p>
-<p>To solve it we put V on a grid of share price by variance, and replace each derivative with a difference of neighbouring cells. At 5250 on the first step back, the slope, east minus west over two spacings, is 0.5, and the curvature, how fast that slope changes, is 0.02. Every row starts as the same payoff, so the other differences are 0.</p>
+<p>To solve it we put V on a grid of share price by variance, and replace each derivative with a difference of neighbouring cells. At 5250 on the first step back, the slope is 0.5, and the curvature, how fast that slope changes, is 0.02. Every row starts as the same payoff, so the other differences are 0.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1580,7 +1580,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Point at the payoff, the red block, then the red cell. Six clicks, three cells, the rest of the row, the other rows, the swap.</em></p>
-<p>Every interior cell reads nine cells of the old buffer and writes one cell of the new one. No cell reads a value written in the same step, so the cells can be computed in any order, and that’s what lets us split them up. Then the two buffers swap pointers.</p>
+<p>Every interior cell reads nine cells of the old buffer and writes one cell of the new one. No cell reads a value written in the same step, so the cells can be computed in any order, and that’s what lets us split them up.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1709,7 +1709,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Three presses, 1 and 9 days, 37 days, today.</em></p>
-<p>A full run on this test grid is 56,000 steps, and the payoff’s corner smooths out as we step back. The full grid gives 196.17, within a tenth of a cent of the Fourier price, and with no volatility of volatility the solver matches Black-Scholes to 4 cents.</p>
+<p>A full run on this test grid is 56,000 steps. The full grid gives 196.17, within a tenth of a cent of the Fourier price, and with no volatility of volatility the solver matches Black-Scholes to 4 cents.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1788,7 +1788,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Four presses, one box each of the rate sum.</em></p>
-<p>A cell update is one cell’s new value in one step. A million cells over 2000 steps is 2.1 billion updates, and in 13.2 seconds that’s 159 million a second. Every rate is the median of 5 runs on one rangpur node that no other job shares. We reran our first round because denormal numbers slowed some versions.</p>
+<p>A cell update is one cell’s new value in one step. A million cells over 2000 steps is 2.1 billion updates, and in 13.2 seconds that’s 159 million a second. Every rate is the median of 5 runs on one rangpur node that no other job shares.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1822,7 +1822,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Same take, continued. Press next for the slide. Point at the tall bar of the profile.</em></p>
-<p>gprof shows the interior row update takes 99 percent of the time, so every version speeds up that one function.</p>
+<p>gprof shows one function takes 99 percent of the time, so that’s what every version speeds up.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1986,7 +1986,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Four clicks, the loads, then each group of four, then the scalar cell.</em></p>
-<p>Serial already ran at 96 percent of one core’s scalar peak, so the next gain had to come from vector instructions. An AVX2 register holds four doubles, and neighbouring cells run the same formula, so one instruction updates four cells.</p>
+<p>Serial was already at 96 percent of the scalar peak, so next we went to vector instructions. An AVX2 register holds four doubles, and neighbouring cells run the same formula, so one instruction updates four cells.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2208,7 +2208,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Point at the 24 thread point, then the dashed Amdahl curve.</em></p>
-<p>Strong scaling keeps the grid the same and adds threads. If every part of a step could be split, 24 threads would be 24 times faster, and we measured 13.9. Amdahl’s law explains the gap. Any part that runs on one thread takes the same time however many threads we add, so it caps the speedup. Fitting the law gives a serial fraction of 2.4 percent. The boundary update, the only code on one thread, is 0.4 percent. The rest is the threads waiting at the barrier every step and sharing each socket’s cache.</p>
+<p>Strong scaling keeps the grid the same and adds threads. Ideally 24 threads would be 24 times faster. We measured 13.9. Amdahl’s law explains the gap. Any part that runs on one thread takes the same time however many threads we add, so it caps the speedup. Fitting the law gives a serial fraction of 2.4 percent. The boundary update, the only code on one thread, is 0.4 percent. The rest is the threads waiting at the barrier every step and sharing each socket’s cache.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2238,7 +2238,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Point at the step time line, then the scaled speedup against the Gustafson line.</em></p>
-<p>Weak scaling asks, if each thread brings its own share of work, does the step time stay flat? Every thread gets 21 rows, so 24 threads solve 504 rows, a grid 24 times bigger. The step time rose from 0.11 to 0.17 milliseconds, so 24 threads do 24 times the work in 1.5 times the time, a scaled speedup of 16. Gustafson’s law predicts 22 from our 9 percent serial share. We fall short because one thread has a whole socket’s cache and bandwidth to itself, and 24 threads share them.</p>
+<p>Weak scaling gives each thread its own 21 rows, so 24 threads solve a grid 24 times bigger. Does the step time stay flat? The step time rose from 0.11 to 0.17 milliseconds, so 24 threads do 24 times the work in 1.5 times the time, a scaled speedup of 16. Gustafson’s law predicts 22 from our 9 percent serial share. We fall short because one thread has a whole socket’s cache and bandwidth to itself, and 24 threads share them.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2267,7 +2267,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Point at the omp line where it drops.</em></p>
-<p>While both buffers fit in the two 30 mebibyte L3 caches, 24 threads run 40 times serial. At 4096 by 1024 they no longer fit, and the rate halves.</p>
+<p>While both buffers fit in the L3 caches, 24 threads run 40 times serial. At 4096 by 1024 they no longer fit, and the rate halves.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2408,7 +2408,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Four clicks, the owned rows, the edge rows, the exchange, the wait.</em></p>
-<p>To use more than one node we need MPI, where each process has its own memory. Each process owns a block of rows. To update its first row it needs the last row of the process below, so every step each process sends its edge rows to its neighbours and receives theirs into an extra row at each end, called a ghost row.</p>
+<p>To go past one node we need MPI, and each MPI process has its own memory. So each process gets a block of rows. Its first row needs the row below it, which another process owns. So every step, each process sends its edge rows to its neighbours and receives theirs into an extra row, called a ghost row.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2454,7 +2454,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Same take, continued. Press next for the code. Three presses, the receive, the send, the wait.</em></p>
-<p>In the code the receive is posted before the send, both return straight away, and MPI Waitall blocks until both finish.</p>
+<p>In the code we post the receive, then the send, and MPI Waitall waits for both.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2483,8 +2483,8 @@ display:block!important;
 <p><span class="cite">Pages and sockets, U. Drepper, What every programmer should know about memory, Red Hat, 2007, section 5 on NUMA.</span></p>
 </div>
 <aside class="notes">
-<p><em>Point at the pages on socket 0 bar, then the numactl bar, then the MPI bar.</em></p>
-<p>MPI helped on one node too, because of where memory sits. Each socket has its own memory, and Linux puts each page on the socket whose thread first writes it. In the OpenMP version the main thread fills the grid, so every page sits on socket 0. Spreading the pages over both sockets made the big grid 1.74 times faster, and one MPI process per socket, each filling its own copy, made it 2.28 times faster.</p>
+<p><em>Point at the pages on socket 0 bar, then the MPI bar.</em></p>
+<p>MPI helped on one node too. Each socket has its own memory, and Linux puts a page on the socket that writes it first. In OpenMP the main thread fills the grid, so every page lands on socket 0. With one MPI process per socket, each fills its own copy, so its pages stay local. That made the big grid 2.28 times faster.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2513,7 +2513,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Same take, continued. Press next for the slide. Point at the two node bars, then the white exchange shares.</em></p>
-<p>Across two nodes we get 1.21 times one node on the small grid and 1.64 on the big one, because on the small grid the exchange takes 40 percent of each step.</p>
+<p>Two nodes give 1.21 times on the small grid and 1.64 on the big one. The small grid gains less because the exchange is 40 percent of each step.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2575,7 +2575,7 @@ display:block!important;
 <p>No version was timed until it matched, and every benchmark job reran these tests before timing anything.</p>
 </div>
 <aside class="notes">
-<p>No version was timed until it matched the baseline. Every version is within 3.3 times 10 to the minus 15, and OpenMP and MPI match SIMD bit for bit, because they split the same row updates.</p>
+<p>No version was timed until it matched the baseline, and every version agrees to within 3.3 times 10 to the minus 15.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2702,7 +2702,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Point at each block in turn.</em></p>
-<p>What surprised me most was how much the build and the system mattered. Two compiler flags alone gave SIMD 1.19 times. If I started again, I’d flush denormals before the first sweep. A denormal is a double below about 2.2 times 10 to the minus 308, and this CPU spends tens of extra cycles on every operation that touches one. Next, each MPI process would hold only its own rows plus one ghost row from each neighbour. That cuts each process on two nodes from 16 to about 4 mebibytes, so the grid can grow with the nodes.</p>
+<p>What surprised me most was that two compiler flags alone gave SIMD 1.19 times. If I started again, I’d flush denormals before the first sweep. A denormal is a double below about 2.2 times 10 to the minus 308, and this CPU spends tens of extra cycles on every operation that touches one. Next, each MPI process would hold only its own rows plus one ghost row from each neighbour. That cuts each process from 16 to 4 mebibytes on two nodes, so the grid can grow.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;

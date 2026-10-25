@@ -2348,3 +2348,25 @@ The script comes to 9 minutes 46 seconds, 1385 words, plus the hold on the
 AI declaration. `presentation/INTERVIEW.md` sections 4b, 4c and 8 and the
 README map follow the new order, and the appendix is numbered A1 to A45 with
 the anchor for each slide.
+
+### Takes retimed at the measured speaking pace
+
+Two timed run-throughs reached the reflection slide at 9:45 to 9:50, so the
+real pace is about 136 words a minute, against the 150 the script assumed.
+At that pace the video would have ended near 10:37. The script is now timed
+at 136 words a minute and cut from 1385 to 1261 words, so it ends at 9:48
+plus the hold on the AI declaration, with the reflection starting at 9:01.
+
+The MPI and placement takes were the slowest to say, so they are rewritten
+as shorter plain sentences that follow one another. The MPI take says each
+process gets a block of rows, its first row needs the row below it from
+another process, so each step it sends its edge rows and receives its
+neighbours' into a ghost row. The placement take drops the 1.74x interleave
+result, which stays on the figure, and goes straight from every page on
+socket 0 to one MPI process per socket at 2.28x.
+
+The other cuts drop what the slide already shows. These are the slope
+formula on the finite differences slide, the smoothing on the full run, the
+denormal rerun in the measurement take (the reflection defines denormals),
+the bit-for-bit match on the same answer slide, the 504 rows in weak scaling,
+the buffer swap on the one step slide, and a shorter title and reflection.

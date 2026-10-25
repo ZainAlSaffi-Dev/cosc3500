@@ -579,8 +579,8 @@ Each question has a full answer in the place named after it. "HPC" means
   `quarto render deck_m2.qmd`. It has 32 recorded slides in 19 takes, the
   divider and 45 backup slides. `make slides-m2` still builds the older
   beamer PDF, `deck_m2.pdf`, which no longer matches the video.
-- The script runs 9:46 at 150 words a minute, plus 2 seconds holding the AI
-  declaration.
+- The script runs 9:48 at 136 words a minute, the pace of two timed
+  run-throughs, plus 2 seconds holding the AI declaration.
 - Still open are the date, the room and any rules for the interview from the
   course FAQ and profile, recording the video, and `make package` once the
   figures are final.
