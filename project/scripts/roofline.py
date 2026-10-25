@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# AI declaration
+# I used Claude, an AI assistant made by Anthropic, while working on this file.
+# It helped me debug the code, draft pseudocode and implement it.
+
 """Roofline for the Heston kernel (PLAN P7): is it compute- or memory-bound?
 
 The optimisation story rests on the claim that the kernel is memory-bound, so

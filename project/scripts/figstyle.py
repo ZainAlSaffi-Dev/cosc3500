@@ -1,3 +1,7 @@
+# AI declaration
+# I used Claude, an AI assistant made by Anthropic, while working on this file.
+# It helped me debug the code, draft pseudocode and implement it.
+
 """Shared look for every figure in the project.
 
 Each plotting script imports this and calls apply() once before drawing, so

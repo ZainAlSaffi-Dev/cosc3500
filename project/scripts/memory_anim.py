@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# AI declaration
+# I used Claude, an AI assistant made by Anthropic, while working on this file.
+# It helped me debug the code, draft pseudocode and implement it.
+
 """Memory-behaviour animations (PLAN P7): why loop order and layout dominate.
 
 Two styles, both driven by the same flat layout the solver actually uses

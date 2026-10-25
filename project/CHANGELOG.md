@@ -2155,3 +2155,81 @@ gave 66 to 67 pictures in the fourth section, finishing in 4.4 s.
 `differences.mp4` also has frame times that drift 10 ticks of 1/15360 s off
 the 30 frames a second grid from frame 174 on. It played through cleanly in
 Safari, so the file was left as it is.
+
+### The opening as stepped diagrams
+
+The lecturers said the slides do not need to be heavy on notation from the
+start. The opening can show the PDE once and rely on diagrams of how a
+finite difference is worked out and why each part of the method is needed.
+The four manim videos also needed the stepped video player and its Safari
+fix. The opening now keeps the order of the videos, from the model to the
+PDE, the differences, the C++ and the real numbers, and draws each part as a
+stepped SVG or an auto-animate move, the same as the grid step and the code
+slides. One key press shows one step.
+
+Slides 3 to 8 now run as follows.
+
+What an option is starts from today's price of 5200 and the strike line at
+5250. One path ends at 5700 and the option pays 450. One path ends at 5000,
+below the strike, so nobody buys and it pays 0. The payoff line max(S - K, 0)
+then joins every ending price to what it pays, eight more paths show that
+the path is unknown, and the price is the average payoff discounted back to
+today. The paths come from a seeded Euler simulation in
+`scripts/deck_m2_svgs.py` with the deck's Heston parameters, picked from 4000
+so the two examples end at 5700 and 5000. They are an illustration and not
+output of the solver.
+
+From the model to the PDE shows the PDE as a row of six coloured terms. The
+presses label the share price terms, the volatility terms, then the
+correlation and the discounting, in plain words, and the last press shows
+five grids solved one step back at a time from the payoff at expiry.
+
+Finite differences on one cell moves the PDE to the top of the slide with
+auto-animate, each term keeping its colour. It works the cell at S = 5250,
+v = 0.04 of the test grid at expiry, where west, centre and east hold 0, 0
+and 50. The slope (50 - 0) / 100 = 0.5 is drawn as the line from west to
+east, the curvature 50 / 2500 = 0.02 as the change from slope 0 to slope 1,
+and each press marks the stencil cells the difference reads with their
+weights. The variance and cross differences are 0 because every row holds
+the same payoff.
+
+From the PDE to C++ puts the same cell beside the lines of
+`src/stencil.cpp` that update it. Lines 107 to 111 hold the five
+differences, each a multiplication by a reciprocal from lines 28 to 32.
+Lines 114 to 118 hold the terms, 11025 and 84 with the others 0. Lines 121
+and 122 give change = 11109 and the new value 4.464e-6 x 11109 = 0.04959,
+the value the solver's own snapshot holds, 0.04959375. The last press gives
+the stability limit, 5.66e-6 on the test grid and 3.66e-7 on the full grid,
+so the full grid needs 980,000 steps.
+
+One step over the whole grid is unchanged. A full run draws the v = 0.04 row
+of the test grid at expiry, 1 and 9 days before, 37 days before and today,
+from the solver snapshots, ending at 195.64 at S = 5200.
+
+`scripts/deck_m2_svgs.py` gained `option_paths`, `backwards_in_time`,
+`finite_differences`, `pde_to_code` and `full_run`, and lost the video step
+code. The PDE row is HTML in `deck_m2.qmd`, styled by `.terms` in
+`deck_m2.scss`, so MathJax draws each term and auto-animate can move it by
+its `data-id`. The stepped video player left the title slide and its style
+left `deck_m2.scss`. The deck file dropped from 15.5 MB to 6.4 MB because
+the videos are no longer embedded. The recorded part has 39 slides, one
+more than before, and the takes in `M2_SCRIPT.md` still add up to 9 minutes
+34 seconds, 1338 words.
+
+### Interview prep for the new opening, package size, AI declarations
+
+`presentation/INTERVIEW.md` section 4b now lists the 39 recorded slides of
+the Quarto deck, with what each press shows on slides 3 to 8. Section 8 has
+a new group of questions on the opening, from what a call option is to the
+stability limit and the reciprocals, each with its answer and where the full
+answer is.
+
+`make package` no longer copies the solver snapshots in
+`presentation/anim_m2/snapshots` or the manim videos and their json stop
+files, because the deck no longer uses them. The files it zips, before the
+video, dropped from 92.6 MB to 45.6 MB, so the zip stays well under the
+100 MB limit with the video added. `scenes.py` and `full_run.cfg` stay,
+because they hold the commands that make the snapshots.
+
+Every script in `scripts/` now opens with the three-line AI declaration, the
+same as the C++ files.

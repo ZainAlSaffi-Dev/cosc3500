@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# AI declaration
+# I used Claude, an AI assistant made by Anthropic, while working on this file.
+# It helped me debug the code, draft pseudocode and implement it.
+
 """xi sweep (reading B): the volatility smile flattening into Black-Scholes.
 
 Black-Scholes says every strike on the same underlying trades at one single

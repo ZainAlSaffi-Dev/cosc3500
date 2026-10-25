@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# AI declaration
+# I used Claude, an AI assistant made by Anthropic, while working on this file.
+# It helped me debug the code, draft pseudocode and implement it.
+
 """Grid-refinement convergence study (PLAN P4). Runs the sweep and plots it.
 
 Each rung halves both spacings (ds, dv) and rescales nt to keep the explicit

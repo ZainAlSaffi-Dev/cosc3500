@@ -1,3 +1,7 @@
+# AI declaration
+# I used Claude, an AI assistant made by Anthropic, while working on this file.
+# It helped me debug the code, draft pseudocode and implement it.
+
 """Extract one representative still frame from each presentation animation.
 
 The Beamer deck (presentation/deck.tex) is a PDF, and a PDF cannot play an

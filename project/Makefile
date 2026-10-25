@@ -302,6 +302,8 @@ package:
 	         --exclude 'results/demo' --exclude 'results/blowup' \
 	         --exclude 'results/smooth' --exclude 'results/smoke_dump' \
 	         --exclude 'results/collapse_work' --exclude 'results/xi_work' \
+	         --exclude 'presentation/anim_m2/snapshots' --exclude 'presentation/anim_m2/*.mp4' \
+	         --exclude 'presentation/anim_m2/*.json' \
 	         ./ /tmp/$(PKG)/code/
 	cp "$(VIDEO)" /tmp/$(PKG)/
 	@echo "--- verifying no secrets made it in ---"

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# AI declaration
+# I used Claude, an AI assistant made by Anthropic, while working on this file.
+# It helped me debug the code, draft pseudocode and implement it.
+
 """Weather map (PLAN P6): results/<run>/snap_*.csv -> animated value surface.
 
 Each snapshot CSV has nv rows (variance) and ns columns (stock price). That

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# AI declaration
+# I used Claude, an AI assistant made by Anthropic, while working on this file.
+# It helped me debug the code, draft pseudocode and implement it.
+
 """Monte-Carlo cross-check of the Heston PDE price by simulating the SDEs.
 
 The C++ solver takes the deterministic route: it walks a partial differential

@@ -167,35 +167,47 @@ the number and its job id.
 | 24, conclusion | The bullets collide with the callout. "Next is overlapping the exchange" is out of date because E9 has run. | Fixed layout, and the E9 result in place of the old next step. |
 | none | No plain-English summary, and nothing on E1, E2 and E2b or E9. | New slides for each. |
 
-### 4b. The recorded part, frames 1 to 35
+### 4b. The recorded part, slides 1 to 39
 
-The intermediate slides are the four marked with a star. Each one shows a
-diagram before the code or chart that follows it. Every rung that
-changed the code has a before and after, the serial rung (12), SIMD (14),
-OpenMP (19) and MPI (26), where the MPI loop marks the lines that differ
-from the OpenMP loop. Frame 34 is the reflection the task sheet asks for,
+The recorded part is `presentation/deck_m2.html`, the Quarto deck, and
+`presentation/M2_SCRIPT.md` has one take per slide. The opening, slides 3 to
+8, builds one step per key press, from what an option is to the update in
+C++. Every rung that changed the code has a before and after made with
+auto-animate, the serial rung (14 and 15), SIMD (17 and 18), OpenMP (22 and
+23) and MPI (30 and 31). Slide 38 is the reflection the task sheet asks for,
 what surprised me and what I would do next.
 
-| Page | Slide | Page | Slide |
+| Slide | Title | Slide | Title |
 |---|---|---|---|
-| 1 | Title | 19 | OpenMP code |
-| 2 | The project in one slide | 20 | Strong scaling |
-| 3 | The problem | 21 | Weak scaling |
-| 4 | The equation | 22 | Grid size |
-| 5 | One step on the grid | 23 | After threads, memory bandwidth |
-| 6 | Checking the answer | 24 | Placement |
-| 7 | The data structure | 25 | *MPI, one block of rows per process |
-| 8 | How every number was measured | 26 | MPI code, the time loop |
-| 9 | Where the time goes | 27 | MPI code, the edge row exchange |
-| 10 | What the compiler does alone | 28 | Hybrid layouts |
-| 11 | The ladder | 29 | Overlapping the exchange with the update (E9) |
-| 12 | The serial rung | 30 | Where each step goes |
-| 13 | *SIMD, four cells per instruction | 31 | Same answer on every rung |
-| 14 | SIMD code, before and after | 32 | Tried and rejected |
-| 15 | *The compiler was splitting the loads (E2, E2b) | 33 | Conclusion |
-| 16 | Could the compiler have written it? (E1) | 34 | What surprised me, and what I would do next |
-| 17 | SIMD on the roofline | 35 | Close |
-| 18 | *OpenMP, one block of rows per thread | | |
+| 1 | Title | 21 | OpenMP, one block of rows per thread |
+| 2 | The project in one slide | 22, 23 | OpenMP code |
+| 3 | What an option is | 24 | Strong scaling |
+| 4 | From the model to the PDE | 25 | Weak scaling |
+| 5 | Finite differences on one cell | 26 | Grid size |
+| 6 | From the PDE to C++ | 27 | After threads, memory bandwidth |
+| 7 | One step over the whole grid | 28 | Placement |
+| 8 | A full run | 29 | MPI, one block of rows per process |
+| 9 | Checking the answer | 30, 31 | MPI code, the time loop |
+| 10 | The data structure | 32 | MPI code, the edge row exchange |
+| 11 | How every number was measured | 33 | Hybrid layouts |
+| 12 | Where the time goes | 34 | Overlapping the exchange with the update (E9) |
+| 13 | The ladder | 35 | Same answer on every rung |
+| 14, 15 | The serial rung | 36 | Tried and rejected |
+| 16 | SIMD, four cells per instruction | 37 | Conclusion |
+| 17, 18 | SIMD code, before and after | 38 | What surprised me, and what I would do next |
+| 19 | The compiler was splitting the loads (E2, E2b) | 39 | Close |
+| 20 | SIMD on the roofline | | |
+
+The opening slides and what each step shows.
+
+| Slide | Presses | Steps |
+|---|---|---|
+| 3 | 5 | a path ending at 5700 pays 450, a path ending at 5000 pays 0, the payoff line max(S - K, 0), eight more paths, the price as the average discounted payoff |
+| 4 | 4 | labels for the share price terms, the volatility terms, the correlation and discount terms, then five grids solved back from the payoff |
+| 5 | 4 | the slope 0.5, the curvature 0.02, the variance differences, the cross difference, each with the stencil cells it reads |
+| 6 | 3 | opens on `src/stencil.cpp` lines 107 to 111, then the terms at lines 114 to 118, the update at lines 121 and 122 giving 0.04959, the stability limit |
+| 7 | 6 | the stencil moving along row 1, the rest of the grid, the swap |
+| 8 | 3 | the v = 0.04 row 1 and 9 days, 37 days and 91 days before expiry, ending at 195.64 |
 
 ### 4c. The appendix, pages 37 to 68
 
@@ -422,6 +434,58 @@ redraws them all.
 
 Each question has a full answer in the place named after it. "HPC" means
 `HPC_JUSTIFICATIONS.md`, and the experiments are in `docs/RESULTS.md` M2.6.
+
+### The opening, slides 3 to 8
+
+- What is a call option, and why is its price the discounted average payoff?
+  It pays max(S - K, 0) at expiry. Its price today is the expected payoff
+  under the risk-neutral measure, discounted at the rate r, because a hedged
+  position earns the risk-free rate. (STUDY_GUIDE sections 1, 2 and 5b)
+- Were the paths on slide 3 made by the solver? No. They illustrate the
+  model and are drawn by `scripts/deck_m2_svgs.py` with the deck's Heston
+  parameters. The solver has no random numbers. `make mc-check` is a separate
+  Monte Carlo check, $196.13 plus or minus $0.55 against the grid's $196.17.
+  (RESULTS section 7, Correctness)
+- Where did the randomness go? The Feynman-Kac theorem turns the expected
+  discounted payoff into the Heston PDE. The random parts of the model become
+  the second derivative terms, so the solver steps a grid with no sampling.
+  (STUDY_GUIDE section 5b, appendix The Heston model)
+- Why does the solve run backwards in time? V is known only at expiry, where
+  it is the payoff. Each step goes from t to t - dt, so 980,000 steps on the
+  full grid reach today. (STUDY_GUIDE section 6.2)
+- Why central differences? They take one cell on each side, so the error
+  falls with the square of the spacing, second order. A one-sided difference
+  is first order. They also need only the nine cells around each cell, so
+  every cell can be updated on its own. Halving the spacing cut the
+  error 3.78 times on the convergence run. (STUDY_GUIDE sections 6.6, 7.1
+  and 7.5)
+- Why are V_v, V_vv and V_Sv zero on slide 5? At expiry every variance row
+  holds the same payoff, so north equals south and the four corners cancel.
+  They become nonzero once the rows differ after the first step.
+  (STUDY_GUIDE section 7.4)
+- Why do the cells above and below get different values in the same step?
+  The 1/2 v S^2 V_SS term grows with v. In the first step v = 0.06 gives
+  0.07420, v = 0.04 gives 0.04959 and v = 0.02 gives 0.02498.
+  (STUDY_GUIDE section 7.4)
+- What sets the stability limit? The largest diffusion on the grid, at the
+  top corner where v and S are largest. The limit is 1 / (v_max S_max^2 /
+  dS^2 + xi^2 v_max / dv^2 + r), 5.66e-6 on the 421 by 51 test grid and
+  3.66e-7 on the full grid, worked out in `src/solver.cpp` line 81. Above it
+  the values grow without bound, which `config/unstable.cfg` shows.
+  (STUDY_GUIDE section 8)
+- Why not an implicit scheme, which has no limit? An implicit step solves a
+  linear system across the whole grid, which couples every cell and is much
+  harder to split between lanes, threads and processes. The explicit step is
+  the same local stencil for every cell. (appendix Why an explicit scheme)
+- Why multiply by reciprocals when the compiler could? Without
+  `-ffast-math` the compiler may not, because 1/(2 dS) is itself rounded and
+  the result can differ in the last bit. Doing it by hand gave 2.8x.
+  (STUDY_GUIDE section 13, slides 14 and 15)
+- How do the edge cells get their values? The boundary rules, applied after
+  the interior cells in each step, by the main thread in the OpenMP rungs. (STUDY_GUIDE section 9, appendix The
+  boundaries)
+
+### The rungs and the measurements
 
 - What is your project, in plain English? (section 3 of this file)
 - Why is the problem parallel at all? (HPC section 1)

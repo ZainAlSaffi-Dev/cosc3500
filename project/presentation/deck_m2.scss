@@ -352,15 +352,6 @@ $code-block-font-size: 0.6em;
   box-sizing: border-box;
 }
 
-// The stepped manim videos in the appendix.
-.reveal .slides section video.stepped {
-  display: block;
-  height: 640px;
-  margin: 0 auto;
-  border: 1px solid $sig-line;
-  border-radius: 8px;
-}
-
 // Detail woven in from the backup slides, under a figure. It stops at 74
 // percent of the width, like the band, so the webcam corner stays empty.
 .reveal .slides section .detail {
@@ -375,10 +366,50 @@ $code-block-font-size: 0.6em;
   margin: 0;
 }
 
-// The source line under a video.
+// The source line under a diagram.
 .reveal .slides section .vcite {
   width: 74%;
   font-size: 0.42em;
   color: $sig-slate;
   margin-top: 0.3em;
 }
+
+// The PDE as one row of terms. Each term has its colour and a label under it.
+// The labels sit under their term without widening it, so the terms keep their spacing.
+.reveal .slides section .terms {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 0.3em;
+  font-size: 1.25em;
+  margin: 0.4em 0 2.6em 0;
+}
+
+.reveal .slides section .terms .term {
+  position: relative;
+  text-align: center;
+}
+
+.reveal .slides section .terms .lbl {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 7.5em;
+  font-size: 0.5em;
+  margin-top: 0.4em;
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+.reveal .slides section .terms.small {
+  font-size: 0.6em;
+  margin: 0 0 0.1em 0;
+}
+
+.reveal .slides section .terms .c-ss { color: #D97706; }
+.reveal .slides section .terms .c-sv { color: #DB2777; }
+.reveal .slides section .terms .c-vv { color: #7C3AED; }
+.reveal .slides section .terms .c-s { color: #2563EB; }
+.reveal .slides section .terms .c-v { color: #059669; }
+.reveal .slides section .terms .c-r { color: #0891B2; }

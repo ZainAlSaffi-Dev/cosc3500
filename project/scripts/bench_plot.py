@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# AI declaration
+# I used Claude, an AI assistant made by Anthropic, while working on this file.
+# It helped me debug the code, draft pseudocode and implement it.
+
 """Benchmark figures (PLAN P7 / §4b): rangpur bench CSVs -> ladder + scaling.
 
 Input: the CSVs written by slurm/bench_{ladder,scaling,controls}.sh. Each has

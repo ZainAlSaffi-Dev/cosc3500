@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# AI declaration
+# I used Claude, an AI assistant made by Anthropic, while working on this file.
+# It helped me debug the code, draft pseudocode and implement it.
+
 """The payoff diagram for the presentation's first Introduction beat.
 
 One curve, max(S - K, 0), the strike kink annotated, today's share price marked.

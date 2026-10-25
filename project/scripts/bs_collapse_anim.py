@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# AI declaration
+# I used Claude, an AI assistant made by Anthropic, while working on this file.
+# It helped me debug the code, draft pseudocode and implement it.
+
 """Model collapse (reading A): watch the Heston PDE turn into Black-Scholes.
 
 The Heston PDE has three extra terms compared with Black-Scholes, and every
