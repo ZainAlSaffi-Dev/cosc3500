@@ -2306,3 +2306,45 @@ take no longer repeats that every version must match the baseline, which the
 same answer slide says, and the profile take no longer reads out the
 baseline's 58, which is on the slide. The script comes to 9 minutes 47
 seconds, 1367 words, plus the hold on the declaration.
+
+### The video as 19 teaching takes
+
+The takes were too short to explain anything. 34 spoken slides in 9:47 left
+about 20 seconds a slide, so a take could read out numbers but not the idea
+behind them, and the strong and weak scaling takes in particular did not say
+what either kind of scaling measures. The task sheet marks the choice of
+topics and the time given to each, and says a shorter talk done well beats a
+padded one, so the video now covers fewer topics and teaches each one.
+
+There are now 19 takes over 32 recorded slides. Each take says what the idea
+is, shows what was measured, then says why. A take that runs over two or
+three slides has an italic line in `presentation/M2_SCRIPT.md` saying when
+to press next, and each slide's speaker notes hold the words said over it.
+
+Eight slides moved to the start of the appendix, where they are still
+there for the interview with their old takes as notes. These are the
+project summary, the Black-Scholes check (now one line in the band of the
+full run slide), the ladder (each rung slide grows its own bar, and the
+conclusion has the table), the split loads (the reflection says it), the
+one-core roofline (the roofline is taught once, on the node roofline), the
+two MPI time loop slides (the MPI take keeps the exchange code) and the
+overlap experiment E9.
+
+Some slides moved so each take tells one story. The data structure follows
+the one step slide, placement follows MPI so the first-touch explanation
+leads into one process per socket, and the same answer slide comes just
+before the conclusion.
+
+The slides changed in a few places to match the takes.
+
+- The strong and weak scaling subtitles now say in one sentence what each
+  measures, and the bands state Amdahl's and Gustafson's laws.
+- The OpenMP slide says the grid has 512 rows, one per variance value, and
+  that thread 0 updates rows 1 to 22, so 21 rows per thread on the weak
+  scaling slide has a meaning.
+- The grid size and roofline subtitles say what each figure shows.
+
+The script comes to 9 minutes 46 seconds, 1385 words, plus the hold on the
+AI declaration. `presentation/INTERVIEW.md` sections 4b, 4c and 8 and the
+README map follow the new order, and the appendix is numbered A1 to A45 with
+the anchor for each slide.

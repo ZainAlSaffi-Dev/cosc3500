@@ -1,8 +1,9 @@
 ---
 # The Milestone 2 deck as a Quarto revealjs presentation. The recorded part
-# comes first, one slide per take in presentation/M2_SCRIPT.md, with the take
-# as the speaker notes (press S). The appendix after the closing slide holds
-# the backup slides for the interview and is never recorded.
+# comes first, one take in presentation/M2_SCRIPT.md for each slide or short
+# run of slides, with the words for each slide as its speaker notes (press S).
+# The appendix after the closing slide holds the backup slides for the
+# interview, with the slides cut from the video first, and is never recorded.
 #
 # Build from this folder with `quarto render deck_m2.qmd`. The result is one
 # self-contained file, deck_m2.html.
@@ -81,52 +82,9 @@ Zain Al-Saffi, 48008361
 [COSC3500 Milestone 2, October 2026]{.sub}
 
 ::: {.notes}
-Hi, I'm Zain, and in this video I'll show how we made a Heston option pricer
-123 times faster on one rangpur node, with the same answer from every
-version.
-:::
-
-## The project in one slide {.roomy}
-
-[Price one option by solving a PDE on a grid, then make each step parallel]{.sub}
-
-::: {.grid2}
-::: {.blk}
-[The question]{.bt}
-
-What is a call option worth today, when the share price and its volatility
-both move randomly, as in the Heston model?
-:::
-
-::: {.blk}
-[Why it parallelises]{.bt}
-
-No cell in a step depends on another in the same step, so cells go to AVX2
-lanes, rows to cores and blocks of rows to processes.
-:::
-
-::: {.blk}
-[The method]{.bt}
-
-Solve the Heston PDE on a grid of share price by variance, stepping back from
-expiry, where every value is known, to today.
-:::
-
-::: {.blk}
-[The result]{.bt}
-
-[{{< meta n.x_mpi_one >}}x]{.em} on one node and
-[{{< meta n.x_mpi_two >}}x]{.em} on two, with the same answer on every
-version.
-:::
-:::
-
-::: {.notes}
-*The four blocks.*
-
-We're pricing a call option where the share price and its volatility both
-move randomly, by solving the Heston PDE on a grid. No cell in a step
-depends on another, so every step can be split up.
+Hi, I'm Zain. In this video I'll show how we price an option on a grid, and
+how we made it 123 times faster on one rangpur node, with the same answer
+from every version.
 :::
 
 ## What an option is
@@ -168,10 +126,11 @@ depends on another, so every step can be split up.
 *Five presses, the path above the strike, the path below it, the payoff
 line, the other paths, the price.*
 
-A call option is the right to buy a share for 5250 in three months. If the
-share ends at 5700 it pays 450, if it ends below 5250 nobody buys, so it
-pays nothing. Nobody knows the path, so the price today is the average
-payoff over every path, discounted to today.
+A call option is the right to buy one share at a fixed price, here 5250, in
+three months. If the share ends at 5700, you buy at 5250 and the option pays
+450. If it ends below 5250, you don't buy, so it pays nothing. Nobody knows
+the path, so the price today is the average payoff over every path,
+discounted to today.
 :::
 
 ## From the model to the PDE {auto-animate="true"}
@@ -342,9 +301,11 @@ S. L. Heston, A closed-form solution for options with stochastic volatility with
 *Four presses, the share price terms, the volatility terms, the last two,
 then the steps back from expiry.*
 
-In Heston the price and its volatility both move randomly, and V follows
-this PDE, each coloured term from one part of the model. We only know V at
-expiry, the payoff, so we start there and step back.
+In the Heston model the share price and its volatility both move randomly,
+and the option value V follows this PDE. These terms come from the share
+price, these from the volatility, and the last two say the two move together
+and that money later is worth less. We only know V at expiry, where it's the
+payoff, so we start there and step back to today.
 :::
 
 ## Finite differences on one cell {auto-animate="true"}
@@ -439,10 +400,11 @@ expiry, the payoff, so we start there and step back.
 *The PDE moves to the top. Four presses, the slope, the curvature, north and
 south, the corners.*
 
-Each derivative becomes a difference of neighbours. Here the slope, east
-minus west over two spacings, is 0.5, and the curvature, how much that slope
-changes, is 0.02. Every row holds the same payoff, so the variance and cross
-differences are 0.
+To solve it we put V on a grid of share price by variance, and replace each
+derivative with a difference of neighbouring cells. At 5250 on the first
+step back, the slope, east minus west over two spacings, is 0.5, and the
+curvature, how fast that slope changes, is 0.02. Every row starts as the
+same payoff, so the other differences are 0.
 :::
 
 ## From the PDE to C++ {auto-animate="true"}
@@ -480,12 +442,12 @@ differences are 0.
 ```
 
 ::: {.notes}
-*Three presses, the terms, the update, the stability limit.*
+*Same take, continued. Press next for the slide. Three presses, the terms,
+the update, the stability limit.*
 
-Each difference multiplies by a reciprocal worked out once. The terms give
-11025 and 84, the rest 0, and one step of dt gives 0.04959, exactly the
-solver's own snapshot. dt has a stability limit, hence 980,000 steps on the
-full grid.
+In C++ each difference is multiplied by a reciprocal worked out once. One
+step of dt gives 0.04959. A larger dt would make the errors grow, so the
+full grid needs 980,000 steps.
 :::
 
 ## One step over the whole grid
@@ -646,77 +608,13 @@ cells can be computed in any order.
 :::
 
 ::: {.notes}
-*Point at the payoff, the red block, then the red cell. Six clicks: three
+*Point at the payoff, the red block, then the red cell. Six clicks, three
 cells, the rest of the row, the other rows, the swap.*
 
-Every interior cell gets this same update, reading only the old buffer and
-writing only the new one, so the cells can be computed in any order. Then
-the two buffers swap pointers, so no values are copied.
-:::
-
-## A full run
-
-[56,000 steps on the test grid, from the payoff at expiry back to today]{.sub}
-
-```{=html}
-<!-- svg:full-run -->
-<svg class="anim" viewBox="0 0 1400 580" xmlns="http://www.w3.org/2000/svg" >
-<defs><marker id="run-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1F2937"/></marker></defs>
-<line x1="150.0" y1="520.0" x2="1010.0" y2="520.0" stroke="#1F2937" stroke-width="3" marker-end="url(#run-arrow)"/>
-<line x1="150.0" y1="520.0" x2="150.0" y2="20.0" stroke="#1F2937" stroke-width="3" marker-end="url(#run-arrow)"/>
-<text x="1000.0" y="554.0" font-size="20" text-anchor="end" font-weight="400" >share price S</text>
-<text x="134.0" y="40.0" font-size="22" text-anchor="end" font-weight="400" >V</text>
-<text x="291.7" y="554.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >4750</text>
-<text x="575.0" y="554.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >5250</text>
-<text x="858.3" y="554.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >5750</text>
-<text x="138.0" y="390.9" font-size="18" text-anchor="end" font-weight="400" class="dim" >250</text>
-<text x="138.0" y="254.8" font-size="18" text-anchor="end" font-weight="400" class="dim" >500</text>
-<text x="138.0" y="118.7" font-size="18" text-anchor="end" font-weight="400" class="dim" >750</text>
-<g class="fragment" data-fragment-index="0"><polyline points="150.0,520.0 178.3,520.0 206.7,520.0 235.0,520.0 263.3,520.0 291.7,520.0 320.0,520.0 348.3,520.0 376.7,520.0 405.0,520.0 433.3,520.0 461.7,520.0 490.0,520.0 518.3,519.7 546.7,517.9 575.0,510.1 603.3,490.3 631.7,464.9 660.0,438.0 688.3,410.9 716.7,383.7 745.0,356.4 773.3,329.2 801.7,302.0 830.0,274.8 858.3,247.6 886.7,220.3 915.0,193.1 943.3,165.9 971.7,138.7 1000.0,111.5" fill="none" stroke="#BFDBFE" stroke-width="4" /><polyline points="150.0,520.0 178.3,520.0 206.7,520.0 235.0,520.0 263.3,520.0 291.7,520.0 320.0,520.0 348.3,519.9 376.7,519.8 405.0,519.3 433.3,518.3 461.7,516.1 490.0,512.2 518.3,505.8 546.7,496.3 575.0,483.3 603.3,467.1 631.7,447.9 660.0,426.3 688.3,402.9 716.7,378.1 745.0,352.4 773.3,326.1 801.7,299.4 830.0,272.5 858.3,245.4 886.7,218.3 915.0,191.1 943.3,163.9 971.7,136.7 1000.0,109.5" fill="none" stroke="#93C5FD" stroke-width="4" /></g>
-<g class="fragment current-visible" data-fragment-index="0"><text x="1040.0" y="120.0" font-size="22" text-anchor="start" font-weight="700" class="blue" >1 and 9 days before expiry</text></g>
-<g class="fragment" data-fragment-index="1"><polyline points="150.0,520.0 178.3,519.9 206.7,519.7 235.0,519.4 263.3,518.8 291.7,517.8 320.0,516.3 348.3,514.0 376.7,510.8 405.0,506.4 433.3,500.5 461.7,492.9 490.0,483.5 518.3,472.2 546.7,459.0 575.0,444.2 603.3,427.8 631.7,410.0 660.0,390.8 688.3,370.5 716.7,349.0 745.0,326.6 773.3,303.4 801.7,279.5 830.0,255.0 858.3,230.1 886.7,204.7 915.0,178.9 943.3,152.9 971.7,126.7 1000.0,100.2" fill="none" stroke="#3B82F6" stroke-width="4" /></g>
-<g class="fragment current-visible" data-fragment-index="1"><text x="1040.0" y="120.0" font-size="22" text-anchor="start" font-weight="700" class="blue" >37 days before expiry</text></g>
-<g class="fragment" data-fragment-index="2"><polyline points="150.0,517.1 178.3,515.7 206.7,513.8 235.0,511.3 263.3,508.1 291.7,504.1 320.0,499.0 348.3,492.9 376.7,485.5 405.0,476.9 433.3,466.9 461.7,455.5 490.0,442.7 518.3,428.7 546.7,413.5 575.0,397.3 603.3,380.1 631.7,362.1 660.0,343.3 688.3,323.7 716.7,303.4 745.0,282.4 773.3,260.9 801.7,238.7 830.0,216.1 858.3,192.9 886.7,169.4 915.0,145.5 943.3,121.2 971.7,96.6 1000.0,71.8" fill="none" stroke="#1E3A8A" stroke-width="4" /></g>
-<g class="fragment current-visible" data-fragment-index="2"><text x="1040.0" y="120.0" font-size="22" text-anchor="start" font-weight="700" class="blue" >today, 91 days before expiry</text></g>
-<g class="fragment" data-fragment-index="2"><circle cx="546.7" cy="413.5" r="10" fill="#2563EB"/><text x="1040.0" y="160.0" font-size="22" text-anchor="start" font-weight="400" class="blue" >V at S = 5200 is 195.64</text><text x="1040.0" y="192.0" font-size="20" text-anchor="start" font-weight="400" class="dim" >196.17 on the full 2048 x 512 grid</text></g>
-<polyline points="150.0,520.0 178.3,520.0 206.7,520.0 235.0,520.0 263.3,520.0 291.7,520.0 320.0,520.0 348.3,520.0 376.7,520.0 405.0,520.0 433.3,520.0 461.7,520.0 490.0,520.0 518.3,520.0 546.7,520.0 575.0,520.0 603.3,492.8 631.7,465.6 660.0,438.3 688.3,411.1 716.7,383.9 745.0,356.7 773.3,329.4 801.7,302.2 830.0,275.0 858.3,247.8 886.7,220.6 915.0,193.3 943.3,166.1 971.7,138.9 1000.0,111.7" fill="none" stroke="#DC2626" stroke-width="4" />
-<text x="728.0" y="454.7" font-size="20" text-anchor="start" font-weight="400" class="red" >expiry, the payoff</text>
-<text x="1040.0" y="60.0" font-size="20" text-anchor="start" font-weight="400" class="dim" >56,000 steps on the 421 x 51 test grid</text>
-</svg>
-<!-- /svg:full-run -->
-```
-
-::: {.notes}
-*Three presses, 1 and 9 days, 37 days, today.*
-
-A full run on the test grid is 56,000 of those steps, and the corner of the
-payoff smooths out as we step back to today, and the price at 5200 is
-195.64. The full grid gives 196.17, within a tenth of a cent of the Fourier
-price.
-:::
-
-## Checking the answer
-
-[With $\xi = 0$ and $\rho = 0$ the variance never moves and Heston becomes Black-Scholes]{.sub}
-
-![](assets_m2/f14_bs_collapse.png){width="1240px" fig-align="center"}
-
-::: {.detail}
-Every benchmark job first runs four tests. `test_bs_collapse` is this check,
-`test_parity` checks $C - P = S e^{-qT} - K e^{-rT}$ on the full model,
-`test_ladder_matches` holds every rung to the baseline, and `test_avx_row`
-holds the AVX2 row to the scalar row.
-:::
-
-::: {.band}
-With its full stencil unchanged, the solver is within 4 cents of the closed
-form at today's price. Every benchmark job runs this check first.
-:::
-
-::: {.notes}
-To check the solver, we set the volatility of volatility to zero, where
-Heston reduces to Black-Scholes, and the unchanged solver lands within 4
-cents of the closed-form price.
+Every interior cell reads nine cells of the old buffer and writes one cell
+of the new one. No cell reads a value written in the same step, so the cells
+can be computed in any order, and that's what lets us split them up. Then
+the two buffers swap pointers.
 :::
 
 ## The data structure
@@ -787,11 +685,59 @@ and a step in variance is a stride of one row.
 :::
 
 ::: {.notes}
-*Three clicks: the rows flatten, the index of each cell, the stride to north.*
+*Same take, continued. Press next for the slide. Three clicks, the rows
+flatten, the index of each cell, the stride to north.*
 
-Both buffers are flat arrays of doubles, with cell i, j at j times the row
-length plus i, so the share price axis is contiguous in memory and a step in
-variance is a stride of one row.
+Each buffer is one flat array of doubles, with cell i, j at j times the row
+length plus i. So a row of 2048 share prices sits together in 16 kibibytes,
+and the cell to the north is one row further on.
+:::
+
+## A full run
+
+[56,000 steps on the test grid, from the payoff at expiry back to today]{.sub}
+
+```{=html}
+<!-- svg:full-run -->
+<svg class="anim" viewBox="0 0 1400 580" xmlns="http://www.w3.org/2000/svg" >
+<defs><marker id="run-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1F2937"/></marker></defs>
+<line x1="150.0" y1="520.0" x2="1010.0" y2="520.0" stroke="#1F2937" stroke-width="3" marker-end="url(#run-arrow)"/>
+<line x1="150.0" y1="520.0" x2="150.0" y2="20.0" stroke="#1F2937" stroke-width="3" marker-end="url(#run-arrow)"/>
+<text x="1000.0" y="554.0" font-size="20" text-anchor="end" font-weight="400" >share price S</text>
+<text x="134.0" y="40.0" font-size="22" text-anchor="end" font-weight="400" >V</text>
+<text x="291.7" y="554.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >4750</text>
+<text x="575.0" y="554.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >5250</text>
+<text x="858.3" y="554.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >5750</text>
+<text x="138.0" y="390.9" font-size="18" text-anchor="end" font-weight="400" class="dim" >250</text>
+<text x="138.0" y="254.8" font-size="18" text-anchor="end" font-weight="400" class="dim" >500</text>
+<text x="138.0" y="118.7" font-size="18" text-anchor="end" font-weight="400" class="dim" >750</text>
+<g class="fragment" data-fragment-index="0"><polyline points="150.0,520.0 178.3,520.0 206.7,520.0 235.0,520.0 263.3,520.0 291.7,520.0 320.0,520.0 348.3,520.0 376.7,520.0 405.0,520.0 433.3,520.0 461.7,520.0 490.0,520.0 518.3,519.7 546.7,517.9 575.0,510.1 603.3,490.3 631.7,464.9 660.0,438.0 688.3,410.9 716.7,383.7 745.0,356.4 773.3,329.2 801.7,302.0 830.0,274.8 858.3,247.6 886.7,220.3 915.0,193.1 943.3,165.9 971.7,138.7 1000.0,111.5" fill="none" stroke="#BFDBFE" stroke-width="4" /><polyline points="150.0,520.0 178.3,520.0 206.7,520.0 235.0,520.0 263.3,520.0 291.7,520.0 320.0,520.0 348.3,519.9 376.7,519.8 405.0,519.3 433.3,518.3 461.7,516.1 490.0,512.2 518.3,505.8 546.7,496.3 575.0,483.3 603.3,467.1 631.7,447.9 660.0,426.3 688.3,402.9 716.7,378.1 745.0,352.4 773.3,326.1 801.7,299.4 830.0,272.5 858.3,245.4 886.7,218.3 915.0,191.1 943.3,163.9 971.7,136.7 1000.0,109.5" fill="none" stroke="#93C5FD" stroke-width="4" /></g>
+<g class="fragment current-visible" data-fragment-index="0"><text x="1040.0" y="120.0" font-size="22" text-anchor="start" font-weight="700" class="blue" >1 and 9 days before expiry</text></g>
+<g class="fragment" data-fragment-index="1"><polyline points="150.0,520.0 178.3,519.9 206.7,519.7 235.0,519.4 263.3,518.8 291.7,517.8 320.0,516.3 348.3,514.0 376.7,510.8 405.0,506.4 433.3,500.5 461.7,492.9 490.0,483.5 518.3,472.2 546.7,459.0 575.0,444.2 603.3,427.8 631.7,410.0 660.0,390.8 688.3,370.5 716.7,349.0 745.0,326.6 773.3,303.4 801.7,279.5 830.0,255.0 858.3,230.1 886.7,204.7 915.0,178.9 943.3,152.9 971.7,126.7 1000.0,100.2" fill="none" stroke="#3B82F6" stroke-width="4" /></g>
+<g class="fragment current-visible" data-fragment-index="1"><text x="1040.0" y="120.0" font-size="22" text-anchor="start" font-weight="700" class="blue" >37 days before expiry</text></g>
+<g class="fragment" data-fragment-index="2"><polyline points="150.0,517.1 178.3,515.7 206.7,513.8 235.0,511.3 263.3,508.1 291.7,504.1 320.0,499.0 348.3,492.9 376.7,485.5 405.0,476.9 433.3,466.9 461.7,455.5 490.0,442.7 518.3,428.7 546.7,413.5 575.0,397.3 603.3,380.1 631.7,362.1 660.0,343.3 688.3,323.7 716.7,303.4 745.0,282.4 773.3,260.9 801.7,238.7 830.0,216.1 858.3,192.9 886.7,169.4 915.0,145.5 943.3,121.2 971.7,96.6 1000.0,71.8" fill="none" stroke="#1E3A8A" stroke-width="4" /></g>
+<g class="fragment current-visible" data-fragment-index="2"><text x="1040.0" y="120.0" font-size="22" text-anchor="start" font-weight="700" class="blue" >today, 91 days before expiry</text></g>
+<g class="fragment" data-fragment-index="2"><circle cx="546.7" cy="413.5" r="10" fill="#2563EB"/><text x="1040.0" y="160.0" font-size="22" text-anchor="start" font-weight="400" class="blue" >V at S = 5200 is 195.64</text><text x="1040.0" y="192.0" font-size="20" text-anchor="start" font-weight="400" class="dim" >196.17 on the full 2048 x 512 grid</text></g>
+<polyline points="150.0,520.0 178.3,520.0 206.7,520.0 235.0,520.0 263.3,520.0 291.7,520.0 320.0,520.0 348.3,520.0 376.7,520.0 405.0,520.0 433.3,520.0 461.7,520.0 490.0,520.0 518.3,520.0 546.7,520.0 575.0,520.0 603.3,492.8 631.7,465.6 660.0,438.3 688.3,411.1 716.7,383.9 745.0,356.7 773.3,329.4 801.7,302.2 830.0,275.0 858.3,247.8 886.7,220.6 915.0,193.3 943.3,166.1 971.7,138.9 1000.0,111.7" fill="none" stroke="#DC2626" stroke-width="4" />
+<text x="728.0" y="454.7" font-size="20" text-anchor="start" font-weight="400" class="red" >expiry, the payoff</text>
+<text x="1040.0" y="60.0" font-size="20" text-anchor="start" font-weight="400" class="dim" >56,000 steps on the 421 x 51 test grid</text>
+</svg>
+<!-- /svg:full-run -->
+```
+
+::: {.band}
+The full grid is within a tenth of a cent of the Fourier price, 196.1692. With
+$\xi = 0$ and $\rho = 0$ Heston becomes Black-Scholes, and the same solver is
+within 4 cents of the closed form.
+:::
+
+::: {.notes}
+*Three presses, 1 and 9 days, 37 days, today.*
+
+A full run on this test grid is 56,000 steps, and the payoff's corner
+smooths out as we step back. The full grid gives 196.17, within a tenth of a
+cent of the Fourier price, and with no volatility of volatility the solver
+matches Black-Scholes to 4 cents.
 :::
 
 ## How every number was measured
@@ -853,10 +799,13 @@ about floating-point arithmetic, *ACM Computing Surveys* 23(1), 5 to 48,
 :::
 
 ::: {.notes}
-*Four presses, one box each.*
+*Four presses, one box each of the rate sum.*
 
-A cell update is one cell's new value in one step. Every number is the
-median of 5 runs on one exclusive rangpur node through sbatch, after the tests pass in the same job.
+A cell update is one cell's new value in one step. A million cells over 2000
+steps is 2.1 billion updates, and in 13.2 seconds that's 159 million a
+second. Every rate is the median of 5 runs on one rangpur node that no other
+job shares. We reran our first round because denormal numbers slowed some
+versions.
 :::
 
 ## Where the time goes
@@ -888,71 +837,11 @@ still below the serial rung's 159 at -O2.
 :::
 
 ::: {.notes}
-Profiling with gprof shows one function, the interior row update, takes 99
-percent of the time. Every benchmark builds at O2, so each version measures only our change.
-:::
+*Same take, continued. Press next for the slide. Point at the tall bar of
+the profile.*
 
-## The ladder
-
-[Each rung adds one technique and must give the baseline's answer before it is timed]{.sub}
-
-:::: {.columns}
-::: {.column width="58%"}
-```{=html}
-<!-- svg:ladder -->
-<svg class="anim" viewBox="0 0 900 540" xmlns="http://www.w3.org/2000/svg" >
-<line x1="120.0" y1="450.0" x2="880.0" y2="450.0" stroke="#D1D5DB" stroke-width="1.5" />
-<text x="108.0" y="457.0" font-size="20" text-anchor="end" font-weight="400" class="dim" >10</text>
-<line x1="120.0" y1="322.8" x2="880.0" y2="322.8" stroke="#D1D5DB" stroke-width="1.5" />
-<text x="108.0" y="329.8" font-size="20" text-anchor="end" font-weight="400" class="dim" >100</text>
-<line x1="120.0" y1="195.5" x2="880.0" y2="195.5" stroke="#D1D5DB" stroke-width="1.5" />
-<text x="108.0" y="202.5" font-size="20" text-anchor="end" font-weight="400" class="dim" >1,000</text>
-<line x1="120.0" y1="68.3" x2="880.0" y2="68.3" stroke="#D1D5DB" stroke-width="1.5" />
-<text x="108.0" y="75.3" font-size="20" text-anchor="end" font-weight="400" class="dim" >10,000</text>
-<text x="36.0" y="240.0" font-size="20" text-anchor="middle" font-weight="400" class="dim" transform="rotate(-90 36 240.0)">Mcell-updates/s, log scale</text>
-<rect x="148.9" y="353.8" width="94.2" height="96.2" fill="#9CA3AF" stroke="none" stroke-width="0" class="bar" style="--d:0.15s"/>
-<g class="pop" style="--d:0.45s"><text x="196.0" y="319.8" font-size="22" text-anchor="middle" font-weight="700" >57</text><text x="196.0" y="343.8" font-size="20" text-anchor="middle" font-weight="400" class="dim" >1x</text></g>
-<text x="196.0" y="480.0" font-size="21" text-anchor="middle" font-weight="400" >baseline</text>
-<rect x="300.9" y="297.1" width="94.2" height="152.9" fill="#2563EB" stroke="none" stroke-width="0" class="bar" style="--d:0.45s"/>
-<g class="pop" style="--d:0.75s"><text x="348.0" y="263.1" font-size="22" text-anchor="middle" font-weight="700" >159</text><text x="348.0" y="287.1" font-size="20" text-anchor="middle" font-weight="400" class="dim" >2.8x</text><text x="348.0" y="327.1" font-size="21" text-anchor="middle" font-weight="700" style="fill:#FFFFFF">x2.80</text></g>
-<text x="348.0" y="480.0" font-size="21" text-anchor="middle" font-weight="400" >serial</text>
-<rect x="452.9" y="238.9" width="94.2" height="211.1" fill="#2563EB" stroke="none" stroke-width="0" class="bar" style="--d:0.75s"/>
-<g class="pop" style="--d:1.05s"><text x="500.0" y="204.9" font-size="22" text-anchor="middle" font-weight="700" >456</text><text x="500.0" y="228.9" font-size="20" text-anchor="middle" font-weight="400" class="dim" >8.0x</text><text x="500.0" y="268.9" font-size="21" text-anchor="middle" font-weight="700" style="fill:#FFFFFF">x2.87</text></g>
-<text x="500.0" y="480.0" font-size="21" text-anchor="middle" font-weight="400" >simd</text>
-<rect x="604.9" y="93.2" width="94.2" height="356.8" fill="#2563EB" stroke="none" stroke-width="0" class="bar" style="--d:1.05s"/>
-<g class="pop" style="--d:1.35s"><text x="652.0" y="59.2" font-size="22" text-anchor="middle" font-weight="700" >6,367</text><text x="652.0" y="83.2" font-size="20" text-anchor="middle" font-weight="400" class="dim" >112x</text><text x="652.0" y="123.2" font-size="21" text-anchor="middle" font-weight="700" style="fill:#FFFFFF">x14.0</text></g>
-<text x="652.0" y="480.0" font-size="21" text-anchor="middle" font-weight="400" >omp</text>
-<text x="652.0" y="506.0" font-size="19" text-anchor="middle" font-weight="400" class="dim" >24 threads</text>
-<rect x="756.9" y="88.1" width="94.2" height="361.9" fill="#2563EB" stroke="none" stroke-width="0" class="bar" style="--d:1.35s"/>
-<g class="pop" style="--d:1.65s"><text x="804.0" y="54.1" font-size="22" text-anchor="middle" font-weight="700" >6,984</text><text x="804.0" y="78.1" font-size="20" text-anchor="middle" font-weight="400" class="dim" >123x</text><text x="804.0" y="118.1" font-size="21" text-anchor="middle" font-weight="700" style="fill:#FFFFFF">x1.10</text></g>
-<text x="804.0" y="480.0" font-size="21" text-anchor="middle" font-weight="400" >mpi</text>
-<text x="804.0" y="506.0" font-size="19" text-anchor="middle" font-weight="400" class="dim" >2 x 12</text>
-<line x1="120.0" y1="450.0" x2="880.0" y2="450.0" stroke="#1F2937" stroke-width="2" />
-</svg>
-<!-- /svg:ladder -->
-```
-:::
-
-::: {.column width="40%"}
-| Rung | Technique |
-|:--|:--|
-| **baseline** | the original loop, with divisions inside it |
-| **serial** | divisions turned into multiplications |
-| **simd** | four cells per AVX2 instruction |
-| **omp** | the rows shared between 24 cores |
-| **mpi** | one process per socket, edge rows exchanged |
-:::
-::::
-
-::: {.band}
-The white number inside each bar is the gain over the rung below. The total
-on one node is [{{< meta n.x_mpi_one >}}x]{.em} the baseline.
-:::
-
-::: {.notes}
-*The bars grow on their own. Point along them from left to right.*
-
-The ladder adds one technique per version, and the number in each bar is the gain over the version below.
+gprof shows the interior row update takes 99 percent of the time, so every
+version speeds up that one function.
 :::
 
 ## The serial rung {auto-animate="true"}
@@ -974,13 +863,12 @@ last bit. By hand it gives {{< meta n.serial >}} million updates a second,
 :::
 
 ::: {.notes}
-*Point at a division, then press next. The code changes into the serial
-rung, then one more press grows the bar.*
+*Point at a division.*
 
-The baseline divides by the grid spacing in every cell. The compiler can't
-turn that into a multiplication by the reciprocal, because the rounding can
-differ in the last bit, so we did it by hand once per solve, for 159 million
-updates a second, 2.8 times the baseline.
+The baseline divides by the grid spacing in every cell of every step, and a
+division costs several times the cycles of a multiplication. The compiler
+can't swap in the reciprocal by itself, because the rounding can differ in
+the last bit.
 :::
 
 ## The serial rung {auto-animate="true"}
@@ -1029,7 +917,11 @@ last bit. By hand it gives {{< meta n.serial >}} million updates a second,
 :::
 
 ::: {.notes}
-*Same take, continued. Press next for the bar.*
+*Same take, continued. Press next and the code changes into the serial rung.
+One more press grows the bar.*
+
+So we worked out the reciprocals once per solve, for 159 million updates a
+second, 2.8 times the baseline.
 :::
 
 ## SIMD, four cells per instruction
@@ -1105,11 +997,12 @@ gain came from vector instructions.
 :::
 
 ::: {.notes}
-*Four clicks: the loads, then each group of four, then the scalar cell.*
+*Four clicks, the loads, then each group of four, then the scalar cell.*
 
-Serial was already at 96 percent of the scalar peak, so next we used vector
-instructions. An AVX2 register holds four doubles and neighbouring cells use
-the same formula, so one instruction updates four cells.
+Serial already ran at 96 percent of one core's scalar peak, so the next gain
+had to come from vector instructions. An AVX2 register holds four doubles,
+and neighbouring cells run the same formula, so one instruction updates four
+cells.
 :::
 
 ## SIMD code, before and after {auto-animate="true"}
@@ -1133,13 +1026,8 @@ serial.
 :::
 
 ::: {.notes}
-*Point at the loads, then press next. The serial loop turns into the AVX2
-loop. Three more presses highlight the loads, the fused multiply-add and
-store, and the counter, and the last press grows the bar.*
-
-The serial loop turns into the AVX2 loop, where each scalar load becomes a
-load of four doubles, the update becomes one fused multiply-add and the
-counter goes up by four. This runs at 456, 2.9 times serial.
+*Same take, continued. Press next for the code. Point at the loads, then
+press next. The serial loop turns into the AVX2 loop.*
 :::
 
 ## SIMD code, before and after {auto-animate="true"}
@@ -1179,118 +1067,13 @@ serial.
 :::
 
 ::: {.notes}
-*Same take, continued.*
-:::
+*Same take, continued. Three presses highlight the loads, the fused
+multiply-add and store, and the counter. The last press grows the bar.*
 
-## The compiler was splitting the loads {.dense}
-
-[Experiments E2 and E2b, the same source built two ways]{.sub}
-
-:::: {.columns}
-::: {.column width="46%"}
-![](assets_m2/f16_split.png){width="100%"}
-:::
-
-::: {.column width="51%"}
-![](assets_m2/shot_split_loads.png){width="100%"}
-
-::: {.small}
-With only `-mavx2`, g++ 8.5 tunes for a generic x86 and compiles every
-unaligned 256 bit load as two 128 bit loads. With the same flags, the
-compiler's own vectorised serial row reaches 77 percent of the hand-written
-AVX2 row.
-:::
-
-```{.makefile filename="Makefile, line 23"}
-NOSPLIT = -mno-avx256-split-unaligned-load -mno-avx256-split-unaligned-store
-```
-:::
-::::
-
-::: {.band}
-Two flags make every unaligned load one 256 bit load, with the same answer
-and [{{< meta n.split_gain_one >}}x]{.em} the speed on one core. Every number
-in this video uses them.
-:::
-
-::: {.notes}
-*Point at the two bars, then at the vinsertf128 lines.*
-
-Our first build ran this at 387, because g++ 8.5 split every unaligned 256
-bit load into two 128 bit loads. Two flags make each a single load, for 1.19
-times the speed, and every number here uses them.
-:::
-
-## SIMD on the roofline
-
-[Measured ceilings of one r730 core]{.sub}
-
-:::: {.columns}
-::: {.column width="57%"}
-```{=html}
-<!-- svg:roof-core -->
-<svg class="anim" viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg" >
-<defs><marker id="rise-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2563EB"/></marker></defs>
-<line x1="110.0" y1="450.0" x2="870.0" y2="450.0" stroke="#D1D5DB" stroke-width="1.5" />
-<text x="98.0" y="457.0" font-size="20" text-anchor="end" font-weight="400" class="dim" >1</text>
-<line x1="110.0" y1="240.0" x2="870.0" y2="240.0" stroke="#D1D5DB" stroke-width="1.5" />
-<text x="98.0" y="247.0" font-size="20" text-anchor="end" font-weight="400" class="dim" >10</text>
-<line x1="110.0" y1="30.0" x2="870.0" y2="30.0" stroke="#D1D5DB" stroke-width="1.5" />
-<text x="98.0" y="37.0" font-size="20" text-anchor="end" font-weight="400" class="dim" >100</text>
-<line x1="110.0" y1="30.0" x2="110.0" y2="450.0" stroke="#D1D5DB" stroke-width="1.5" />
-<text x="110.0" y="480.0" font-size="20" text-anchor="middle" font-weight="400" class="dim" >0.1</text>
-<line x1="490.0" y1="30.0" x2="490.0" y2="450.0" stroke="#D1D5DB" stroke-width="1.5" />
-<text x="490.0" y="480.0" font-size="20" text-anchor="middle" font-weight="400" class="dim" >1</text>
-<line x1="870.0" y1="30.0" x2="870.0" y2="450.0" stroke="#D1D5DB" stroke-width="1.5" />
-<text x="870.0" y="480.0" font-size="20" text-anchor="middle" font-weight="400" class="dim" >10</text>
-<text x="490.0" y="512.0" font-size="20" text-anchor="middle" font-weight="400" class="dim" >arithmetic intensity, flops per byte</text>
-<text x="34.0" y="240.0" font-size="20" text-anchor="middle" font-weight="400" class="dim" transform="rotate(-90 34 240.0)">GFLOP/s</text>
-<line x1="110.0" y1="430.4" x2="696.7" y2="106.1" stroke="#1F2937" stroke-width="4" pathLength="1" class="draw" style="--d:0.1s"/>
-<line x1="696.7" y1="106.1" x2="870.0" y2="106.1" stroke="#1F2937" stroke-width="4" pathLength="1" class="draw" style="--d:0.35s"/>
-<g class="pop" style="--d:0.5s"><text x="864.0" y="94.1" font-size="20" text-anchor="end" font-weight="400" >AVX2 FMA peak, 43.4</text></g>
-<g class="pop" style="--d:0.3s"><text x="122.0" y="400.4" font-size="20" text-anchor="start" font-weight="400" transform="rotate(-28.9 122.0 400.4)">memory roof, 12.4 GB/s</text></g>
-<line x1="344.0" y1="301.1" x2="870.0" y2="301.1" stroke="#6B7280" stroke-width="3" stroke-dasharray="10 7" class="pop" style="--d:0.6s"/>
-<g class="pop" style="--d:0.6s"><text x="864.0" y="327.1" font-size="20" text-anchor="end" font-weight="400" class="dim" >scalar peak, 5.12</text></g>
-<line x1="532.2" y1="30" x2="532.2" y2="450" stroke="#9CA3AF" stroke-width="2.5" stroke-dasharray="6 6"/>
-<text x="540.2" y="438.0" font-size="19" text-anchor="start" font-weight="400" class="dim" >31 / 24 = 1.29</text>
-<g class="fragment" data-fragment-index="0"><circle cx="532.2" cy="305.1" r="11" fill="#FFFFFF" stroke="#6B7280" stroke-width="4"/><text x="512.2" y="312.1" font-size="21" text-anchor="end" font-weight="400" >serial 4.9</text></g>
-<g class="fragment" data-fragment-index="1"><g class="fragment go" data-fragment-index="1" style="--tx:0px; --ty:-96.4px"><circle cx="532.2" cy="305.1" r="11" fill="#2563EB" stroke="#2563EB" stroke-width="4"/></g><text x="512.2" y="200.7" font-size="21" text-anchor="end" font-weight="700" class="blue" >simd 14.1</text><text x="512.2" y="263.9" font-size="21" text-anchor="end" font-weight="400" class="blue" >2.9x</text></g>
-<g class="fragment" data-fragment-index="2"><circle cx="532.2" cy="222.6" r="7" fill="#FFFFFF" stroke="#2563EB" stroke-width="3"/><text x="552.2" y="234.6" font-size="20" text-anchor="start" font-weight="400" class="blue" >simd, 4096 x 1024, 12.1</text></g>
-<line x1="110.0" y1="450.0" x2="870.0" y2="450.0" stroke="#1F2937" stroke-width="2" />
-</svg>
-<!-- /svg:roof-core -->
-```
-:::
-
-::: {.column width="40%"}
-::: {.small}
-- 31 flops per cell, 15 for the five differences and 16 for the terms and
-  the step, with an FMA counted as two.
-- 24 bytes per cell, 8 read, 8 written and 8 more because a store first
-  reads its cache line. So every rung sits at 31 / 24 = 1.29 flops per byte.
-- simd is below 4x serial because four cells need nine overlapping loads and
-  two table loads, unaligned loads cross a cache line every other pass, and
-  one core already streams about 11 of its 12.4 GB/s.
-:::
-:::
-::::
-
-::: {.band}
-simd does {{< meta n.gf_simd >}} GFLOP/s, a third of the AVX2 ceiling and just
-under the one-core memory roof. On 4096 x 1024 memory slows it by 14 percent.
-
-[S. Williams, A. Waterman and D. Patterson, Roofline: an insightful visual
-performance model for multicore architectures, *Communications of the ACM*
-52(4), 65 to 76, 2009.]{.cite}
-:::
-
-::: {.notes}
-*The roofs draw on their own. Press next for serial, next for simd rising
-above it, next for the big grid.*
-
-On the one-core roofline serial is at the scalar peak and SIMD reaches 14
-gigaflops, a third of the AVX2 ceiling and just below the memory roof of one
-core.
+In the code each load now reads four doubles, the update is one fused
+multiply-add, and the counter steps by four. That runs at 456, 2.9 times
+serial. It's below 4 times because four cells need nine overlapping loads,
+and one core is already near its memory bandwidth.
 :::
 
 ## OpenMP, one block of rows per thread
@@ -1316,14 +1099,13 @@ core.
 
 ::: {.column width="40%"}
 ::: {.small}
-- `schedule(static)` gives each thread one contiguous block of rows, the
-  same block every step.
+- The grid has 512 rows, one per variance value. `schedule(static)` gives
+  each of 24 threads one block of 21 or 22 neighbouring rows, the same block
+  every step, so thread 0 updates rows 1 to 22.
 - Every thread reads the old buffer and writes only its own rows, so no locks
   are needed.
 - The loop ends with an implicit barrier. Then the main thread updates the
   boundaries and swaps the buffers.
-- Every row costs the same, so `schedule(dynamic)` only added overhead, up to
-  43 percent slower (E5).
 :::
 :::
 ::::
@@ -1333,11 +1115,13 @@ The code change is one pragma above the row loop.
 :::
 
 ::: {.notes}
-*Four clicks: the bands, the barrier, the boundaries, the swap.*
+*Four clicks, the bands, the barrier, the boundaries, the swap.*
 
-With OpenMP each thread gets a contiguous block of rows. The threads read
-the old buffer and write only their own rows, so there are no data races and
-no locks, then the main thread updates the boundaries.
+The grid has 512 rows, one per variance value. OpenMP gives each of the 24
+threads a block of about 21 neighbouring rows, so thread 0 updates rows 1 to
+22, thread 1 the next 22, and so on. Each thread writes only its own rows,
+so no locks are needed. After a barrier, the main thread updates the
+boundaries.
 :::
 
 ## OpenMP code {auto-animate="true"}
@@ -1358,11 +1142,8 @@ shared variable a compile error.
 :::
 
 ::: {.notes}
-*Press next and the pragma appears above the same loop. One more press
-grows the bar.*
-
-The code change is one pragma above the row loop. On 24 cores it gives 6367
-million updates a second, 14 times SIMD.
+*Same take, continued. Press next for the code, then next again and the
+pragma appears above the same loop.*
 :::
 
 ## OpenMP code {auto-animate="true"}
@@ -1398,12 +1179,15 @@ shared variable a compile error.
 :::
 
 ::: {.notes}
-*Same take, continued.*
+*Same take, continued. One more press grows the bar.*
+
+In the code that's one pragma above the row loop, and it gives 6367 on 24
+cores, 14 times SIMD.
 :::
 
 ## Strong scaling
 
-[The same 2048 x 512 grid on 1 to 24 threads, with Amdahl's law $1/S = f + (1 - f)/p$ fitted]{.sub}
+[Strong scaling keeps the 2048 x 512 grid fixed and adds threads. How close to 24 times faster does it get?]{.sub}
 
 ![](assets_m2/f2_strong.png){width="1140px" fig-align="center"}
 
@@ -1416,7 +1200,8 @@ DRAM triad.
 :::
 
 ::: {.band}
-{{< meta n.strong_speedup >}}x on 24 threads, a serial fraction
+{{< meta n.strong_speedup >}}x on 24 threads. Amdahl's law
+$S = 1 / (f + (1 - f)/p)$ fits a serial fraction
 $f = {{< meta n.amdahl_percent >}}$ percent. The scalar row reaches
 {{< meta n.scalar_speedup >}}x, because each of its threads needs data at a
 third of the rate.
@@ -1427,15 +1212,20 @@ Karp and H. P. Flatt, Measuring parallel processor performance,
 :::
 
 ::: {.notes}
-With the grid fixed, 24 threads give 13.9 times, and Amdahl's law fits a
-serial fraction of 2.4 percent. Most of that is the fork and barrier every
-step and the shared caches, because the boundaries are only 0.4 percent of a
-one-thread step.
+*Point at the 24 thread point, then the dashed Amdahl curve.*
+
+Strong scaling keeps the grid the same and adds threads. If every part of a
+step could be split, 24 threads would be 24 times faster, and we measured
+13.9. Amdahl's law explains the gap. Any part that runs on one thread takes
+the same time however many threads we add, so it caps the speedup. Fitting
+the law gives a serial fraction of 2.4 percent. The boundary update, the
+only code on one thread, is 0.4 percent. The rest is the threads waiting at
+the barrier every step and sharing each socket's cache.
 :::
 
 ## Weak scaling
 
-[21 rows per thread, the grid grows with the threads, Gustafson's law $S = f + (1 - f)N$]{.sub}
+[Weak scaling gives every thread 21 rows, so the grid grows with the threads. Does the step time stay flat?]{.sub}
 
 ![](assets_m2/f3_weak.png){width="1240px" fig-align="center"}
 
@@ -1448,22 +1238,29 @@ boundaries take 9.2 percent of a step, so Gustafson predicts
 
 ::: {.band}
 The step time grows from 0.11 to 0.17 ms, a scaled speedup of
-{{< meta n.weak_scaled >}} on 24 threads, where Gustafson with
-$f = {{< meta n.gustafson_f >}}$ predicts {{< meta n.gustafson_predicted >}}.
+{{< meta n.weak_scaled >}} on 24 threads. Gustafson's law $S = f + (1 - f)N$
+with $f = {{< meta n.gustafson_f >}}$ predicts {{< meta n.gustafson_predicted >}}.
 
 [J. L. Gustafson, Reevaluating Amdahl's law, *Communications of the ACM*
 31(5), 532 to 533, 1988.]{.cite}
 :::
 
 ::: {.notes}
-For weak scaling each thread keeps 21 rows, so the grid grows with the
-threads. The step time goes from 0.11 to 0.17 milliseconds, a scaled
-speedup of 16 on 24 threads, below Gustafson's prediction of 22.
+*Point at the step time line, then the scaled speedup against the Gustafson
+line.*
+
+Weak scaling asks, if each thread brings its own share of work, does the
+step time stay flat? Every thread gets 21 rows, so 24 threads solve 504
+rows, a grid 24 times bigger. The step time rose from 0.11 to 0.17
+milliseconds, so 24 threads do 24 times the work in 1.5 times the time, a
+scaled speedup of 16. Gustafson's law predicts 22 from our 9 percent serial
+share. We fall short because one thread has a whole socket's cache and
+bandwidth to itself, and 24 threads share them.
 :::
 
 ## Grid size
 
-[1 MiB to 128 MiB of working set]{.sub}
+[The same rungs on grids from 1 MiB to 128 MiB of buffers]{.sub}
 
 ![](assets_m2/f4_size.png){width="1240px" fig-align="center"}
 
@@ -1481,14 +1278,15 @@ memory and the rate halves.
 :::
 
 ::: {.notes}
-Small grids are dominated by the fixed cost of each step. While both
-buffers fit in the two L3 caches, 24 threads run 40 times serial, and at
-4096 by 1024, where they don't fit, the rate halves.
+*Point at the omp line where it drops.*
+
+While both buffers fit in the two 30 mebibyte L3 caches, 24 threads run 40
+times serial. At 4096 by 1024 they no longer fit, and the rate halves.
 :::
 
 ## After threads, memory bandwidth
 
-[Measured ceilings of the whole node]{.sub}
+[The roofline caps a kernel's rate by the node's compute peak or by its memory bandwidth]{.sub}
 
 :::: {.columns}
 ::: {.column width="57%"}
@@ -1547,40 +1345,13 @@ performance model for multicore architectures, *Communications of the ACM*
 :::
 
 ::: {.notes}
-*Press next for one core of simd, next for 24 threads rising, next for the
-big grid on the memory roof.*
+*Same take, continued. Press next for the slide. Press next for one core of
+simd, next for 24 threads rising, next for the big grid on the memory roof.*
 
-On the node roofline the small grid runs above the memory roof because it
-fits in L3, while the big grid sits on the memory roof, limited by memory bandwidth.
-:::
-
-## Placement
-
-[Which socket the threads run on, and which socket's memory holds the pages]{.sub}
-
-![](assets_m2/f7_placement.png){width="1160px" fig-align="center"}
-
-::: {.detail}
-The CPUs are numbered even on socket 0 and odd on socket 1, so
-`OMP_PROC_BIND=close` splits every even thread count over both sockets.
-`numactl --interleave=all` made 24 threads 1.74x faster on the big grid (E7),
-and `MALLOC_MMAP_THRESHOLD_` gives every repetition fresh 2 MiB huge pages.
-:::
-
-::: {.band}
-Two sockets give two L3 caches and two memory controllers. Each page is
-placed on the socket whose thread first writes it.
-
-[Pages and sockets, U. Drepper, What every programmer should know about
-memory, Red Hat, 2007, section 5 on NUMA.]{.cite}
-:::
-
-::: {.notes}
-*Point at the 4096 pair on the left, then the two pairs on the right.*
-
-On the big grid, 12 threads gave 1894 on one socket and 3413 on both. The
-main thread writes every page first, so all of them sit on socket 0, and
-interleaving them made 24 threads 1.74 times faster.
+The roofline shows why. Speed is capped by how fast the cores compute, the
+flat roof, or by how fast memory delivers data, the sloped roof. The small
+grid runs above the memory roof because its data comes from L3. The big grid
+sits on the memory roof, so after threads the limit is memory bandwidth.
 :::
 
 ## MPI, one block of rows per process
@@ -1657,105 +1428,13 @@ grid, so its pages are in that socket's memory.
 :::
 
 ::: {.notes}
-*Four clicks: the owned rows, the edge rows, the exchange, the wait.*
+*Four clicks, the owned rows, the edge rows, the exchange, the wait.*
 
-With MPI each process owns a block of rows. Every step it sends its first
-and last rows to its neighbours and receives theirs into its copied rows.
-With one process per socket, each fills its own grid, so its pages are
-local.
-:::
-
-## MPI code, the time loop {.dense auto-animate="true"}
-
-[The OpenMP rung's time loop]{.sub}
-
-```{.cpp data-id="step-code" filename="src/solver_omp.cpp, lines 39 to 59, timer lines left out"}
-for (int step = 1; step <= num_timesteps; ++step) {
-    // Split the interior rows between the threads, one equal band each.
-    // Threads only read current and only write their own rows of next, so no locks are needed.
-    #pragma omp parallel for schedule(static) default(none) shared(constants, current, next, num_variance_nodes)
-    for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
-        update_row_avx(constants, current, next, var_j);
-    }
-
-    // The parallel for ends with every thread waiting for the others.
-    // Only the main thread runs the boundaries.
-    // The top row goes last because it copies the row below.
-    update_zero_row(constants, current, next);
-    apply_stock_edges(constants, next, 0, num_variance_nodes, step * dt);
-    copy_top_row(constants, next);
-
-    // Swap the buffers for the next step.
-    grid.swap_buffers();
-}
-```
-
-::: {.band}
-Each process updates only its own rows and the boundaries it owns, then
-exchanges its edge rows before the buffers swap.
-:::
-
-::: {.notes}
-*Press next and the loop changes into the MPI loop. Then one press per
-marked line, and a last press for the bars.*
-
-In the loop, rows for rank gives each process its block, and it updates only
-those rows and its own boundaries. The exchange is non-blocking, with MPI
-Irecv posted before MPI Isend, and MPI Waitall blocks until both finish, then
-at the end MPI Gatherv collects the blocks onto process 0.
-:::
-
-## MPI code, the time loop {.dense auto-animate="true"}
-
-[The same loop with the changes for MPI marked]{.sub}
-
-```{.cpp data-id="step-code" filename="src/solver_mpi.cpp, line 145 and lines 156 to 190, timer lines left out" code-line-numbers="|1|4-7|10-16|20|24"}
-RowRange owned_rows = rows_for_rank(num_variance_nodes, rank, num_ranks);
-for (int step = 1; step <= num_timesteps; ++step) {
-    // Split this process's interior rows between its threads.
-    #pragma omp parallel for schedule(static) default(none) shared(constants, current, next, first_interior, end_interior)
-    for (int var_j = first_interior; var_j < end_interior; ++var_j) {
-        update_row_avx(constants, current, next, var_j);
-    }
-
-    // Only the owning process updates each boundary.
-    if (owns_zero_row) {
-        update_zero_row(constants, current, next);
-    }
-    apply_stock_edges(constants, next, owned_rows.begin, owned_rows.end, step * dt);
-    if (owns_top_row) {
-        copy_top_row(constants, next);
-    }
-
-    // Send the edge rows to the neighbours and receive theirs.
-    // The next step reads one row past each end of this process's rows.
-    exchange_edge_rows(next, num_stock_nodes, owned_rows, rank, num_ranks);
-
-    grid.swap_buffers();
-}
-gather_rows(grid, num_stock_nodes, num_variance_nodes, rank, num_ranks);
-```
-
-::: {.impact .wide}
-```{=html}
-<!-- svg:impact-mpi -->
-<svg class="anim" viewBox="0 0 1000 96" xmlns="http://www.w3.org/2000/svg" >
-<text x="220.0" y="32.0" font-size="21" text-anchor="end" font-weight="400" >omp, 24 threads</text>
-<rect x="230.0" y="8.0" width="528.8" height="32.0" fill="#9CA3AF" stroke="none" stroke-width="0" rx="4"/><text x="770.8" y="32.0" font-size="21" text-anchor="start" font-weight="400" class="dim" >6367</text>
-<text x="220.0" y="76.0" font-size="21" text-anchor="end" font-weight="400" >mpi, one node</text>
-<g class="fragment"><g class="grow-x"><rect x="230.0" y="52.0" width="580.0" height="32.0" fill="#2563EB" stroke="none" stroke-width="0" rx="4"/></g><text x="822.0" y="76.0" font-size="21" text-anchor="start" font-weight="700" class="blue" >6984, 1.10x</text></g>
-</svg>
-<!-- /svg:impact-mpi -->
-```
-:::
-
-::: {.band}
-Each process updates only its own rows and the boundaries it owns, then
-exchanges its edge rows before the buffers swap.
-:::
-
-::: {.notes}
-*Same take, continued.*
+To use more than one node we need MPI, where each process has its own
+memory. Each process owns a block of rows. To update its first row it needs
+the last row of the process below, so every step each process sends its edge
+rows to its neighbours and receives theirs into an extra row at each end,
+called a ghost row.
 :::
 
 ## MPI code, the edge row exchange
@@ -1789,7 +1468,44 @@ The receive is posted before the send, and both return immediately.
 :::
 
 ::: {.notes}
-*Same take, continued. Three presses, the receive, the send, the wait.*
+*Same take, continued. Press next for the code. Three presses, the receive,
+the send, the wait.*
+
+In the code the receive is posted before the send, both return straight
+away, and MPI Waitall blocks until both finish.
+:::
+
+## Placement
+
+[Which socket the threads run on, and which socket's memory holds the pages]{.sub}
+
+![](assets_m2/f7_placement.png){width="1160px" fig-align="center"}
+
+::: {.detail}
+The CPUs are numbered even on socket 0 and odd on socket 1, so
+`OMP_PROC_BIND=close` splits every even thread count over both sockets.
+`numactl --interleave=all` made 24 threads 1.74x faster on the big grid (E7),
+and `MALLOC_MMAP_THRESHOLD_` gives every repetition fresh 2 MiB huge pages.
+:::
+
+::: {.band}
+Two sockets give two L3 caches and two memory controllers. Each page is
+placed on the socket whose thread first writes it.
+
+[Pages and sockets, U. Drepper, What every programmer should know about
+memory, Red Hat, 2007, section 5 on NUMA.]{.cite}
+:::
+
+::: {.notes}
+*Point at the pages on socket 0 bar, then the numactl bar, then the MPI
+bar.*
+
+MPI helped on one node too, because of where memory sits. Each socket has
+its own memory, and Linux puts each page on the socket whose thread first
+writes it. In the OpenMP version the main thread fills the grid, so every
+page sits on socket 0. Spreading the pages over both sockets made the big
+grid 1.74 times faster, and one MPI process per socket, each filling its own
+copy, made it 2.28 times faster.
 :::
 
 ## Hybrid layouts
@@ -1811,39 +1527,37 @@ figure is the exchange share of a step.
 :::
 
 ::: {.notes}
-One process per socket made the big grid 2.28 times faster than one process
-of 24 threads. Two nodes give 1.21 times one node on the small grid and 1.64
-on the big one, since on the small grid the exchange takes 40 percent of
-each step.
+*Same take, continued. Press next for the slide. Point at the two node bars,
+then the white exchange shares.*
+
+Across two nodes we get 1.21 times one node on the small grid and 1.64 on
+the big one, because on the small grid the exchange takes 40 percent of each
+step.
 :::
 
-## Overlapping the exchange with the update
+## Tried and rejected
 
-[Experiment E9, the edge rows sent first while the other rows are updated]{.sub}
+[Each bar is one variant against the OpenMP rung, 24 threads]{.sub}
 
-![](assets_m2/f17_overlap.png){width="1240px" fig-align="center"}
+![](assets_m2/f1b_tried.png){width="1240px" fig-align="center"}
 
 ::: {.detail}
-Between nodes Open MPI 4.1.1 uses TCP with a 64 KiB eager limit, so a 16 KiB
-row leaves at `MPI_Isend`. Within a node shared memory has a 4 KiB eager
-limit, so the row waits for a rendezvous inside `MPI_Waitall`, and there is
-no progress thread. Raising that limit above 16 KiB would test this.
+Float gave 1.73x on 2048 by 512 and 4.8x on 4096 by 1024, where its 32 MB
+fits in the two L3 caches. It priced the option at 196.1256 against 196.1684
+in double, and moved gamma by 11.9 percent.
 :::
 
 ::: {.band}
-It helps only with one process per node, [{{< meta n.overlap_gain >}}x]{.em}.
-Within a node Open MPI most likely transfers a 16 KiB row only during
-`MPI_Waitall`.
+Dynamic scheduling lost, because every row costs the same. Float was faster
+but moved the price by 4 cents, so it was rejected.
 :::
 
 ::: {.notes}
-*Point at the tall blue bar.*
+*Point at the dynamic bars, then the float bar.*
 
-We tried overlapping the exchange with computation, sending the edge rows
-first and updating the rest while they're in transit. It only helped with
-one process per node, at 1.41 times, and we suspect that within a node Open
-MPI waits for the receiver to call MPI Waitall before it transfers a 16
-kibibyte row.
+Dynamic scheduling only added overhead, because every row costs the same.
+Float ran 1.73 times faster but moved the price by 4 cents and gamma by 12
+percent, so we rejected it.
 :::
 
 ## Same answer on every rung
@@ -1875,30 +1589,8 @@ tests before timing anything.
 
 ::: {.notes}
 No version was timed until it matched the baseline. Every version is within
-3.3 times 10 to the minus 15, and OpenMP and MPI match SIMD bit for bit.
-:::
-
-## Tried and rejected
-
-[Each bar is one variant against the OpenMP rung, 24 threads]{.sub}
-
-![](assets_m2/f1b_tried.png){width="1240px" fig-align="center"}
-
-::: {.detail}
-Float gave 1.73x on 2048 by 512 and 4.8x on 4096 by 1024, where its 32 MB
-fits in the two L3 caches. It priced the option at 196.1256 against 196.1684
-in double, and moved gamma by 11.9 percent.
-:::
-
-::: {.band}
-Dynamic scheduling lost, because every row costs the same. Float was faster
-but moved the price by 4 cents, so it was rejected.
-:::
-
-::: {.notes}
-We tested these variants against OpenMP. Dynamic scheduling was slower
-because every row costs the same, and float was faster, but it moved the
-price by 4 cents and gamma by 12 percent, so we rejected it.
+3.3 times 10 to the minus 15, and OpenMP and MPI match SIMD bit for bit,
+because they split the same row updates.
 :::
 
 ## Conclusion
@@ -1938,9 +1630,11 @@ only on 4096 x 1024, and the serial boundary update grew to
 :::
 
 ::: {.notes}
-We reached 123 times the baseline on one node and 147 on two.
-Most of that came from SIMD and threads, across nodes the exchange is the
-main limit, and four of our six hypotheses held.
+*Same take, continued. Press next for the slide. Point down the ladder
+table.*
+
+In the end we reached 123 times the baseline on one node and 147 on two.
+Most of it came from SIMD and threads, and four of our six hypotheses held.
 :::
 
 ## What surprised me, what I would change, and what comes next
@@ -1995,15 +1689,15 @@ result file records the node, the compiler and the flags.
 :::
 
 ::: {.notes}
-What surprised me most was how much the build and the system mattered, with
-two compiler flags alone giving SIMD 1.19 times. If I started again, I'd
-flush denormals before the first sweep. A denormal is a double below about 2.2 times 10 to the minus 308, and this CPU
-spends tens of extra cycles on every operation that touches one, so they
-slowed some rungs and we had to rerun the whole first round. Next, on the
-MPI rung, each rank would hold only its own rows plus one copied row from
-each neighbour, because the update only reads the rows above and below. On
-two nodes that cuts each rank from 16 to about 4 mebibytes, so the grid can
-grow with the nodes.
+*Point at each block in turn.*
+
+What surprised me most was how much the build and the system mattered. Two
+compiler flags alone gave SIMD 1.19 times. If I started again, I'd flush
+denormals before the first sweep. A denormal is a double below about 2.2
+times 10 to the minus 308, and this CPU spends tens of extra cycles on every
+operation that touches one. Next, each MPI process would hold only its own
+rows plus one ghost row from each neighbour. That cuts each process on two
+nodes from 16 to about 4 mebibytes, so the grid can grow with the nodes.
 :::
 
 ## {{< meta n.x_mpi_one >}}x on one node, {{< meta n.x_mpi_two >}}x on two, the same answer on every rung {.closing}
@@ -2013,8 +1707,7 @@ grow with the nodes.
 [COSC3500 Milestone 2, Zain Al-Saffi]{.sub}
 
 ::: {.notes}
-Every number here has a job id in the results file, and the repository has
-the code to reproduce it. Thanks for watching.
+Every number here has a job id in the results file. Thanks for watching.
 :::
 
 ## AI declaration {.roomy}
@@ -2034,12 +1727,376 @@ file opens with the same declaration.
 :::
 
 ::: {.notes}
-*Hold for three seconds. Nothing is said.*
+*Same take, continued. Press next for the AI declaration and hold it for
+three seconds. Nothing is said.*
 :::
 
 ## Appendix {.closing visibility="uncounted"}
 
 [Backup slides for questions. They are not part of the video.]{.sub}
+
+## The project in one slide {.roomy visibility="uncounted"}
+
+[Price one option by solving a PDE on a grid, then make each step parallel]{.sub}
+
+::: {.grid2}
+::: {.blk}
+[The question]{.bt}
+
+What is a call option worth today, when the share price and its volatility
+both move randomly, as in the Heston model?
+:::
+
+::: {.blk}
+[Why it parallelises]{.bt}
+
+No cell in a step depends on another in the same step, so cells go to AVX2
+lanes, rows to cores and blocks of rows to processes.
+:::
+
+::: {.blk}
+[The method]{.bt}
+
+Solve the Heston PDE on a grid of share price by variance, stepping back from
+expiry, where every value is known, to today.
+:::
+
+::: {.blk}
+[The result]{.bt}
+
+[{{< meta n.x_mpi_one >}}x]{.em} on one node and
+[{{< meta n.x_mpi_two >}}x]{.em} on two, with the same answer on every
+version.
+:::
+:::
+
+::: {.notes}
+*The four blocks.*
+
+We're pricing a call option where the share price and its volatility both
+move randomly, by solving the Heston PDE on a grid. No cell in a step
+depends on another, so every step can be split up.
+:::
+
+## Checking the answer {visibility="uncounted"}
+
+[With $\xi = 0$ and $\rho = 0$ the variance never moves and Heston becomes Black-Scholes]{.sub}
+
+![](assets_m2/f14_bs_collapse.png){width="1240px" fig-align="center"}
+
+::: {.detail}
+Every benchmark job first runs four tests. `test_bs_collapse` is this check,
+`test_parity` checks $C - P = S e^{-qT} - K e^{-rT}$ on the full model,
+`test_ladder_matches` holds every rung to the baseline, and `test_avx_row`
+holds the AVX2 row to the scalar row.
+:::
+
+::: {.band}
+With its full stencil unchanged, the solver is within 4 cents of the closed
+form at today's price. Every benchmark job runs this check first.
+:::
+
+::: {.notes}
+To check the solver, we set the volatility of volatility to zero, where
+Heston reduces to Black-Scholes, and the unchanged solver lands within 4
+cents of the closed-form price.
+:::
+
+## The ladder {visibility="uncounted"}
+
+[Each rung adds one technique and must give the baseline's answer before it is timed]{.sub}
+
+:::: {.columns}
+::: {.column width="58%"}
+```{=html}
+<!-- svg:ladder -->
+<svg class="anim" viewBox="0 0 900 540" xmlns="http://www.w3.org/2000/svg" >
+<line x1="120.0" y1="450.0" x2="880.0" y2="450.0" stroke="#D1D5DB" stroke-width="1.5" />
+<text x="108.0" y="457.0" font-size="20" text-anchor="end" font-weight="400" class="dim" >10</text>
+<line x1="120.0" y1="322.8" x2="880.0" y2="322.8" stroke="#D1D5DB" stroke-width="1.5" />
+<text x="108.0" y="329.8" font-size="20" text-anchor="end" font-weight="400" class="dim" >100</text>
+<line x1="120.0" y1="195.5" x2="880.0" y2="195.5" stroke="#D1D5DB" stroke-width="1.5" />
+<text x="108.0" y="202.5" font-size="20" text-anchor="end" font-weight="400" class="dim" >1,000</text>
+<line x1="120.0" y1="68.3" x2="880.0" y2="68.3" stroke="#D1D5DB" stroke-width="1.5" />
+<text x="108.0" y="75.3" font-size="20" text-anchor="end" font-weight="400" class="dim" >10,000</text>
+<text x="36.0" y="240.0" font-size="20" text-anchor="middle" font-weight="400" class="dim" transform="rotate(-90 36 240.0)">Mcell-updates/s, log scale</text>
+<rect x="148.9" y="353.8" width="94.2" height="96.2" fill="#9CA3AF" stroke="none" stroke-width="0" class="bar" style="--d:0.15s"/>
+<g class="pop" style="--d:0.45s"><text x="196.0" y="319.8" font-size="22" text-anchor="middle" font-weight="700" >57</text><text x="196.0" y="343.8" font-size="20" text-anchor="middle" font-weight="400" class="dim" >1x</text></g>
+<text x="196.0" y="480.0" font-size="21" text-anchor="middle" font-weight="400" >baseline</text>
+<rect x="300.9" y="297.1" width="94.2" height="152.9" fill="#2563EB" stroke="none" stroke-width="0" class="bar" style="--d:0.45s"/>
+<g class="pop" style="--d:0.75s"><text x="348.0" y="263.1" font-size="22" text-anchor="middle" font-weight="700" >159</text><text x="348.0" y="287.1" font-size="20" text-anchor="middle" font-weight="400" class="dim" >2.8x</text><text x="348.0" y="327.1" font-size="21" text-anchor="middle" font-weight="700" style="fill:#FFFFFF">x2.80</text></g>
+<text x="348.0" y="480.0" font-size="21" text-anchor="middle" font-weight="400" >serial</text>
+<rect x="452.9" y="238.9" width="94.2" height="211.1" fill="#2563EB" stroke="none" stroke-width="0" class="bar" style="--d:0.75s"/>
+<g class="pop" style="--d:1.05s"><text x="500.0" y="204.9" font-size="22" text-anchor="middle" font-weight="700" >456</text><text x="500.0" y="228.9" font-size="20" text-anchor="middle" font-weight="400" class="dim" >8.0x</text><text x="500.0" y="268.9" font-size="21" text-anchor="middle" font-weight="700" style="fill:#FFFFFF">x2.87</text></g>
+<text x="500.0" y="480.0" font-size="21" text-anchor="middle" font-weight="400" >simd</text>
+<rect x="604.9" y="93.2" width="94.2" height="356.8" fill="#2563EB" stroke="none" stroke-width="0" class="bar" style="--d:1.05s"/>
+<g class="pop" style="--d:1.35s"><text x="652.0" y="59.2" font-size="22" text-anchor="middle" font-weight="700" >6,367</text><text x="652.0" y="83.2" font-size="20" text-anchor="middle" font-weight="400" class="dim" >112x</text><text x="652.0" y="123.2" font-size="21" text-anchor="middle" font-weight="700" style="fill:#FFFFFF">x14.0</text></g>
+<text x="652.0" y="480.0" font-size="21" text-anchor="middle" font-weight="400" >omp</text>
+<text x="652.0" y="506.0" font-size="19" text-anchor="middle" font-weight="400" class="dim" >24 threads</text>
+<rect x="756.9" y="88.1" width="94.2" height="361.9" fill="#2563EB" stroke="none" stroke-width="0" class="bar" style="--d:1.35s"/>
+<g class="pop" style="--d:1.65s"><text x="804.0" y="54.1" font-size="22" text-anchor="middle" font-weight="700" >6,984</text><text x="804.0" y="78.1" font-size="20" text-anchor="middle" font-weight="400" class="dim" >123x</text><text x="804.0" y="118.1" font-size="21" text-anchor="middle" font-weight="700" style="fill:#FFFFFF">x1.10</text></g>
+<text x="804.0" y="480.0" font-size="21" text-anchor="middle" font-weight="400" >mpi</text>
+<text x="804.0" y="506.0" font-size="19" text-anchor="middle" font-weight="400" class="dim" >2 x 12</text>
+<line x1="120.0" y1="450.0" x2="880.0" y2="450.0" stroke="#1F2937" stroke-width="2" />
+</svg>
+<!-- /svg:ladder -->
+```
+:::
+
+::: {.column width="40%"}
+| Rung | Technique |
+|:--|:--|
+| **baseline** | the original loop, with divisions inside it |
+| **serial** | divisions turned into multiplications |
+| **simd** | four cells per AVX2 instruction |
+| **omp** | the rows shared between 24 cores |
+| **mpi** | one process per socket, edge rows exchanged |
+:::
+::::
+
+::: {.band}
+The white number inside each bar is the gain over the rung below. The total
+on one node is [{{< meta n.x_mpi_one >}}x]{.em} the baseline.
+:::
+
+::: {.notes}
+*The bars grow on their own. Point along them from left to right.*
+
+The ladder adds one technique per version, and the number in each bar is the gain over the version below.
+:::
+
+## The compiler was splitting the loads {.dense visibility="uncounted"}
+
+[Experiments E2 and E2b, the same source built two ways]{.sub}
+
+:::: {.columns}
+::: {.column width="46%"}
+![](assets_m2/f16_split.png){width="100%"}
+:::
+
+::: {.column width="51%"}
+![](assets_m2/shot_split_loads.png){width="100%"}
+
+::: {.small}
+With only `-mavx2`, g++ 8.5 tunes for a generic x86 and compiles every
+unaligned 256 bit load as two 128 bit loads. With the same flags, the
+compiler's own vectorised serial row reaches 77 percent of the hand-written
+AVX2 row.
+:::
+
+```{.makefile filename="Makefile, line 23"}
+NOSPLIT = -mno-avx256-split-unaligned-load -mno-avx256-split-unaligned-store
+```
+:::
+::::
+
+::: {.band}
+Two flags make every unaligned load one 256 bit load, with the same answer
+and [{{< meta n.split_gain_one >}}x]{.em} the speed on one core. Every number
+in this video uses them.
+:::
+
+::: {.notes}
+*Point at the two bars, then at the vinsertf128 lines.*
+
+Our first build ran this at 387, because g++ 8.5 split every unaligned 256
+bit load into two 128 bit loads. Two flags make each a single load, for 1.19
+times the speed, and every number here uses them.
+:::
+
+## SIMD on the roofline {visibility="uncounted"}
+
+[Measured ceilings of one r730 core]{.sub}
+
+:::: {.columns}
+::: {.column width="57%"}
+```{=html}
+<!-- svg:roof-core -->
+<svg class="anim" viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg" >
+<defs><marker id="rise-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2563EB"/></marker></defs>
+<line x1="110.0" y1="450.0" x2="870.0" y2="450.0" stroke="#D1D5DB" stroke-width="1.5" />
+<text x="98.0" y="457.0" font-size="20" text-anchor="end" font-weight="400" class="dim" >1</text>
+<line x1="110.0" y1="240.0" x2="870.0" y2="240.0" stroke="#D1D5DB" stroke-width="1.5" />
+<text x="98.0" y="247.0" font-size="20" text-anchor="end" font-weight="400" class="dim" >10</text>
+<line x1="110.0" y1="30.0" x2="870.0" y2="30.0" stroke="#D1D5DB" stroke-width="1.5" />
+<text x="98.0" y="37.0" font-size="20" text-anchor="end" font-weight="400" class="dim" >100</text>
+<line x1="110.0" y1="30.0" x2="110.0" y2="450.0" stroke="#D1D5DB" stroke-width="1.5" />
+<text x="110.0" y="480.0" font-size="20" text-anchor="middle" font-weight="400" class="dim" >0.1</text>
+<line x1="490.0" y1="30.0" x2="490.0" y2="450.0" stroke="#D1D5DB" stroke-width="1.5" />
+<text x="490.0" y="480.0" font-size="20" text-anchor="middle" font-weight="400" class="dim" >1</text>
+<line x1="870.0" y1="30.0" x2="870.0" y2="450.0" stroke="#D1D5DB" stroke-width="1.5" />
+<text x="870.0" y="480.0" font-size="20" text-anchor="middle" font-weight="400" class="dim" >10</text>
+<text x="490.0" y="512.0" font-size="20" text-anchor="middle" font-weight="400" class="dim" >arithmetic intensity, flops per byte</text>
+<text x="34.0" y="240.0" font-size="20" text-anchor="middle" font-weight="400" class="dim" transform="rotate(-90 34 240.0)">GFLOP/s</text>
+<line x1="110.0" y1="430.4" x2="696.7" y2="106.1" stroke="#1F2937" stroke-width="4" pathLength="1" class="draw" style="--d:0.1s"/>
+<line x1="696.7" y1="106.1" x2="870.0" y2="106.1" stroke="#1F2937" stroke-width="4" pathLength="1" class="draw" style="--d:0.35s"/>
+<g class="pop" style="--d:0.5s"><text x="864.0" y="94.1" font-size="20" text-anchor="end" font-weight="400" >AVX2 FMA peak, 43.4</text></g>
+<g class="pop" style="--d:0.3s"><text x="122.0" y="400.4" font-size="20" text-anchor="start" font-weight="400" transform="rotate(-28.9 122.0 400.4)">memory roof, 12.4 GB/s</text></g>
+<line x1="344.0" y1="301.1" x2="870.0" y2="301.1" stroke="#6B7280" stroke-width="3" stroke-dasharray="10 7" class="pop" style="--d:0.6s"/>
+<g class="pop" style="--d:0.6s"><text x="864.0" y="327.1" font-size="20" text-anchor="end" font-weight="400" class="dim" >scalar peak, 5.12</text></g>
+<line x1="532.2" y1="30" x2="532.2" y2="450" stroke="#9CA3AF" stroke-width="2.5" stroke-dasharray="6 6"/>
+<text x="540.2" y="438.0" font-size="19" text-anchor="start" font-weight="400" class="dim" >31 / 24 = 1.29</text>
+<g class="fragment" data-fragment-index="0"><circle cx="532.2" cy="305.1" r="11" fill="#FFFFFF" stroke="#6B7280" stroke-width="4"/><text x="512.2" y="312.1" font-size="21" text-anchor="end" font-weight="400" >serial 4.9</text></g>
+<g class="fragment" data-fragment-index="1"><g class="fragment go" data-fragment-index="1" style="--tx:0px; --ty:-96.4px"><circle cx="532.2" cy="305.1" r="11" fill="#2563EB" stroke="#2563EB" stroke-width="4"/></g><text x="512.2" y="200.7" font-size="21" text-anchor="end" font-weight="700" class="blue" >simd 14.1</text><text x="512.2" y="263.9" font-size="21" text-anchor="end" font-weight="400" class="blue" >2.9x</text></g>
+<g class="fragment" data-fragment-index="2"><circle cx="532.2" cy="222.6" r="7" fill="#FFFFFF" stroke="#2563EB" stroke-width="3"/><text x="552.2" y="234.6" font-size="20" text-anchor="start" font-weight="400" class="blue" >simd, 4096 x 1024, 12.1</text></g>
+<line x1="110.0" y1="450.0" x2="870.0" y2="450.0" stroke="#1F2937" stroke-width="2" />
+</svg>
+<!-- /svg:roof-core -->
+```
+:::
+
+::: {.column width="40%"}
+::: {.small}
+- 31 flops per cell, 15 for the five differences and 16 for the terms and
+  the step, with an FMA counted as two.
+- 24 bytes per cell, 8 read, 8 written and 8 more because a store first
+  reads its cache line. So every rung sits at 31 / 24 = 1.29 flops per byte.
+- simd is below 4x serial because four cells need nine overlapping loads and
+  two table loads, unaligned loads cross a cache line every other pass, and
+  one core already streams about 11 of its 12.4 GB/s.
+:::
+:::
+::::
+
+::: {.band}
+simd does {{< meta n.gf_simd >}} GFLOP/s, a third of the AVX2 ceiling and just
+under the one-core memory roof. On 4096 x 1024 memory slows it by 14 percent.
+
+[S. Williams, A. Waterman and D. Patterson, Roofline: an insightful visual
+performance model for multicore architectures, *Communications of the ACM*
+52(4), 65 to 76, 2009.]{.cite}
+:::
+
+::: {.notes}
+*The roofs draw on their own. Press next for serial, next for simd rising
+above it, next for the big grid.*
+
+On the one-core roofline serial is at the scalar peak and SIMD reaches 14
+gigaflops, a third of the AVX2 ceiling and just below the memory roof of one
+core.
+:::
+
+## MPI code, the time loop {.dense auto-animate="true" visibility="uncounted"}
+
+[The OpenMP rung's time loop]{.sub}
+
+```{.cpp data-id="step-code" filename="src/solver_omp.cpp, lines 39 to 59, timer lines left out"}
+for (int step = 1; step <= num_timesteps; ++step) {
+    // Split the interior rows between the threads, one equal band each.
+    // Threads only read current and only write their own rows of next, so no locks are needed.
+    #pragma omp parallel for schedule(static) default(none) shared(constants, current, next, num_variance_nodes)
+    for (int var_j = 1; var_j < num_variance_nodes - 1; ++var_j) {
+        update_row_avx(constants, current, next, var_j);
+    }
+
+    // The parallel for ends with every thread waiting for the others.
+    // Only the main thread runs the boundaries.
+    // The top row goes last because it copies the row below.
+    update_zero_row(constants, current, next);
+    apply_stock_edges(constants, next, 0, num_variance_nodes, step * dt);
+    copy_top_row(constants, next);
+
+    // Swap the buffers for the next step.
+    grid.swap_buffers();
+}
+```
+
+::: {.band}
+Each process updates only its own rows and the boundaries it owns, then
+exchanges its edge rows before the buffers swap.
+:::
+
+::: {.notes}
+*Press next and the loop changes into the MPI loop. Then one press per
+marked line, and a last press for the bars.*
+
+In the loop, rows for rank gives each process its block, and it updates only
+those rows and its own boundaries. The exchange is non-blocking, with MPI
+Irecv posted before MPI Isend, and MPI Waitall blocks until both finish, then
+at the end MPI Gatherv collects the blocks onto process 0.
+:::
+
+## MPI code, the time loop {.dense auto-animate="true" visibility="uncounted"}
+
+[The same loop with the changes for MPI marked]{.sub}
+
+```{.cpp data-id="step-code" filename="src/solver_mpi.cpp, line 145 and lines 156 to 190, timer lines left out" code-line-numbers="|1|4-7|10-16|20|24"}
+RowRange owned_rows = rows_for_rank(num_variance_nodes, rank, num_ranks);
+for (int step = 1; step <= num_timesteps; ++step) {
+    // Split this process's interior rows between its threads.
+    #pragma omp parallel for schedule(static) default(none) shared(constants, current, next, first_interior, end_interior)
+    for (int var_j = first_interior; var_j < end_interior; ++var_j) {
+        update_row_avx(constants, current, next, var_j);
+    }
+
+    // Only the owning process updates each boundary.
+    if (owns_zero_row) {
+        update_zero_row(constants, current, next);
+    }
+    apply_stock_edges(constants, next, owned_rows.begin, owned_rows.end, step * dt);
+    if (owns_top_row) {
+        copy_top_row(constants, next);
+    }
+
+    // Send the edge rows to the neighbours and receive theirs.
+    // The next step reads one row past each end of this process's rows.
+    exchange_edge_rows(next, num_stock_nodes, owned_rows, rank, num_ranks);
+
+    grid.swap_buffers();
+}
+gather_rows(grid, num_stock_nodes, num_variance_nodes, rank, num_ranks);
+```
+
+::: {.impact .wide}
+```{=html}
+<!-- svg:impact-mpi -->
+<svg class="anim" viewBox="0 0 1000 96" xmlns="http://www.w3.org/2000/svg" >
+<text x="220.0" y="32.0" font-size="21" text-anchor="end" font-weight="400" >omp, 24 threads</text>
+<rect x="230.0" y="8.0" width="528.8" height="32.0" fill="#9CA3AF" stroke="none" stroke-width="0" rx="4"/><text x="770.8" y="32.0" font-size="21" text-anchor="start" font-weight="400" class="dim" >6367</text>
+<text x="220.0" y="76.0" font-size="21" text-anchor="end" font-weight="400" >mpi, one node</text>
+<g class="fragment"><g class="grow-x"><rect x="230.0" y="52.0" width="580.0" height="32.0" fill="#2563EB" stroke="none" stroke-width="0" rx="4"/></g><text x="822.0" y="76.0" font-size="21" text-anchor="start" font-weight="700" class="blue" >6984, 1.10x</text></g>
+</svg>
+<!-- /svg:impact-mpi -->
+```
+:::
+
+::: {.band}
+Each process updates only its own rows and the boundaries it owns, then
+exchanges its edge rows before the buffers swap.
+:::
+
+::: {.notes}
+*Same take, continued.*
+:::
+
+## Overlapping the exchange with the update {visibility="uncounted"}
+
+[Experiment E9, the edge rows sent first while the other rows are updated]{.sub}
+
+![](assets_m2/f17_overlap.png){width="1240px" fig-align="center"}
+
+::: {.detail}
+Between nodes Open MPI 4.1.1 uses TCP with a 64 KiB eager limit, so a 16 KiB
+row leaves at `MPI_Isend`. Within a node shared memory has a 4 KiB eager
+limit, so the row waits for a rendezvous inside `MPI_Waitall`, and there is
+no progress thread. Raising that limit above 16 KiB would test this.
+:::
+
+::: {.band}
+It helps only with one process per node, [{{< meta n.overlap_gain >}}x]{.em}.
+Within a node Open MPI most likely transfers a 16 KiB row only during
+`MPI_Waitall`.
+:::
+
+::: {.notes}
+*Point at the tall blue bar.*
+
+We tried overlapping the exchange with computation, sending the edge rows
+first and updating the rest while they're in transit. It only helped with
+one process per node, at 1.41 times, and we suspect that within a node Open
+MPI waits for the receiver to call MPI Waitall before it transfers a 16
+kibibyte row.
+:::
 
 ## The problem {visibility="uncounted"}
 

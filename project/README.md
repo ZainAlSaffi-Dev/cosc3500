@@ -64,7 +64,7 @@ the benchmark sweeps.
 | `tests/` | Four test programs, run before every benchmark |
 | `slurm/` | One job script per benchmark sweep, sharing `bench_common.sh` |
 | `scripts/` | Every figure, drawn from the CSVs the jobs wrote |
-| `presentation/` | The video deck `deck_m2.pdf` with backup slides after frame 35, and the script |
+| `presentation/` | The video deck `deck_m2.html` (from `deck_m2.qmd`) with backup slides after the AI declaration, and the script `M2_SCRIPT.md` |
 | `docs/RESULTS.md` | Every measured number, with its job id |
 
 ## Documents

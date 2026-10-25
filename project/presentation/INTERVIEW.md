@@ -54,12 +54,12 @@ rule about what you may bring are still open.
 | What happens in the room | What we prepare | Where it lives |
 |---|---|---|
 | They start from the video they watched | Every slide can be explained from what is on it, without outside notes | the deck |
-| They ask what the project is | A 30 second plain-English answer, said the same way every time | section 3, deck slide 2 |
+| They ask what the project is | A 30 second plain-English answer, said the same way every time | section 3, appendix A1 |
 | They ask about the optimisation code | Each rung's code on its slide, large and readable, and the same lines easy to find in the editor | the deck, section 6 |
 | They ask why something unusual is in the C++ | One short answer per unusual construct | section 5 |
 | They ask how a figure was made and what it shows | The script, the data and the meaning of each mark for every figure | section 7, deck appendix |
 | They open another file | Know where everything lives | section 6, the README map |
-| They push past what the video covered | Backup slides in the same PDF, after the closing slide | deck appendix |
+| They push past what the video covered | Backup slides in the same deck, after the AI declaration | deck appendix |
 
 Two practical points follow from the screen showing the submitted project.
 
@@ -167,74 +167,107 @@ the number and its job id.
 | 24, conclusion | The bullets collide with the callout. "Next is overlapping the exchange" is out of date because E9 has run. | Fixed layout, and the E9 result in place of the old next step. |
 | none | No plain-English summary, and nothing on E1, E2 and E2b or E9. | New slides for each. |
 
-### 4b. The recorded part, slides 1 to 40
+### 4b. The recorded part, slides 1 to 32
 
 The recorded part is `presentation/deck_m2.html`, the Quarto deck, and
-`presentation/M2_SCRIPT.md` has one take per slide. The opening, slides 3 to
-8, builds one step per key press, from what an option is to the update in
-C++. Every rung that changed the code has a before and after made with
-auto-animate, the serial rung (14 and 15), SIMD (17 and 18), OpenMP (22 and
-23) and MPI (30 and 31). Slide 38 is the reflection the task sheet asks for,
-what surprised me, what I would do differently and how I would extend it.
+`presentation/M2_SCRIPT.md` has 19 takes. Each take teaches one idea. It
+says what the idea is, shows what was measured, then says why, over one to
+three slides. The opening, slides 2 to 8, builds one step per key press,
+from what an option is to the update in C++. Every rung that changed the
+code has a before and after made with auto-animate, the serial rung (11 and
+12), SIMD (14 and 15) and OpenMP (17 and 18). Slide 30 is the reflection the
+task sheet asks for, what surprised me, what I would do differently and how
+I would extend it.
 
-| Slide | Title | Slide | Title |
-|---|---|---|---|
-| 1 | Title | 21 | OpenMP, one block of rows per thread |
-| 2 | The project in one slide | 22, 23 | OpenMP code |
-| 3 | What an option is | 24 | Strong scaling |
-| 4 | From the model to the PDE | 25 | Weak scaling |
-| 5 | Finite differences on one cell | 26 | Grid size |
-| 6 | From the PDE to C++ | 27 | After threads, memory bandwidth |
-| 7 | One step over the whole grid | 28 | Placement |
-| 8 | A full run | 29 | MPI, one block of rows per process |
-| 9 | Checking the answer | 30, 31 | MPI code, the time loop |
-| 10 | The data structure | 32 | MPI code, the edge row exchange |
-| 11 | How every number was measured | 33 | Hybrid layouts |
-| 12 | Where the time goes | 34 | Overlapping the exchange with the update (E9) |
-| 13 | The ladder | 35 | Same answer on every rung |
-| 14, 15 | The serial rung | 36 | Tried and rejected |
-| 16 | SIMD, four cells per instruction | 37 | Conclusion |
-| 17, 18 | SIMD code, before and after | 38 | What surprised me, what I would change, and what comes next |
-| 19 | The compiler was splitting the loads (E2, E2b) | 39 | Close |
-| 20 | SIMD on the roofline | 40 | AI declaration |
+| Take | Slides | Title |
+|---|---|---|
+| 1 | 1 | Title |
+| 2 | 2 | What an option is |
+| 3 | 3 | From the model to the PDE |
+| 4 | 4, 5 | Finite differences on one cell, then the same sum in C++ |
+| 5 | 6, 7 | One step over the whole grid, then the data structure |
+| 6 | 8 | A full run, with the Black-Scholes check in the band |
+| 7 | 9, 10 | How every number was measured, then where the time goes |
+| 8 | 11, 12 | The serial rung |
+| 9 | 13 to 15 | SIMD, four cells per instruction, then the code |
+| 10 | 16 to 18 | OpenMP, one block of rows per thread, then the code |
+| 11 | 19 | Strong scaling |
+| 12 | 20 | Weak scaling |
+| 13 | 21, 22 | Grid size, then the node roofline |
+| 14 | 23, 24 | MPI, one block of rows per process, then the edge row exchange |
+| 15 | 25, 26 | Placement, then the hybrid layouts |
+| 16 | 27 | Tried and rejected |
+| 17 | 28, 29 | Same answer on every rung, then the conclusion |
+| 18 | 30 | What surprised me, what I would change, and what comes next |
+| 19 | 31, 32 | Close, then the AI declaration held for three seconds |
 
 The opening slides and what each step shows.
 
 | Slide | Presses | Steps |
 |---|---|---|
-| 3 | 5 | a path ending at 5700 pays 450, a path ending at 5000 pays 0, the payoff line max(S - K, 0), eight more paths, the price as the average discounted payoff |
-| 4 | 4 | labels for the share price terms, the volatility terms, the correlation and discount terms, then five grids solved back from the payoff |
-| 5 | 4 | the slope 0.5, the curvature 0.02, the variance differences, the cross difference, each with the stencil cells it reads |
-| 6 | 3 | opens on `src/stencil.cpp` lines 107 to 111, then the terms at lines 114 to 118, the update at lines 121 and 122 giving 0.04959, the stability limit |
-| 7 | 6 | the stencil moving along row 1, the rest of the grid, the swap |
+| 2 | 5 | a path ending at 5700 pays 450, a path ending at 5000 pays 0, the payoff line max(S - K, 0), eight more paths, the price as the average discounted payoff |
+| 3 | 4 | labels for the share price terms, the volatility terms, the correlation and discount terms, then five grids solved back from the payoff |
+| 4 | 4 | the slope 0.5, the curvature 0.02, the variance differences, the cross difference, each with the stencil cells it reads |
+| 5 | 3 | opens on `src/stencil.cpp` lines 107 to 111, then the terms at lines 114 to 118, the update at lines 121 and 122 giving 0.04959, the stability limit |
+| 6 | 6 | the stencil moving along row 1, the rest of the grid, the swap |
+| 7 | 3 | the rows flattened into one array, the index of each cell, the stride of one row to north |
 | 8 | 3 | the v = 0.04 row 1 and 9 days, 37 days and 91 days before expiry, ending at 195.64 |
 
-### 4c. The appendix, pages 37 to 68
+### 4c. The appendix, A1 to A45
 
-Page 36 is the divider. In the room, open `presentation/deck_m2.pdf` and type
-the page number into the viewer to go straight to a backup slide. The
-footer of every backup slide shows its A number.
+Press next after the AI declaration for the divider, then the backup
+slides. To go straight to one, add its anchor to the address, for example
+`deck_m2.html#/the-ladder`, or press O for the overview of every slide. The
+first eight are the slides cut from the video when it moved to 19 takes, so
+each still has its old take as speaker notes.
 
-| Page | A | Slide | Page | A | Slide |
-|---|---|---|---|---|---|
-| 37 | A1 | Where everything is | 53 | A17 | Thread binding on the r730 nodes |
-| 38 | A2 | The Heston model | 54 | A18 | Page placement, numactl and huge pages |
-| 39 | A3 | The five differences | 55 | A19 | Which rows a process owns |
-| 40 | A4 | The boundaries | 56 | A20 | E9 in code |
-| 41 | A5 | The timestep limit | 57 | A21 | Why E9 only helped across nodes |
-| 42 | A6 | Why an explicit scheme | 58 | A22 | The two node numbers between jobs |
-| 43 | A7 | Reading the price and the Greeks | 59 | A23 | MPI started for threads |
-| 44 | A8 | Flops and bytes per cell | 60 | A24 | The test that timed out |
-| 45 | A9 | The AVX2 row next to the scalar row | 61 | A25 | Denormal numbers |
-| 46 | A10 | Why SIMD is below 4x | 62 | A26 | The 2^24 byte address effect |
-| 47 | A11 | Where the rows sit in their cache lines | 63 | A27 | Float instead of double |
-| 48 | A12 | Experiment E1 in full | 64 | A28 | The six hypotheses |
-| 49 | A13 | Why there are no locks | 65 | A29 | What the tests check |
-| 50 | A14 | The swap | 66 | A30 | How the figures were made |
-| 51 | A15 | Constants copied into local variables | 67 | A31 | Tests before timing |
-| 52 | A16 | Amdahl and Gustafson | 68 | A32 | Where a number came from |
-
----
+| A | Slide | Anchor |
+|---|---|---|
+| A1 | The project in one slide, cut from the video | `#/the-project-in-one-slide` |
+| A2 | Checking the answer, the Black-Scholes check, cut from the video | `#/checking-the-answer` |
+| A3 | The ladder, cut from the video | `#/the-ladder` |
+| A4 | The compiler was splitting the loads (E2, E2b), cut from the video | `#/the-compiler-was-splitting-the-loads` |
+| A5 | SIMD on the roofline, cut from the video | `#/simd-on-the-roofline` |
+| A6 | MPI code, the time loop, cut from the video | `#/mpi-code-the-time-loop` |
+| A7 | MPI code, the time loop with the changes marked, cut from the video | `#/mpi-code-the-time-loop-1` |
+| A8 | Overlapping the exchange with the update (E9), cut from the video | `#/overlapping-the-exchange-with-the-update` |
+| A9 | The problem | `#/the-problem` |
+| A10 | The equation | `#/the-equation` |
+| A11 | What the compiler does alone | `#/what-the-compiler-does-alone` |
+| A12 | Could the compiler have written it? | `#/could-the-compiler-have-written-it` |
+| A13 | Where each step goes | `#/where-each-step-goes` |
+| A14 | Where everything is | `#/where-everything-is` |
+| A15 | The Heston model | `#/the-heston-model` |
+| A16 | The five differences | `#/the-five-differences` |
+| A17 | The boundaries | `#/the-boundaries` |
+| A18 | The timestep limit | `#/the-timestep-limit` |
+| A19 | Why an explicit scheme | `#/why-an-explicit-scheme` |
+| A20 | Reading the price and the Greeks | `#/reading-the-price-and-the-greeks` |
+| A21 | Flops and bytes per cell | `#/flops-and-bytes-per-cell` |
+| A22 | The AVX2 row next to the scalar row | `#/the-avx2-row-next-to-the-scalar-row` |
+| A23 | Why SIMD is below 4x | `#/why-simd-is-below-4x` |
+| A24 | Where the rows sit in their cache lines | `#/where-the-rows-sit-in-their-cache-lines` |
+| A25 | Experiment E1 in full | `#/experiment-e1-in-full` |
+| A26 | Why there are no locks | `#/why-there-are-no-locks` |
+| A27 | The swap | `#/the-swap` |
+| A28 | Constants copied into local variables | `#/constants-copied-into-local-variables` |
+| A29 | Amdahl and Gustafson | `#/amdahl-and-gustafson` |
+| A30 | Thread binding on the r730 nodes | `#/thread-binding-on-the-r730-nodes` |
+| A31 | Page placement, numactl and huge pages | `#/page-placement-numactl-and-huge-pages` |
+| A32 | Which rows a process owns | `#/which-rows-a-process-owns` |
+| A33 | E9 in code | `#/e9-in-code` |
+| A34 | Why E9 only helped across nodes | `#/why-e9-only-helped-across-nodes` |
+| A35 | The two node numbers between jobs | `#/the-two-node-numbers-between-jobs` |
+| A36 | MPI started for threads | `#/mpi-started-for-threads` |
+| A37 | The test that timed out | `#/the-test-that-timed-out` |
+| A38 | Denormal numbers | `#/denormal-numbers` |
+| A39 | The 2^24 byte address effect | `#/the-224-byte-address-effect` |
+| A40 | Float buffers | `#/float-buffers` |
+| A41 | The six hypotheses | `#/the-six-hypotheses` |
+| A42 | What the tests check | `#/what-the-tests-check` |
+| A43 | How the figures were made | `#/how-the-figures-were-made` |
+| A44 | Tests before timing | `#/tests-before-timing` |
+| A45 | Where a number came from | `#/where-a-number-came-from` |
 
 ## 5. The unusual C++, and the answer for each
 
@@ -435,13 +468,13 @@ redraws them all.
 Each question has a full answer in the place named after it. "HPC" means
 `HPC_JUSTIFICATIONS.md`, and the experiments are in `docs/RESULTS.md` M2.6.
 
-### The opening, slides 3 to 8
+### The opening, slides 2 to 8
 
 - What is a call option, and why is its price the discounted average payoff?
   It pays max(S - K, 0) at expiry. Its price today is the expected payoff
   under the risk-neutral measure, discounted at the rate r, because a hedged
   position earns the risk-free rate. (STUDY_GUIDE sections 1, 2 and 5b)
-- Were the paths on slide 3 made by the solver? No. They illustrate the
+- Were the paths on slide 2 made by the solver? No. They illustrate the
   model and are drawn by `scripts/deck_m2_svgs.py` with the deck's Heston
   parameters. The solver has no random numbers. `make mc-check` is a separate
   Monte Carlo check, $196.13 plus or minus $0.55 against the grid's $196.17.
@@ -459,7 +492,7 @@ Each question has a full answer in the place named after it. "HPC" means
   every cell can be updated on its own. Halving the spacing cut the
   error 3.78 times on the convergence run. (STUDY_GUIDE sections 6.6, 7.1
   and 7.5)
-- Why are V_v, V_vv and V_Sv zero on slide 5? At expiry every variance row
+- Why are V_v, V_vv and V_Sv zero on slide 4? At expiry every variance row
   holds the same payoff, so north equals south and the four corners cancel.
   They become nonzero once the rows differ after the first step.
   (STUDY_GUIDE section 7.4)
@@ -480,7 +513,7 @@ Each question has a full answer in the place named after it. "HPC" means
 - Why multiply by reciprocals when the compiler could? Without
   `-ffast-math` the compiler may not, because 1/(2 dS) is itself rounded and
   the result can differ in the last bit. Doing it by hand gave 2.8x.
-  (STUDY_GUIDE section 13, slides 14 and 15)
+  (STUDY_GUIDE section 13, slides 11 and 12)
 - How do the edge cells get their values? The boundary rules, applied after
   the interior cells in each step, by the main thread in the OpenMP rungs. (STUDY_GUIDE section 9, appendix The
   boundaries)
@@ -511,7 +544,7 @@ Each question has a full answer in the place named after it. "HPC" means
   section 6)
 - How repeatable are the two-node numbers? The small grid's two-node layouts
   differ between jobs, so its gain lies between 1.21x and 1.33x. Every other
-  layout agrees within 5 percent. (appendix A22, RESULTS M2.9)
+  layout agrees within 5 percent. (appendix A35, RESULTS M2.9)
 - Did you try to overlap the communication with the computation? (E9 in
   RESULTS M2.6)
 - Why must every rung match the baseline before it is timed? (HPC section 7)
@@ -524,7 +557,7 @@ Each question has a full answer in the place named after it. "HPC" means
   (RESULTS M2.6)
 - Why does the 2896 x 724 point drop out of the grid size figure? Its two
   buffers sit exactly 2^24 bytes apart and every rung runs slowly there. The
-  trigger is known and the hardware cause is not. (appendix A26, RESULTS
+  trigger is known and the hardware cause is not. (appendix A39, RESULTS
   M2.8)
 
 ---
@@ -537,15 +570,17 @@ Each question has a full answer in the place named after it. "HPC" means
   its numbers.
 - The two-node headline quotes job 659242, 8310 and 147x, because the hybrid
   figure is drawn from that job. The E9 job measured 9364 for the same layout
-  minutes later. Appendix A22 shows both jobs side by side.
+  minutes later. Appendix A35 shows both jobs side by side.
 - Every figure and code image was redrawn on this machine with
   `make m2-figures` and `make code-shots`. F14 and F18 read local snapshots
   from `make collapse-anim` and `make demo-snapshots`, which need a local
   build of heston and so an MPI compiler.
-- `make slides-m2` builds the deck with tectonic when it is installed and
-  with pdflatex twice otherwise. The deck has 35 recorded frames, the
-  divider and 32 backup slides, 68 pages in all.
-- The script runs 9:43 at 140 words a minute.
+- The recorded deck is `presentation/deck_m2.html`, built with
+  `quarto render deck_m2.qmd`. It has 32 recorded slides in 19 takes, the
+  divider and 45 backup slides. `make slides-m2` still builds the older
+  beamer PDF, `deck_m2.pdf`, which no longer matches the video.
+- The script runs 9:46 at 150 words a minute, plus 2 seconds holding the AI
+  declaration.
 - Still open are the date, the room and any rules for the interview from the
   course FAQ and profile, recording the video, and `make package` once the
   figures are final.
