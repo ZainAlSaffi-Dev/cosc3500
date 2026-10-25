@@ -1061,7 +1061,7 @@ margin-right: 0; }
 <p>Zain Al-Saffi, 48008361</p>
 <p><span class="sub">COSC3500 Milestone 2, October 2026</span></p>
 <aside class="notes">
-<p>Hi, I’m Zain. In this video I’ll show how we made a Heston option pricer 123 times faster on one rangpur node, with the same answer from every version.</p>
+<p>Hi, I’m Zain, and in this video I’ll show how we made a Heston option pricer 123 times faster on one rangpur node, with the same answer from every version.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1097,7 +1097,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>The four blocks.</em></p>
-<p>We’re pricing a call option when the share price and its volatility both move randomly, by solving the Heston PDE on a grid. No cell in a step depends on another, so each step can be split up.</p>
+<p>We’re pricing a call option where the share price and its volatility both move randomly, by solving the Heston PDE on a grid. No cell in a step depends on another, so every step can be split up.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1143,7 +1143,7 @@ display:block!important;
 <!-- /svg:option -->
 <aside class="notes">
 <p><em>Five presses, the path above the strike, the path below it, the payoff line, the other paths, the price.</em></p>
-<p>A call option is the right to buy a share for 5250 in three months. If the share ends at 5700, it pays 450. If it ends below 5250, nobody buys, so it pays nothing. Nobody knows the path, so the price today is the average payoff over every path, discounted to today.</p>
+<p>A call option is the right to buy a share for 5250 in three months. If the share ends at 5700 it pays 450, if it ends below 5250 nobody buys, so it pays nothing. Nobody knows the path, so the price today is the average payoff over every path, discounted to today.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1312,7 +1312,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Four presses, the share price terms, the volatility terms, the last two, then the steps back from expiry.</em></p>
-<p>In Heston the price and its volatility both move randomly, and V follows this PDE, each coloured term from one part of the model. V is the payoff at expiry, so we start there and step back to today.</p>
+<p>In Heston the price and its volatility both move randomly, and V follows this PDE, each coloured term from one part of the model. We only know V at expiry, the payoff, so we start there and step back.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1408,7 +1408,7 @@ display:block!important;
 <!-- /svg:differences -->
 <aside class="notes">
 <p><em>The PDE moves to the top. Four presses, the slope, the curvature, north and south, the corners.</em></p>
-<p>Each derivative becomes a difference of neighbours. Here the slope, east minus west over two spacings, is 0.5, and the curvature, how much the slope changes, is 0.02. Every row holds the same payoff, so the variance and cross differences are 0.</p>
+<p>Each derivative becomes a difference of neighbours. Here the slope, east minus west over two spacings, is 0.5, and the curvature, how much that slope changes, is 0.02. Every row holds the same payoff, so the variance and cross differences are 0.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1450,7 +1450,7 @@ display:block!important;
 <!-- /svg:pde-code -->
 <aside class="notes">
 <p><em>Three presses, the terms, the update, the stability limit.</em></p>
-<p>Each difference multiplies by a reciprocal worked out once. The terms give 11025 and 84, the rest 0, and one step of dt gives 0.04959, exactly the solver’s own snapshot. dt has a stability limit, so the full grid needs 980,000 steps.</p>
+<p>Each difference multiplies by a reciprocal worked out once. The terms give 11025 and 84, the rest 0, and one step of dt gives 0.04959, exactly the solver’s own snapshot. dt has a stability limit, hence 980,000 steps on the full grid.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1659,7 +1659,7 @@ display:block!important;
 <!-- /svg:full-run -->
 <aside class="notes">
 <p><em>Three presses, 1 and 9 days, 37 days, today.</em></p>
-<p>A full run on the test grid is 56,000 of those steps. The corner of the payoff smooths out as we step back to today, and the price at 5200 is 195.64. The full grid gives 196.17, within a tenth of a cent of the Fourier price.</p>
+<p>A full run on the test grid is 56,000 of those steps, and the corner of the payoff smooths out as we step back to today, and the price at 5200 is 195.64. The full grid gives 196.17, within a tenth of a cent of the Fourier price.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1687,7 +1687,7 @@ display:block!important;
 <p>With its full stencil unchanged, the solver is within 4 cents of the closed form at today’s price. Every benchmark job runs this check first.</p>
 </div>
 <aside class="notes">
-<p>To validate the solver, we set the volatility of volatility to zero, where Heston reduces to Black-Scholes, and the unchanged solver lands within 4 cents of the closed-form price.</p>
+<p>To check the solver, we set the volatility of volatility to zero, where Heston reduces to Black-Scholes, and the unchanged solver lands within 4 cents of the closed-form price.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1770,7 +1770,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Three clicks: the rows flatten, the index of each cell, the stride to north.</em></p>
-<p>Both buffers are flat arrays of doubles, with cell i, j at j times the row length plus i. So the share price axis is contiguous in memory, and a step in variance is a stride of one row.</p>
+<p>Both buffers are flat arrays of doubles, with cell i, j at j times the row length plus i, so the share price axis is contiguous in memory and a step in variance is a stride of one row.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1786,16 +1786,24 @@ display:block!important;
 <section id="how-every-number-was-measured" class="slide level2">
 <h2>How every number was measured</h2>
 <p><span class="sub">One exclusive rangpur r730 compute node, through sbatch</span></p>
+<!-- svg:rate -->
+<svg class="anim" viewbox="0 0 1400 170" xmlns="http://www.w3.org/2000/svg">
+<text x="10.0" y="26.0" font-size="20" text-anchor="start" font-weight="400" class="dim">One rate step by step, the serial rung, src/solver_serial.cpp lines 66 and 67</text>
+<rect x="10.0" y="44.0" width="252.0" height="112.0" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="2" rx="8" /><text x="136.0" y="84.0" font-size="23" text-anchor="middle" font-weight="700" class="blue">1,048,576 cells</text><text x="136.0" y="116.0" font-size="18" text-anchor="middle" font-weight="400" class="dim">2048 share prices</text><text x="136.0" y="140.0" font-size="18" text-anchor="middle" font-weight="400" class="dim">x 512 variances</text>
+<g class="fragment" data-fragment-index="0"><rect x="292.0" y="44.0" width="252.0" height="112.0" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="2" rx="8" /><text x="418.0" y="84.0" font-size="23" text-anchor="middle" font-weight="700" class="blue">x 2000 steps</text><text x="418.0" y="116.0" font-size="18" text-anchor="middle" font-weight="400" class="dim">each step gives every</text><text x="418.0" y="140.0" font-size="18" text-anchor="middle" font-weight="400" class="dim">cell one new value</text></g>
+<g class="fragment" data-fragment-index="1"><rect x="574.0" y="44.0" width="252.0" height="112.0" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="2" rx="8" /><text x="700.0" y="84.0" font-size="23" text-anchor="middle" font-weight="700" class="blue">= 2.1 billion</text><text x="700.0" y="116.0" font-size="18" text-anchor="middle" font-weight="400" class="dim">2,097,152,000</text><text x="700.0" y="140.0" font-size="18" text-anchor="middle" font-weight="400" class="dim">cell updates in the run</text></g>
+<g class="fragment" data-fragment-index="2"><rect x="856.0" y="44.0" width="252.0" height="112.0" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="2" rx="8" /><text x="982.0" y="84.0" font-size="23" text-anchor="middle" font-weight="700" class="blue">÷ 13.2 s</text><text x="982.0" y="116.0" font-size="18" text-anchor="middle" font-weight="400" class="dim">the timer runs only</text><text x="982.0" y="140.0" font-size="18" text-anchor="middle" font-weight="400" class="dim">while the steps run</text></g>
+<g class="fragment" data-fragment-index="3"><rect x="1138.0" y="44.0" width="252.0" height="112.0" fill="#FFFFFF" stroke="#2563EB" stroke-width="3" rx="8" /><text x="1264.0" y="84.0" font-size="23" text-anchor="middle" font-weight="700" class="blue">= 159 million</text><text x="1264.0" y="116.0" font-size="18" text-anchor="middle" font-weight="400" class="dim">cell updates a second,</text><text x="1264.0" y="140.0" font-size="18" text-anchor="middle" font-weight="400" class="dim">higher is faster</text></g>
+</svg>
+<!-- /svg:rate -->
 <div class="columns">
 <div class="column" style="width:52%;">
 <div class="small">
 <ul>
-<li>A cell update is one new value for one cell in one step. The rate is cells times steps over the seconds the time loop took, so 2048 x 512 x 2000 = 2.1 billion updates in 13.2 s is 159 million a second (<code>src/solver_serial.cpp</code> lines 66 and 67).</li>
-<li>Dual Xeon E5-2670 v3, 2 x 12 cores, 30 MiB L3 per socket, g++ 8.5, Open MPI 4.1.</li>
-<li><code>--exclusive</code> on a named node, so no other job shares it.</li>
+<li>Dual Xeon E5-2670 v3, 2 x 12 cores, 30 MiB L3 per socket, g++ 8.5, Open MPI 4.1, with <code>--exclusive</code> on a named node so no other job shares it.</li>
 <li>Median of 5 repetitions, with the threads pinned to cores.</li>
-<li>The tests run first in the same job, and the price is printed so the compiler cannot delete the loop.</li>
 <li>Each job builds from clean and stops unless <code>make test</code>, <code>make test-mpi</code> and <code>make avx-check</code> all pass (<code>slurm/bench_common.sh</code> lines 62 to 68).</li>
+<li>The price is printed, so the compiler cannot delete the loop.</li>
 </ul>
 </div>
 </div><div class="column" style="width:44%;">
@@ -1840,7 +1848,8 @@ display:block!important;
 <p><span class="cite">Denormal numbers, D. Goldberg, What every computer scientist should know about floating-point arithmetic, <em>ACM Computing Surveys</em> 23(1), 5 to 48, 1991.</span></p>
 </div>
 <aside class="notes">
-<p>A cell update is one cell’s new value in one step. Every number is the median of 5 runs on one exclusive rangpur node through sbatch, after the tests pass in the same job. We discarded our first sweeps because denormal numbers slowed some versions, and reran everything with them flushed to zero.</p>
+<p><em>Four presses, one box each, then point at the discarded round.</em></p>
+<p>A cell update is one cell’s new value in one step. A million cells over 2000 steps is 2.1 billion updates, and in 13.2 seconds that’s 159 million a second. Every number is the median of 5 runs on one exclusive rangpur node through sbatch, after the tests pass in the same job. We discarded our first sweeps because denormal numbers slowed some versions, and reran everything with them flushed to zero.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1959,7 +1968,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>The bars grow on their own. Point along them from left to right.</em></p>
-<p>The ladder adds one technique per version, and each version must match the baseline before it’s timed, while the number in each bar is the gain over the version below.</p>
+<p>The ladder adds one technique per version, and each version must match the baseline before it’s timed. The number in each bar is the gain over the version below.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -1990,7 +1999,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Point at a division, then press next. The code changes into the serial rung, then one more press grows the bar.</em></p>
-<p>The baseline divides by the grid spacing in every cell. The compiler can’t turn that into a multiplication by the reciprocal, because the rounding can differ in the last bit, so we did it by hand, once per solve, for 159 million updates a second, 2.8 times the baseline.</p>
+<p>The baseline divides by the grid spacing in every cell. The compiler can’t turn that into a multiplication by the reciprocal, because the rounding can differ in the last bit, so we did it by hand once per solve, for 159 million updates a second, 2.8 times the baseline.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2122,7 +2131,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Four clicks: the loads, then each group of four, then the scalar cell.</em></p>
-<p>Serial was already at 96 percent of the scalar peak, so next we used vector instructions. An AVX2 register holds four doubles, and neighbouring cells use the same formula, so one instruction updates four cells.</p>
+<p>Serial was already at 96 percent of the scalar peak, so next we used vector instructions. An AVX2 register holds four doubles and neighbouring cells use the same formula, so one instruction updates four cells.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2155,7 +2164,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Point at the loads, then press next. The serial loop turns into the AVX2 loop. Three more presses highlight the loads, the fused multiply-add and store, and the counter, and the last press grows the bar.</em></p>
-<p>The serial loop turns into the AVX2 loop. Each scalar load becomes a load of four doubles, the update becomes one fused multiply-add, and the counter goes up by four. This runs at 456, 2.9 times serial.</p>
+<p>The serial loop turns into the AVX2 loop, where each scalar load becomes a load of four doubles, the update becomes one fused multiply-add and the counter goes up by four. This runs at 456, 2.9 times serial.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2300,7 +2309,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>The roofs draw on their own. Press next for serial, next for simd rising above it, next for the big grid.</em></p>
-<p>On the one-core roofline, serial is at the scalar peak. SIMD reaches 14 gigaflops, a third of the AVX2 ceiling and just below the memory roof of one core.</p>
+<p>On the one-core roofline serial is at the scalar peak and SIMD reaches 14 gigaflops, a third of the AVX2 ceiling and just below the memory roof of one core.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2344,7 +2353,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Four clicks: the bands, the barrier, the boundaries, the swap.</em></p>
-<p>With OpenMP each thread gets a contiguous block of rows. The threads read the old buffer and write only their own rows, so there are no data races and no locks. Then the main thread updates the boundaries.</p>
+<p>With OpenMP each thread gets a contiguous block of rows. The threads read the old buffer and write only their own rows, so there are no data races and no locks, then the main thread updates the boundaries.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2374,7 +2383,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Press next and the pragma appears above the same loop. One more press grows the bar.</em></p>
-<p>The code change is one pragma above the row loop. On 24 cores this gives 6367 million updates a second, 14 times SIMD.</p>
+<p>The code change is one pragma above the row loop. On 24 cores it gives 6367 million updates a second, 14 times SIMD.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2565,7 +2574,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Press next for one core of simd, next for 24 threads rising, next for the big grid on the memory roof.</em></p>
-<p>On the node roofline the small grid runs above the memory roof, because it fits in L3. The big grid is on the memory roof, so it’s limited by memory bandwidth.</p>
+<p>On the node roofline the small grid runs above the memory roof because it fits in L3, while the big grid sits on the memory roof, so it’s limited by memory bandwidth.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2848,7 +2857,7 @@ display:block!important;
 <p>Two nodes give <span class="em">1.21x</span> one node on the small grid and <span class="em">1.64x</span> on the big one. The white figure is the exchange share of a step.</p>
 </div>
 <aside class="notes">
-<p>One process per socket made the big grid 2.28 times faster than one process of 24 threads. Two nodes give 1.21 times one node on the small grid and 1.64 on the big one, and on the small grid the exchange takes 40 percent of each step.</p>
+<p>One process per socket made the big grid 2.28 times faster than one process of 24 threads. Two nodes give 1.21 times one node on the small grid and 1.64 on the big one, since on the small grid the exchange takes 40 percent of each step.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2877,7 +2886,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Point at the tall blue bar.</em></p>
-<p>So we tried overlapping the exchange with computation, sending the edge rows first and updating the rest while they’re in transit. That only helped with one process per node, at 1.41 times. We suspect that within a node Open MPI waits for the receiver to call MPI Waitall before it transfers a 16 kibibyte row.</p>
+<p>We tried overlapping the exchange with computation, sending the edge rows first and updating the rest while they’re in transit. It only helped with one process per node, at 1.41 times, and we suspect that within a node Open MPI waits for the receiver to call MPI Waitall before it transfers a 16 kibibyte row.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -2938,7 +2947,7 @@ display:block!important;
 <p>Dynamic scheduling lost, because every row costs the same. Float was faster but moved the price by 4 cents, so it was rejected.</p>
 </div>
 <aside class="notes">
-<p>We tested these variants against OpenMP. Dynamic scheduling was slower, because every row costs the same. Float was faster, but it moved the price by 4 cents and gamma by 12 percent, so we rejected it.</p>
+<p>We tested these variants against OpenMP. Dynamic scheduling was slower because every row costs the same, and float was faster, but it moved the price by 4 cents and gamma by 12 percent, so we rejected it.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -3017,7 +3026,7 @@ display:block!important;
 <p>Four of the six hypotheses held. Two nodes were above 80 percent efficient only on 4096 x 1024, and the serial boundary update grew to 9 percent of a step at 24 threads.</p>
 </div>
 <aside class="notes">
-<p>To conclude, we reached 123 times the baseline on one node and 147 on two. Most of that is the result of SIMD and threads, and across nodes the exchange is the main limit. Four of our six hypotheses held.</p>
+<p>In the end we reached 123 times the baseline on one node and 147 on two. Most of that came from SIMD and threads, across nodes the exchange is the main limit, and four of our six hypotheses held.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
@@ -3055,7 +3064,7 @@ display:block!important;
 <p>Compiler flags, the memory allocator and the floating point control register changed the rates as much as some code changes, so every result file records the node, compiler and flags.</p>
 </div>
 <aside class="notes">
-<p>Build and system settings moved the rates as much as some code changes, from split loads to huge pages. Next, each rank would allocate only its own rows plus two ghost rows, so the grid can be bigger than one node’s memory. We’d also test the eager limit behind E9, and try an implicit scheme and a GPU version.</p>
+<p>What surprised me was that build and system settings moved the rates as much as some code changes, from split loads to huge pages. Next I want each rank to hold only its own rows plus two ghost rows, so the grid can outgrow one node’s memory, then to test the eager limit behind E9, an implicit scheme and a GPU version.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;

@@ -478,6 +478,41 @@ def full_run(snapshot_folder):
     return "\n".join(out)
 
 
+def rate_steps():
+    # How one rate is worked out, as five boxes left to right with the serial rung's numbers.
+    # The first box shows on open and each press adds the next one.
+    num_stock_nodes = 2048
+    num_variance_nodes = 512
+    num_timesteps = 2000
+    serial_rate = 159e6
+    cells = num_stock_nodes * num_variance_nodes
+    updates = cells * num_timesteps
+    seconds = updates / serial_rate
+    boxes = [(f"{cells:,} cells", "2048 share prices", "x 512 variances"),
+             (f"x {num_timesteps} steps", "each step gives every", "cell one new value"),
+             (f"= {updates / 1e9:.1f} billion", f"{updates:,}", "cell updates in the run"),
+             (f"÷ {seconds:.1f} s", "the timer runs only", "while the steps run"),
+             ("= 159 million", "cell updates a second,", "higher is faster")]
+    box_width = 252
+    gap = 30
+    top = 44
+    height = 112
+    out = [svg_open(1400, 170)]
+    out.append(text(10, 26, "One rate step by step, the serial rung, src/solver_serial.cpp lines 66 and 67", 20, "start", "dim"))
+    for k, (big, first, second) in enumerate(boxes):
+        x = 10 + k * (box_width + gap)
+        drawn = (rect(x, top, box_width, height, "#FFFFFF", BLUE if k == 4 else LINE, 3 if k == 4 else 2, 'rx="8"')
+                 + text(x + box_width / 2, top + 40, big, 23, "middle", "blue", "700")
+                 + text(x + box_width / 2, top + 72, first, 18, "middle", "dim")
+                 + text(x + box_width / 2, top + 96, second, 18, "middle", "dim"))
+        if k == 0:
+            out.append(drawn)
+        else:
+            out.append(f'<g {fragment(k - 1)}>' + drawn + "</g>")
+    out.append("</svg>")
+    return "\n".join(out)
+
+
 def grid_step():
     # Two 8 by 6 grids. Column i, variance row j counted from the bottom.
     cell_width = 56
@@ -849,6 +884,7 @@ BUILDERS = {
     "backwards": lambda: backwards_in_time(3),
     "differences": finite_differences,
     "pde-code": pde_to_code,
+    "rate": rate_steps,
     "grid": grid_step,
     "full-run": lambda: full_run(SNAPSHOT_FOLDER),
     "layout": data_layout,

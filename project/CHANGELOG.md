@@ -2242,3 +2242,22 @@ by the seconds its time loop took, `src/solver_serial.cpp` lines 66 and 67.
 On the 2048 by 512 grid with 2000 steps that is 2.1 billion updates, so the
 serial rung's 159 million a second is about 13.2 s. The take gained one
 sentence, and the script now comes to 9 minutes 39 seconds, 1349 words.
+
+The one-line definition read as too dense for someone new to it, so the
+slide now opens with five boxes, one per press, that build the serial rung's
+rate. 2048 x 512 = 1,048,576 cells, times 2000 steps, is 2,097,152,000 cell
+updates, and divided by the 13.2 s of the time loop that is 159 million a
+second. `rate_steps` in `scripts/deck_m2_svgs.py` works the boxes out from
+the grid size, the step count and the measured rate. The five bullets became
+four to make room, with the same facts. The take says the same sum in one
+sentence, and the script now comes to 9 minutes 46 seconds, 1368 words.
+
+### A voice pass over the takes
+
+The takes in `M2_SCRIPT.md` and the speaker notes in `deck_m2.qmd` were
+reworded in the style of the voice profile, with a fact and its consequence
+joined in one sentence where they belong together, "To conclude" dropped
+from the conclusion, and the reflection said in the first person with what
+comes next. Every number and technical term is unchanged and no
+analogies were added. The script now comes to 9 minutes 49 seconds, 1375
+words, so a take that runs long when spoken should be trimmed back.

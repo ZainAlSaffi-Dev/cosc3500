@@ -81,7 +81,7 @@ Zain Al-Saffi, 48008361
 [COSC3500 Milestone 2, October 2026]{.sub}
 
 ::: {.notes}
-Hi, I'm Zain. In this video I'll show how we made a Heston option pricer
+Hi, I'm Zain, and in this video I'll show how we made a Heston option pricer
 123 times faster on one rangpur node, with the same answer from every
 version.
 :::
@@ -124,9 +124,9 @@ version.
 ::: {.notes}
 *The four blocks.*
 
-We're pricing a call option when the share price and its volatility both
+We're pricing a call option where the share price and its volatility both
 move randomly, by solving the Heston PDE on a grid. No cell in a step
-depends on another, so each step can be split up.
+depends on another, so every step can be split up.
 :::
 
 ## What an option is
@@ -169,9 +169,9 @@ depends on another, so each step can be split up.
 line, the other paths, the price.*
 
 A call option is the right to buy a share for 5250 in three months. If the
-share ends at 5700, it pays 450. If it ends below 5250, nobody buys, so it
-pays nothing. Nobody knows the path, so the price today is the average payoff
-over every path, discounted to today.
+share ends at 5700 it pays 450, if it ends below 5250 nobody buys, so it
+pays nothing. Nobody knows the path, so the price today is the average
+payoff over every path, discounted to today.
 :::
 
 ## From the model to the PDE {auto-animate="true"}
@@ -343,8 +343,8 @@ S. L. Heston, A closed-form solution for options with stochastic volatility with
 then the steps back from expiry.*
 
 In Heston the price and its volatility both move randomly, and V follows
-this PDE, each coloured term from one part of the model. V is the payoff at
-expiry, so we start there and step back to today.
+this PDE, each coloured term from one part of the model. We only know V at
+expiry, the payoff, so we start there and step back.
 :::
 
 ## Finite differences on one cell {auto-animate="true"}
@@ -440,7 +440,7 @@ expiry, so we start there and step back to today.
 south, the corners.*
 
 Each derivative becomes a difference of neighbours. Here the slope, east
-minus west over two spacings, is 0.5, and the curvature, how much the slope
+minus west over two spacings, is 0.5, and the curvature, how much that slope
 changes, is 0.02. Every row holds the same payoff, so the variance and cross
 differences are 0.
 :::
@@ -484,8 +484,8 @@ differences are 0.
 
 Each difference multiplies by a reciprocal worked out once. The terms give
 11025 and 84, the rest 0, and one step of dt gives 0.04959, exactly the
-solver's own snapshot. dt has a stability limit, so the full grid needs
-980,000 steps.
+solver's own snapshot. dt has a stability limit, hence 980,000 steps on the
+full grid.
 :::
 
 ## One step over the whole grid
@@ -689,7 +689,7 @@ the two buffers swap pointers, so no values are copied.
 ::: {.notes}
 *Three presses, 1 and 9 days, 37 days, today.*
 
-A full run on the test grid is 56,000 of those steps. The corner of the
+A full run on the test grid is 56,000 of those steps, and the corner of the
 payoff smooths out as we step back to today, and the price at 5200 is
 195.64. The full grid gives 196.17, within a tenth of a cent of the Fourier
 price.
@@ -714,7 +714,7 @@ form at today's price. Every benchmark job runs this check first.
 :::
 
 ::: {.notes}
-To validate the solver, we set the volatility of volatility to zero, where
+To check the solver, we set the volatility of volatility to zero, where
 Heston reduces to Black-Scholes, and the unchanged solver lands within 4
 cents of the closed-form price.
 :::
@@ -790,28 +790,36 @@ and a step in variance is a stride of one row.
 *Three clicks: the rows flatten, the index of each cell, the stride to north.*
 
 Both buffers are flat arrays of doubles, with cell i, j at j times the row
-length plus i. So the share price axis is contiguous in memory, and a step
-in variance is a stride of one row.
+length plus i, so the share price axis is contiguous in memory and a step in
+variance is a stride of one row.
 :::
 
 ## How every number was measured
 
 [One exclusive rangpur r730 compute node, through sbatch]{.sub}
 
+```{=html}
+<!-- svg:rate -->
+<svg class="anim" viewBox="0 0 1400 170" xmlns="http://www.w3.org/2000/svg" >
+<text x="10.0" y="26.0" font-size="20" text-anchor="start" font-weight="400" class="dim" >One rate step by step, the serial rung, src/solver_serial.cpp lines 66 and 67</text>
+<rect x="10.0" y="44.0" width="252.0" height="112.0" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="2" rx="8"/><text x="136.0" y="84.0" font-size="23" text-anchor="middle" font-weight="700" class="blue" >1,048,576 cells</text><text x="136.0" y="116.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >2048 share prices</text><text x="136.0" y="140.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >x 512 variances</text>
+<g class="fragment" data-fragment-index="0"><rect x="292.0" y="44.0" width="252.0" height="112.0" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="2" rx="8"/><text x="418.0" y="84.0" font-size="23" text-anchor="middle" font-weight="700" class="blue" >x 2000 steps</text><text x="418.0" y="116.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >each step gives every</text><text x="418.0" y="140.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >cell one new value</text></g>
+<g class="fragment" data-fragment-index="1"><rect x="574.0" y="44.0" width="252.0" height="112.0" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="2" rx="8"/><text x="700.0" y="84.0" font-size="23" text-anchor="middle" font-weight="700" class="blue" >= 2.1 billion</text><text x="700.0" y="116.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >2,097,152,000</text><text x="700.0" y="140.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >cell updates in the run</text></g>
+<g class="fragment" data-fragment-index="2"><rect x="856.0" y="44.0" width="252.0" height="112.0" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="2" rx="8"/><text x="982.0" y="84.0" font-size="23" text-anchor="middle" font-weight="700" class="blue" >÷ 13.2 s</text><text x="982.0" y="116.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >the timer runs only</text><text x="982.0" y="140.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >while the steps run</text></g>
+<g class="fragment" data-fragment-index="3"><rect x="1138.0" y="44.0" width="252.0" height="112.0" fill="#FFFFFF" stroke="#2563EB" stroke-width="3" rx="8"/><text x="1264.0" y="84.0" font-size="23" text-anchor="middle" font-weight="700" class="blue" >= 159 million</text><text x="1264.0" y="116.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >cell updates a second,</text><text x="1264.0" y="140.0" font-size="18" text-anchor="middle" font-weight="400" class="dim" >higher is faster</text></g>
+</svg>
+<!-- /svg:rate -->
+```
+
 :::: {.columns}
 ::: {.column width="52%"}
 ::: {.small}
-- A cell update is one new value for one cell in one step. The rate is
-  cells times steps over the seconds the time loop took, so 2048 x 512 x
-  2000 = 2.1 billion updates in 13.2 s is 159 million a second
-  (`src/solver_serial.cpp` lines 66 and 67).
-- Dual Xeon E5-2670 v3, 2 x 12 cores, 30 MiB L3 per socket, g++ 8.5, Open MPI 4.1.
-- `--exclusive` on a named node, so no other job shares it.
+- Dual Xeon E5-2670 v3, 2 x 12 cores, 30 MiB L3 per socket, g++ 8.5, Open
+  MPI 4.1, with `--exclusive` on a named node so no other job shares it.
 - Median of 5 repetitions, with the threads pinned to cores.
-- The tests run first in the same job, and the price is printed so the
-  compiler cannot delete the loop.
 - Each job builds from clean and stops unless `make test`, `make test-mpi`
   and `make avx-check` all pass (`slurm/bench_common.sh` lines 62 to 68).
+- The price is printed, so the compiler cannot delete the loop.
 :::
 :::
 
@@ -845,9 +853,12 @@ about floating-point arithmetic, *ACM Computing Surveys* 23(1), 5 to 48,
 :::
 
 ::: {.notes}
-A cell update is one cell's new value in one step. Every number is the
-median of 5 runs on one exclusive rangpur node through sbatch, after the
-tests pass in the same job. We discarded our
+*Four presses, one box each, then point at the discarded round.*
+
+A cell update is one cell's new value in one step. A million cells over
+2000 steps is 2.1 billion updates, and in 13.2 seconds that's 159 million a
+second. Every number is the median of 5 runs on one exclusive rangpur node
+through sbatch, after the tests pass in the same job. We discarded our
 first sweeps because denormal numbers slowed some versions, and reran
 everything with them flushed to zero.
 :::
@@ -947,8 +958,8 @@ on one node is [{{< meta n.x_mpi_one >}}x]{.em} the baseline.
 *The bars grow on their own. Point along them from left to right.*
 
 The ladder adds one technique per version, and each version must match the
-baseline before it's timed, while the number in each bar is the gain over
-the version below.
+baseline before it's timed. The number in each bar is the gain over the
+version below.
 :::
 
 ## The serial rung {auto-animate="true"}
@@ -975,8 +986,8 @@ rung, then one more press grows the bar.*
 
 The baseline divides by the grid spacing in every cell. The compiler can't
 turn that into a multiplication by the reciprocal, because the rounding can
-differ in the last bit, so we did it by hand, once per solve, for 159 million updates a
-second, 2.8 times the baseline.
+differ in the last bit, so we did it by hand once per solve, for 159 million
+updates a second, 2.8 times the baseline.
 :::
 
 ## The serial rung {auto-animate="true"}
@@ -1104,8 +1115,8 @@ gain came from vector instructions.
 *Four clicks: the loads, then each group of four, then the scalar cell.*
 
 Serial was already at 96 percent of the scalar peak, so next we used vector
-instructions. An AVX2 register holds four doubles, and neighbouring cells
-use the same formula, so one instruction updates four cells.
+instructions. An AVX2 register holds four doubles and neighbouring cells use
+the same formula, so one instruction updates four cells.
 :::
 
 ## SIMD code, before and after {auto-animate="true"}
@@ -1133,9 +1144,9 @@ serial.
 loop. Three more presses highlight the loads, the fused multiply-add and
 store, and the counter, and the last press grows the bar.*
 
-The serial loop turns into the AVX2 loop. Each scalar load
-becomes a load of four doubles, the update becomes one fused multiply-add, and the counter
-goes up by four. This runs at 456, 2.9 times serial.
+The serial loop turns into the AVX2 loop, where each scalar load becomes a
+load of four doubles, the update becomes one fused multiply-add and the
+counter goes up by four. This runs at 456, 2.9 times serial.
 :::
 
 ## SIMD code, before and after {auto-animate="true"}
@@ -1284,9 +1295,9 @@ performance model for multicore architectures, *Communications of the ACM*
 *The roofs draw on their own. Press next for serial, next for simd rising
 above it, next for the big grid.*
 
-On the one-core roofline, serial is at the scalar peak. SIMD reaches 14
-gigaflops, a third of the AVX2 ceiling and just below the memory roof of
-one core.
+On the one-core roofline serial is at the scalar peak and SIMD reaches 14
+gigaflops, a third of the AVX2 ceiling and just below the memory roof of one
+core.
 :::
 
 ## OpenMP, one block of rows per thread
@@ -1332,8 +1343,8 @@ The code change is one pragma above the row loop.
 *Four clicks: the bands, the barrier, the boundaries, the swap.*
 
 With OpenMP each thread gets a contiguous block of rows. The threads read
-the old buffer and write only their own rows, so there are no data races
-and no locks. Then the main thread updates the boundaries.
+the old buffer and write only their own rows, so there are no data races and
+no locks, then the main thread updates the boundaries.
 :::
 
 ## OpenMP code {auto-animate="true"}
@@ -1357,8 +1368,8 @@ shared variable a compile error.
 *Press next and the pragma appears above the same loop. One more press
 grows the bar.*
 
-The code change is one pragma above the row loop. On 24 cores this gives
-6367 million updates a second, 14 times SIMD.
+The code change is one pragma above the row loop. On 24 cores it gives 6367
+million updates a second, 14 times SIMD.
 :::
 
 ## OpenMP code {auto-animate="true"}
@@ -1546,9 +1557,9 @@ performance model for multicore architectures, *Communications of the ACM*
 *Press next for one core of simd, next for 24 threads rising, next for the
 big grid on the memory roof.*
 
-On the node roofline the small grid runs above the memory roof, because it
-fits in L3. The big grid is on the memory roof, so it's
-limited by memory bandwidth.
+On the node roofline the small grid runs above the memory roof because it
+fits in L3, while the big grid sits on the memory roof, so it's limited by
+memory bandwidth.
 :::
 
 ## Placement
@@ -1808,10 +1819,10 @@ figure is the exchange share of a step.
 :::
 
 ::: {.notes}
-One process per socket made the big grid 2.28 times faster than one
-process of 24 threads. Two nodes give
-1.21 times one node on the small grid and 1.64 on the big one, and on the
-small grid the exchange takes 40 percent of each step.
+One process per socket made the big grid 2.28 times faster than one process
+of 24 threads. Two nodes give 1.21 times one node on the small grid and 1.64
+on the big one, since on the small grid the exchange takes 40 percent of
+each step.
 :::
 
 ## Overlapping the exchange with the update
@@ -1836,11 +1847,11 @@ Within a node Open MPI most likely transfers a 16 KiB row only during
 ::: {.notes}
 *Point at the tall blue bar.*
 
-So we tried overlapping the exchange with computation, sending the edge
-rows first and updating the rest while they're in transit. That only helped
-with one process per node, at 1.41 times. We suspect that within a node
-Open MPI waits for the receiver to call MPI Waitall before it transfers a
-16 kibibyte row.
+We tried overlapping the exchange with computation, sending the edge rows
+first and updating the rest while they're in transit. It only helped with
+one process per node, at 1.41 times, and we suspect that within a node Open
+MPI waits for the receiver to call MPI Waitall before it transfers a 16
+kibibyte row.
 :::
 
 ## Same answer on every rung
@@ -1893,9 +1904,9 @@ but moved the price by 4 cents, so it was rejected.
 :::
 
 ::: {.notes}
-We tested these variants against OpenMP. Dynamic scheduling was slower,
-because every row costs the same. Float was faster, but it moved
-the price by 4 cents and gamma by 12 percent, so we rejected it.
+We tested these variants against OpenMP. Dynamic scheduling was slower
+because every row costs the same, and float was faster, but it moved the
+price by 4 cents and gamma by 12 percent, so we rejected it.
 :::
 
 ## Conclusion
@@ -1935,9 +1946,9 @@ only on 4096 x 1024, and the serial boundary update grew to
 :::
 
 ::: {.notes}
-To conclude, we reached 123 times the baseline on one node and 147 on two.
-Most of that is the result of SIMD and threads, and across nodes the
-exchange is the main limit. Four of our six hypotheses held.
+In the end we reached 123 times the baseline on one node and 147 on two.
+Most of that came from SIMD and threads, across nodes the exchange is the
+main limit, and four of our six hypotheses held.
 :::
 
 ## What surprised me, and what I would do next
@@ -1979,11 +1990,11 @@ the node, compiler and flags.
 :::
 
 ::: {.notes}
-Build and system settings moved the rates as much as some code changes, from
-split loads to huge pages. Next, each rank would allocate only its own rows
-plus two ghost rows, so the grid can be bigger than one node's memory. We'd
-also test the eager limit behind E9, and try an implicit scheme and a GPU
-version.
+What surprised me was that build and system settings moved the rates as much
+as some code changes, from split loads to huge pages. Next I want each rank
+to hold only its own rows plus two ghost rows, so the grid can outgrow one
+node's memory, then to test the eager limit behind E9, an implicit scheme
+and a GPU version.
 :::
 
 ## {{< meta n.x_mpi_one >}}x on one node, {{< meta n.x_mpi_two >}}x on two, the same answer on every rung {.closing}
