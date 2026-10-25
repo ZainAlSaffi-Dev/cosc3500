@@ -801,6 +801,10 @@ in variance is a stride of one row.
 :::: {.columns}
 ::: {.column width="52%"}
 ::: {.small}
+- A cell update is one new value for one cell in one step. The rate is
+  cells times steps over the seconds the time loop took, so 2048 x 512 x
+  2000 = 2.1 billion updates in 13.2 s is 159 million a second
+  (`src/solver_serial.cpp` lines 66 and 67).
 - Dual Xeon E5-2670 v3, 2 x 12 cores, 30 MiB L3 per socket, g++ 8.5, Open MPI 4.1.
 - `--exclusive` on a named node, so no other job shares it.
 - Median of 5 repetitions, with the threads pinned to cores.
@@ -841,8 +845,9 @@ about floating-point arithmetic, *ACM Computing Surveys* 23(1), 5 to 48,
 :::
 
 ::: {.notes}
-Every number is the median of 5 runs on one exclusive rangpur node through
-sbatch, after the tests pass in the same job. We discarded our
+A cell update is one cell's new value in one step. Every number is the
+median of 5 runs on one exclusive rangpur node through sbatch, after the
+tests pass in the same job. We discarded our
 first sweeps because denormal numbers slowed some versions, and reran
 everything with them flushed to zero.
 :::

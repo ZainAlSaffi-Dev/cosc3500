@@ -2233,3 +2233,12 @@ because they hold the commands that make the snapshots.
 
 Every script in `scripts/` now opens with the three-line AI declaration, the
 same as the C++ files.
+
+### What a cell update is, on the measurement slide
+
+The measurement slide now says what the rate counts. A cell update is one
+new value for one cell in one step, and every rung divides cells times steps
+by the seconds its time loop took, `src/solver_serial.cpp` lines 66 and 67.
+On the 2048 by 512 grid with 2000 steps that is 2.1 billion updates, so the
+serial rung's 159 million a second is about 13.2 s. The take gained one
+sentence, and the script now comes to 9 minutes 39 seconds, 1349 words.
