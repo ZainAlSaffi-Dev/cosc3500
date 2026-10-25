@@ -167,7 +167,7 @@ the number and its job id.
 | 24, conclusion | The bullets collide with the callout. "Next is overlapping the exchange" is out of date because E9 has run. | Fixed layout, and the E9 result in place of the old next step. |
 | none | No plain-English summary, and nothing on E1, E2 and E2b or E9. | New slides for each. |
 
-### 4b. The recorded part, slides 1 to 39
+### 4b. The recorded part, slides 1 to 40
 
 The recorded part is `presentation/deck_m2.html`, the Quarto deck, and
 `presentation/M2_SCRIPT.md` has one take per slide. The opening, slides 3 to
@@ -175,7 +175,7 @@ The recorded part is `presentation/deck_m2.html`, the Quarto deck, and
 C++. Every rung that changed the code has a before and after made with
 auto-animate, the serial rung (14 and 15), SIMD (17 and 18), OpenMP (22 and
 23) and MPI (30 and 31). Slide 38 is the reflection the task sheet asks for,
-what surprised me and what I would do next.
+what surprised me, what I would do differently and how I would extend it.
 
 | Slide | Title | Slide | Title |
 |---|---|---|---|
@@ -194,9 +194,9 @@ what surprised me and what I would do next.
 | 13 | The ladder | 35 | Same answer on every rung |
 | 14, 15 | The serial rung | 36 | Tried and rejected |
 | 16 | SIMD, four cells per instruction | 37 | Conclusion |
-| 17, 18 | SIMD code, before and after | 38 | What surprised me, and what I would do next |
+| 17, 18 | SIMD code, before and after | 38 | What surprised me, what I would change, and what comes next |
 | 19 | The compiler was splitting the loads (E2, E2b) | 39 | Close |
-| 20 | SIMD on the roofline | | |
+| 20 | SIMD on the roofline | 40 | AI declaration |
 
 The opening slides and what each step shows.
 

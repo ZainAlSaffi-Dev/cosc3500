@@ -853,14 +853,10 @@ about floating-point arithmetic, *ACM Computing Surveys* 23(1), 5 to 48,
 :::
 
 ::: {.notes}
-*Four presses, one box each, then point at the discarded round.*
+*Four presses, one box each.*
 
-A cell update is one cell's new value in one step. A million cells over
-2000 steps is 2.1 billion updates, and in 13.2 seconds that's 159 million a
-second. Every number is the median of 5 runs on one exclusive rangpur node
-through sbatch, after the tests pass in the same job. We discarded our
-first sweeps because denormal numbers slowed some versions, and reran
-everything with them flushed to zero.
+A cell update is one cell's new value in one step. Every number is the
+median of 5 runs on one exclusive rangpur node through sbatch, after the tests pass in the same job.
 :::
 
 ## Where the time goes
@@ -893,8 +889,7 @@ still below the serial rung's 159 at -O2.
 
 ::: {.notes}
 Profiling with gprof shows one function, the interior row update, takes 99
-percent of the time. Every benchmark builds at O2, where the baseline runs at
-58 million updates a second, so each version measures only our change.
+percent of the time. Every benchmark builds at O2, so each version measures only our change.
 :::
 
 ## The ladder
@@ -957,9 +952,7 @@ on one node is [{{< meta n.x_mpi_one >}}x]{.em} the baseline.
 ::: {.notes}
 *The bars grow on their own. Point along them from left to right.*
 
-The ladder adds one technique per version, and each version must match the
-baseline before it's timed. The number in each bar is the gain over the
-version below.
+The ladder adds one technique per version, and the number in each bar is the gain over the version below.
 :::
 
 ## The serial rung {auto-animate="true"}
@@ -1435,9 +1428,9 @@ Karp and H. P. Flatt, Measuring parallel processor performance,
 
 ::: {.notes}
 With the grid fixed, 24 threads give 13.9 times, and Amdahl's law fits a
-serial fraction of 2.4 percent. The boundaries are only 0.4 percent of a
-one-thread step, so most of that is the fork and barrier every step and the
-shared caches, while at 24 threads the boundaries grow to 9 percent.
+serial fraction of 2.4 percent. Most of that is the fork and barrier every
+step and the shared caches, because the boundaries are only 0.4 percent of a
+one-thread step.
 :::
 
 ## Weak scaling
@@ -1558,8 +1551,7 @@ performance model for multicore architectures, *Communications of the ACM*
 big grid on the memory roof.*
 
 On the node roofline the small grid runs above the memory roof because it
-fits in L3, while the big grid sits on the memory roof, so it's limited by
-memory bandwidth.
+fits in L3, while the big grid sits on the memory roof, limited by memory bandwidth.
 :::
 
 ## Placement
@@ -1946,55 +1938,72 @@ only on 4096 x 1024, and the serial boundary update grew to
 :::
 
 ::: {.notes}
-In the end we reached 123 times the baseline on one node and 147 on two.
+We reached 123 times the baseline on one node and 147 on two.
 Most of that came from SIMD and threads, across nodes the exchange is the
 main limit, and four of our six hypotheses held.
 :::
 
-## What surprised me, and what I would do next
+## What surprised me, what I would change, and what comes next
 
 [Looking back over the project]{.sub}
 
-::: {.grid2}
+::: {.grid3}
 ::: {.blk}
 [What surprised me]{.bt}
 
-- With only `-mavx2`, g++ 8.5 compiled every unaligned 256 bit load as two
-  128 bit loads. Adding `-mno-avx256-split-unaligned-load` and its store
-  partner made simd {{< meta n.split_gain_one >}}x faster.
-- Serial and simd ran up to 2.7x slower on grids whose `current` and `next`
-  buffers start exactly $2^{24}$ bytes (16 MiB) apart. The hardware cause is
-  still unknown.
-- Transparent huge pages, flushing denormal numbers to zero and NUMA
-  first-touch page placement each moved the rates as much as some code
-  changes did.
+- With only `-mavx2`, g++ 8.5 split every unaligned 256 bit load into two
+  128 bit loads. Two flags made simd {{< meta n.split_gain_one >}}x faster.
+- Grids whose two buffers start exactly $2^{24}$ bytes apart ran up to 2.7x
+  slower. The hardware cause is still unknown.
+- Huge pages, denormal numbers and first-touch page placement each moved the
+  rates as much as some code changes.
 :::
 
-::: {.blk}
-[What I would do next]{.bt}
+::: {.blk .amber}
+[What I would do differently]{.bt}
 
-- Every rank allocates the whole grid today, so one node's memory caps the
-  grid size. Allocating only the rank's own rows plus one ghost row on each
-  side lets the grid grow with the number of nodes.
-- Set `OMPI_MCA_btl_vader_eager_limit` above the 16 KiB row size, so rows
-  inside a node are sent eagerly, to test why E9 helped only between nodes.
-- An implicit or ADI scheme has no explicit stability limit on $\Delta t$,
-  at the cost of linear solves each step. A CUDA kernel for the row update.
+- Flush denormals to zero before the first sweep. A denormal is a double
+  below $2.2 \times 10^{-308}$, too small for the normal format, and this CPU
+  spends tens of extra cycles on every operation that touches one. Short
+  benchmark runs leave values that small far from the strike, so the whole
+  first round of sweeps was rerun.
+- Read the compiler's assembly for every rung from the start. The split
+  loads only showed up after the first simd build ran at 387.
+- Give every slurm job its own copy of the tree from day one. A sync and a
+  `make clean` from other jobs killed two jobs in the first round.
+:::
+
+::: {.blk .green}
+[How I would extend it]{.bt}
+
+- On the mpi rung every rank allocates the whole 2048 x 512 grid, 16 MiB,
+  and updates only its own rows (`src/solver_mpi.cpp` line 126). The update
+  reads only the row above and below (`src/stencil.cpp` lines 89 and 90), so
+  a rank needs just its own rows plus one copied row from each neighbour.
+  With 4 ranks on two r730 nodes that is 130 rows, about 4 MiB, so the grid
+  can grow with the nodes.
+- `OMPI_MCA_btl_vader_eager_limit` above the 16 KiB row, to test why E9
+  helped only between nodes.
+- An implicit or ADI scheme with no limit on $\Delta t$, and a CUDA kernel
+  for the row update.
 :::
 :::
 
 ::: {.band}
-Compiler flags, the memory allocator and the floating point control register
-changed the rates as much as some code changes, so every result file records
-the node, compiler and flags.
+The build and the system moved the rates as much as the code did, so every
+result file records the node, the compiler and the flags.
 :::
 
 ::: {.notes}
-What surprised me was that build and system settings moved the rates as much
-as some code changes, from split loads to huge pages. Next I want each rank
-to hold only its own rows plus two ghost rows, so the grid can outgrow one
-node's memory, then to test the eager limit behind E9, an implicit scheme
-and a GPU version.
+What surprised me most was how much the build and the system mattered, with
+two compiler flags alone giving SIMD 1.19 times. If I started again, I'd
+flush denormals before the first sweep. A denormal is a double below about 2.2 times 10 to the minus 308, and this CPU
+spends tens of extra cycles on every operation that touches one, so they
+slowed some rungs and we had to rerun the whole first round. Next, on the
+MPI rung, each rank would hold only its own rows plus one copied row from
+each neighbour, because the update only reads the rows above and below. On
+two nodes that cuts each rank from 16 to about 4 mebibytes, so the grid can
+grow with the nodes.
 :::
 
 ## {{< meta n.x_mpi_one >}}x on one node, {{< meta n.x_mpi_two >}}x on two, the same answer on every rung {.closing}
@@ -2006,6 +2015,26 @@ and a GPU version.
 ::: {.notes}
 Every number here has a job id in the results file, and the repository has
 the code to reproduce it. Thanks for watching.
+:::
+
+## AI declaration {.roomy}
+
+[How AI was used in this project]{.sub}
+
+::: {.blk}
+[AI declaration]{.bt}
+
+I used Claude, an AI assistant made by Anthropic, while working on this
+project. It helped me debug the code, draft pseudocode and implement it, and
+helped me build the slides, the diagrams and this script.
+
+Every design choice was checked by measurement on rangpur, every number in
+this video comes from a job listed in `docs/RESULTS.md`, and every source
+file opens with the same declaration.
+:::
+
+::: {.notes}
+*Hold for three seconds. Nothing is said.*
 :::
 
 ## Appendix {.closing visibility="uncounted"}

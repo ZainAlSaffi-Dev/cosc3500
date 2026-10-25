@@ -2261,3 +2261,48 @@ from the conclusion, and the reflection said in the first person with what
 comes next. Every number and technical term is unchanged and no
 analogies were added. The script now comes to 9 minutes 49 seconds, 1375
 words, so a take that runs long when spoken should be trimmed back.
+
+### A fuller reflection slide
+
+The reflection criterion asks for what surprised us, what we would do
+differently and how to extend the work, and the slide only covered the
+first and the last, so its take read as a list. Slide 38 now has three
+blocks. What surprised me keeps the split loads, the 2^24 byte address
+effect and the system settings. What I would do differently is new, setting
+the floating point mode before the first sweep because the whole first round
+was rerun, reading the compiler's assembly for every rung from the start
+because the split loads only showed up after simd ran at 387, and giving
+every slurm job its own copy of the tree because two first-round jobs were
+killed by a sync and a `make clean`. How I would extend it keeps the per-rank
+rows, the eager limit test, an implicit or ADI scheme and a CUDA kernel. The
+take says each part in my own words.
+
+To keep the video under 10 minutes the measurement take drops the spoken
+sum, because the five boxes show it, and the strong scaling take drops the
+9 percent boundary share at 24 threads, which stays on the slide. The
+script now comes to 9 minutes 45 seconds, 1365 words.
+
+### Denormals defined, the per-rank rows explained, and an AI declaration slide
+
+The reflection slide and its take now say what a denormal is, a double below
+2.2e-308, too small for the normal format, on which this CPU spends tens of
+extra cycles for every operation that touches one. Short benchmark runs
+leave values that small far from the strike, which is why the first round of
+sweeps was rerun. The measurement take no longer tells that story, because
+the reflection now does, and the amber block on the measurement slide still
+shows the numbers.
+
+The extension on the reflection slide now says where it applies and why. On
+the mpi rung every rank allocates the whole 2048 by 512 grid, 16 MiB
+(`src/solver_mpi.cpp` line 126), and updates only its own rows. The update
+reads only the row above and below (`src/stencil.cpp` lines 89 and 90), so a
+rank needs just its own rows plus one copied row from each neighbour. With 4
+ranks on two r730 nodes that is 128 own rows and 2 copied rows, about 4 MiB,
+so the grid could grow with the number of nodes.
+
+Slide 40, the last recorded slide, is the AI declaration, held for three
+seconds with nothing said. To pay for the longer reflection take, the ladder
+take no longer repeats that every version must match the baseline, which the
+same answer slide says, and the profile take no longer reads out the
+baseline's 58, which is on the slide. The script comes to 9 minutes 47
+seconds, 1367 words, plus the hold on the declaration.

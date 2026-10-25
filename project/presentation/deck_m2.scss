@@ -374,6 +374,17 @@ $code-block-font-size: 0.6em;
   margin-top: 0.3em;
 }
 
+// Three titled blocks side by side.
+.reveal .slides section .grid3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  column-gap: 0.6em;
+}
+
+.reveal .slides section .grid3 .blk {
+  font-size: 0.82em;
+}
+
 // The PDE as one row of terms. Each term has its colour and a label under it.
 // The labels sit under their term without widening it, so the terms keep their spacing.
 .reveal .slides section .terms {
