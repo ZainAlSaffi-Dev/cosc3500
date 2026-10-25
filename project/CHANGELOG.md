@@ -2370,3 +2370,28 @@ formula on the finite differences slide, the smoothing on the full run, the
 denormal rerun in the measurement take (the reflection defines denormals),
 the bit-for-bit match on the same answer slide, the 504 rows in weak scaling,
 the buffer swap on the one step slide, and a shorter title and reflection.
+
+### Aligned and unaligned loads back in the video
+
+A timed run of the 1261 word script finished in 9:20, a pace of about 144
+words a minute, so there was room for one more take. Slide 16, Aligned and
+unaligned loads, now follows the SIMD code. It is a new stepped diagram
+(`aligned_loads` in `scripts/deck_m2_svgs.py`) of 12 doubles of one row with
+a dashed line every 32 bytes, built in four presses.
+
+1. The centre load starts on a 32 byte boundary, so it is aligned.
+   `_mm256_load_pd` needs that address and `_mm256_loadu_pd` reads from any
+   address.
+2. West and east start 8 bytes either side, so they cannot all be aligned,
+   and the AVX2 row uses `_mm256_loadu_pd` for every load.
+3. With only `-mavx2`, g++ 8.5 splits each unaligned load into two 16 byte
+   loads joined by `vinsertf128`, 11 split loads for every four cells.
+4. The two `NOSPLIT` flags keep each one 32 byte load, and simd goes from
+   387 to 460 million updates a second, 1.19x, with the same answer (E2b).
+
+The old slide with the assembly and the bar chart stays in the appendix as
+A4, behind slide 16. The reflection now opens with the split loads, so it
+does not repeat the 1.19x. The script is timed at 144 words a minute and
+comes to 9:43 for 1320 words over 33 slides in 20 takes, plus the hold on
+the AI declaration. `presentation/INTERVIEW.md` section 4b has the new take
+table and a short answer for slide 16.

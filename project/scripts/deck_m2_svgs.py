@@ -645,6 +645,59 @@ def simd_row():
     return "\n".join(out)
 
 
+def aligned_loads():
+    # 12 doubles of one row with the 32 byte boundaries, then the west, centre and east loads.
+    cell_width = 80
+    left = 180
+    row_y = 280
+    out = [svg_open(1400, 400)]
+    for i in range(12):
+        out.append(rect(left + i * cell_width, row_y, cell_width, 56, "#E2E8F0"))
+    for i in range(13):
+        on_boundary = i % 4 == 0
+        out.append(text(left + i * cell_width, row_y + 86, str(8 * i), 19 if on_boundary else 17, "middle", "blue" if on_boundary else "dim", "700" if on_boundary else "400"))
+        if on_boundary:
+            out.append(line(left + i * cell_width, 120, left + i * cell_width, row_y + 62, BLUE, 3, 'stroke-dasharray="7 6"'))
+    out.append(text(left - 20, row_y + 86, "byte", 19, "end", "dim"))
+    out.append(text(left - 20, row_y + 36, "one row", 19, "end", "dim"))
+    out.append(text(left + 12 * cell_width + 20, row_y + 86, "a dashed line every 32 bytes", 19, "start", "blue"))
+    # The three loads of four doubles, with the cell each one starts at.
+    loads = [("west", 3, 150), ("centre", 4, 190), ("east", 5, 230)]
+
+    def bar(first, bar_y, colour):
+        return rect(left + first * cell_width + 4, bar_y, 4 * cell_width - 8, 28, colour, "none", 0, 'rx="5"')
+
+    def half_bars(first, bar_y):
+        half = 2 * cell_width
+        return (rect(left + first * cell_width + 4, bar_y, half - 10, 28, AMBER, "none", 0, 'rx="5"')
+                + rect(left + first * cell_width + half + 6, bar_y, half - 10, 28, AMBER, "none", 0, 'rx="5"'))
+
+    def caption(step, kind, colour, first_line, second_line):
+        return (f'<g {fragment(step, kind)}>' + text(700, 40, first_line, 26, "middle", colour, "700")
+                + text(700, 76, second_line, 21, "middle", colour) + "</g>")
+
+    # Step 0, the centre load starts on a boundary.
+    name, first, bar_y = loads[1]
+    out.append(f'<g {fragment(0)}><g {fragment(2, "fade-out")}>' + bar(first, bar_y, BLUE) + "</g>" + text(left + 9 * cell_width + 14, bar_y + 21, "centre, aligned", 20, "start", "blue") + "</g>")
+    out.append(caption(0, "current-visible", "blue", "An aligned load reads 32 bytes, four doubles, from a multiple of 32",
+                       "_mm256_load_pd needs that address, _mm256_loadu_pd reads from any address"))
+    # Step 1, west and east start one double either side.
+    for name, first, bar_y in (loads[0], loads[2]):
+        out.append(f'<g {fragment(1)}><g {fragment(2, "fade-out")}>' + bar(first, bar_y, LIGHT_BLUE) + "</g>" + text(left + 9 * cell_width + 14, bar_y + 21, name + ", unaligned", 20, "start", "blue") + "</g>")
+    out.append(caption(1, "current-visible", "blue", "West and east sit 8 bytes either side, so they cannot all be aligned",
+                       "so the AVX2 row uses _mm256_loadu_pd for every load"))
+    # Step 2, g++ 8.5 with only -mavx2 splits every unaligned load in two.
+    out.append(f'<g {fragment(2, "current-visible")}>' + "".join(half_bars(first, bar_y) for _, first, bar_y in loads) + "</g>")
+    out.append(caption(2, "current-visible", "amber", "With only -mavx2, g++ 8.5 splits each into two 16 byte loads",
+                       "then joins the halves with vinsertf128, 11 split loads for every four cells"))
+    # Step 3, the two flags keep each load whole.
+    out.append(f'<g {fragment(3)}>' + "".join(bar(first, bar_y, BLUE) for _, first, bar_y in loads) + "</g>")
+    out.append(caption(3, "", "blue", "Two flags keep each one 32 byte load",
+                       "simd goes from 387 to 460 million updates a second, 1.19x, with the same answer"))
+    out.append("</svg>")
+    return "\n".join(out)
+
+
 def omp_bands():
     # Rows 1 to 510 split by schedule(static), 6 threads of 22 rows, then 18 of 21.
     grid_x = 170
@@ -889,6 +942,7 @@ BUILDERS = {
     "full-run": lambda: full_run(SNAPSHOT_FOLDER),
     "layout": data_layout,
     "simd": simd_row,
+    "loads": aligned_loads,
     "omp": omp_bands,
     "mpi": mpi_rows,
     "ladder": ladder_chart,

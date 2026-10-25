@@ -167,15 +167,15 @@ the number and its job id.
 | 24, conclusion | The bullets collide with the callout. "Next is overlapping the exchange" is out of date because E9 has run. | Fixed layout, and the E9 result in place of the old next step. |
 | none | No plain-English summary, and nothing on E1, E2 and E2b or E9. | New slides for each. |
 
-### 4b. The recorded part, slides 1 to 32
+### 4b. The recorded part, slides 1 to 33
 
 The recorded part is `presentation/deck_m2.html`, the Quarto deck, and
-`presentation/M2_SCRIPT.md` has 19 takes. Each take teaches one idea. It
+`presentation/M2_SCRIPT.md` has 20 takes. Each take teaches one idea. It
 says what the idea is, shows what was measured, then says why, over one to
 three slides. The opening, slides 2 to 8, builds one step per key press,
 from what an option is to the update in C++. Every rung that changed the
 code has a before and after made with auto-animate, the serial rung (11 and
-12), SIMD (14 and 15) and OpenMP (17 and 18). Slide 30 is the reflection the
+12), SIMD (14 and 15) and OpenMP (18 and 19). Slide 31 is the reflection the
 task sheet asks for, what surprised me, what I would do differently and how
 I would extend it.
 
@@ -190,16 +190,25 @@ I would extend it.
 | 7 | 9, 10 | How every number was measured, then where the time goes |
 | 8 | 11, 12 | The serial rung |
 | 9 | 13 to 15 | SIMD, four cells per instruction, then the code |
-| 10 | 16 to 18 | OpenMP, one block of rows per thread, then the code |
-| 11 | 19 | Strong scaling |
-| 12 | 20 | Weak scaling |
-| 13 | 21, 22 | Grid size, then the node roofline |
-| 14 | 23, 24 | MPI, one block of rows per process, then the edge row exchange |
-| 15 | 25, 26 | Placement, then the hybrid layouts |
-| 16 | 27 | Tried and rejected |
-| 17 | 28, 29 | Same answer on every rung, then the conclusion |
-| 18 | 30 | What surprised me, what I would change, and what comes next |
-| 19 | 31, 32 | Close, then the AI declaration held for three seconds |
+| 10 | 16 | Aligned and unaligned loads |
+| 11 | 17 to 19 | OpenMP, one block of rows per thread, then the code |
+| 12 | 20 | Strong scaling |
+| 13 | 21 | Weak scaling |
+| 14 | 22, 23 | Grid size, then the node roofline |
+| 15 | 24, 25 | MPI, one block of rows per process, then the edge row exchange |
+| 16 | 26, 27 | Placement, then the hybrid layouts |
+| 17 | 28 | Tried and rejected |
+| 18 | 29, 30 | Same answer on every rung, then the conclusion |
+| 19 | 31 | What surprised me, what I would change, and what comes next |
+| 20 | 32, 33 | Close, then the AI declaration held for three seconds |
+
+Slide 16 builds in four presses. The centre load starts on a 32 byte
+boundary and is aligned. West and east start 8 bytes either side, so they
+cannot all be aligned, and the row uses `_mm256_loadu_pd` for every load.
+With only `-mavx2`, g++ 8.5 splits each unaligned 256 bit load into two
+128 bit loads joined by `vinsertf128`. The two `NOSPLIT` flags keep each one
+load, 387 to 460 on one core, 1.19x. Appendix A4 has the assembly and the
+bars, and STUDY_GUIDE has the full answer under why the row uses `loadu`.
 
 The opening slides and what each step shows.
 
@@ -218,7 +227,8 @@ The opening slides and what each step shows.
 Press next after the AI declaration for the divider, then the backup
 slides. To go straight to one, add its anchor to the address, for example
 `deck_m2.html#/the-ladder`, or press O for the overview of every slide. The
-first eight are the slides cut from the video when it moved to 19 takes, so
+first eight are the slides cut from the video when it moved to 19 takes
+(A4 now backs up slide 16), so
 each still has its old take as speaker notes.
 
 | A | Slide | Anchor |
@@ -226,7 +236,7 @@ each still has its old take as speaker notes.
 | A1 | The project in one slide, cut from the video | `#/the-project-in-one-slide` |
 | A2 | Checking the answer, the Black-Scholes check, cut from the video | `#/checking-the-answer` |
 | A3 | The ladder, cut from the video | `#/the-ladder` |
-| A4 | The compiler was splitting the loads (E2, E2b), cut from the video | `#/the-compiler-was-splitting-the-loads` |
+| A4 | The compiler was splitting the loads (E2, E2b), the assembly and bars behind slide 16 | `#/the-compiler-was-splitting-the-loads` |
 | A5 | SIMD on the roofline, cut from the video | `#/simd-on-the-roofline` |
 | A6 | MPI code, the time loop, cut from the video | `#/mpi-code-the-time-loop` |
 | A7 | MPI code, the time loop with the changes marked, cut from the video | `#/mpi-code-the-time-loop-1` |
@@ -576,11 +586,11 @@ Each question has a full answer in the place named after it. "HPC" means
   from `make collapse-anim` and `make demo-snapshots`, which need a local
   build of heston and so an MPI compiler.
 - The recorded deck is `presentation/deck_m2.html`, built with
-  `quarto render deck_m2.qmd`. It has 32 recorded slides in 19 takes, the
+  `quarto render deck_m2.qmd`. It has 33 recorded slides in 20 takes, the
   divider and 45 backup slides. `make slides-m2` still builds the older
   beamer PDF, `deck_m2.pdf`, which no longer matches the video.
-- The script runs 9:48 at 136 words a minute, the pace of two timed
-  run-throughs, plus 2 seconds holding the AI declaration.
+- The script runs 9:43 at 144 words a minute, the pace of the 9:20 timed
+  run-through, plus 2 seconds holding the AI declaration.
 - Still open are the date, the room and any rules for the interview from the
   course FAQ and profile, recording the video, and `make package` once the
   figures are final.

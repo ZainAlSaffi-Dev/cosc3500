@@ -1,22 +1,22 @@
 # M2 SCRIPT, the word-for-word script for the Milestone 2 video
 
 One section per take, in the order of the recorded slides of
-`presentation/deck_m2.html` (slides 1 to 32). There are 19 takes, and each
+`presentation/deck_m2.html` (slides 1 to 33). There are 20 takes, and each
 one teaches one idea. It says what the idea is, shows what we measured, then
 says why. A take that runs over more than one slide has a line in italics
 where to press next for the next slide, and the notes under each slide
-(press S) hold the words said over that slide. The appendix after slide 32
+(press S) hold the words said over that slide. The appendix after slide 33
 is for the interview and is never recorded. It starts with the eight slides
 cut from the video, the project summary, the Black-Scholes check, the
-ladder, the split loads, the one-core roofline, the MPI time loop and the
-overlap experiment.
+ladder, the split loads in assembly (slide 16 now explains them), the
+one-core roofline, the MPI time loop and the overlap experiment.
 
 Each heading gives the start time and the length of the take, worked out
-from its word count at 136 words per minute plus a second for each slide in
-it. 136 is the pace of two timed run-throughs on 2026-10-25, which reached
-the reflection at 9:45 to 9:50 with the earlier 1385 word script. The
-Milestone 1 marker found the delivery fast, so the numbers still need to be
-said slowly. The 1261 words come to 9:48, plus 2 more seconds holding the AI
+from its word count at 144 words per minute plus a second for each slide in
+it. 144 is the pace of the timed run-through of the 1261 word script, which
+finished in 9:20. The Milestone 1 marker found the delivery fast, so the
+numbers still need to be said slowly. The 1320 words come to 9:43, plus 2
+more seconds holding the AI
 declaration, and the assessors stop watching at 10 minutes. If a take runs
 long when spoken, cut words from it and keep the pace.
 
@@ -81,7 +81,7 @@ On screen, slide 1.
 Hi, I'm Zain. This video shows how we price an option on a grid, and how we
 made it 123 times faster on one rangpur node.
 
-## 0:12 What an option is (0:29)
+## 0:12 What an option is (0:28)
 
 On screen, slide 2. Five presses, the path above the strike, the path below
 it, the payoff line, the other paths, the price.
@@ -92,7 +92,7 @@ three months. If the share ends at 5700, you buy at 5250 and the option pays
 the path, so the price today is the average payoff over every path,
 discounted to today.
 
-## 0:42 From the model to the PDE (0:29)
+## 0:40 From the model to the PDE (0:28)
 
 On screen, slide 3. Four presses, the share price terms, the volatility
 terms, the last two, then the steps back from expiry.
@@ -103,7 +103,7 @@ price, these from the volatility, and the last two say the two move together
 and that money later is worth less. We only know V at expiry, the payoff, so
 we step back from there to today.
 
-## 1:11 Finite differences, then the same sum in C++ (0:42)
+## 1:07 Finite differences, then the same sum in C++ (0:40)
 
 On screen, slides 4 to 5. The PDE moves to the top. Four presses, the slope,
 the curvature, north and south, the corners.
@@ -121,7 +121,7 @@ In C++ each difference is multiplied by a reciprocal worked out once. One
 step of dt gives 0.04959. A larger dt would make the errors grow, so the
 full grid needs 980,000 steps.
 
-## 1:53 One step over the grid, and how it sits in memory (0:41)
+## 1:47 One step over the grid, and how it sits in memory (0:39)
 
 On screen, slides 6 to 7. Point at the payoff, the red block, then the red
 cell. Six clicks, three cells, the rest of the row, the other rows, the
@@ -138,7 +138,7 @@ Each buffer is one flat array of doubles, with cell i, j at j times the row
 length plus i. So a row of 2048 share prices sits together in 16 kibibytes,
 and the cell to the north is one row further on.
 
-## 2:34 A full run, and checking it (0:18)
+## 2:26 A full run, and checking it (0:17)
 
 On screen, slide 8. Three presses, 1 and 9 days, 37 days, today.
 
@@ -146,7 +146,7 @@ A full run on this test grid is 56,000 steps. The full grid gives 196.17,
 within a tenth of a cent of the Fourier price, and with no volatility of
 volatility the solver matches Black-Scholes to 4 cents.
 
-## 2:52 How we measured, and where the time goes (0:30)
+## 2:43 How we measured, and where the time goes (0:29)
 
 On screen, slides 9 to 10. Four presses, one box each of the rate sum.
 
@@ -160,7 +160,7 @@ job shares.
 gprof shows one function takes 99 percent of the time, so that's what every
 version speeds up.
 
-## 3:22 The serial rung (0:29)
+## 3:11 The serial rung (0:27)
 
 On screen, slides 11 to 12. Point at a division.
 
@@ -175,7 +175,7 @@ press grows the bar.*
 So we worked out the reciprocals once per solve, for 159 million updates a
 second, 2.8 times the baseline.
 
-## 3:51 SIMD (0:40)
+## 3:39 SIMD (0:38)
 
 On screen, slides 13 to 15. Four clicks, the loads, then each group of four,
 then the scalar cell.
@@ -195,9 +195,20 @@ multiply-add, and the counter steps by four. That runs at 456, 2.9 times
 serial. It's below 4 times because four cells need nine overlapping loads,
 and one core is already near its memory bandwidth.
 
-## 4:31 OpenMP (0:38)
+## 4:17 Aligned and unaligned loads (0:28)
 
-On screen, slides 16 to 18. Four clicks, the bands, the barrier, the
+On screen, slide 16. Four presses, the aligned load, west and east, the
+split, one load again.
+
+One more SIMD detail. An aligned load reads 32 bytes starting at a multiple
+of 32. West, centre and east sit one double apart, so they can't all be
+aligned, and the code uses unaligned loads. With only the AVX2 flag, g++ 8.5
+split every unaligned load into two 16 byte halves. Two flags keep it one
+load, 1.19 times faster, with the same answer.
+
+## 4:45 OpenMP (0:36)
+
+On screen, slides 17 to 19. Four clicks, the bands, the barrier, the
 boundaries, the swap.
 
 The grid has 512 rows, one per variance value. OpenMP gives each of the 24
@@ -206,17 +217,17 @@ threads a block of about 21 neighbouring rows, so thread 0 updates rows 1 to
 so no locks are needed. After a barrier, the main thread updates the
 boundaries.
 
-*Slide 17. Press next for the code, then next again and the pragma appears
+*Slide 18. Press next for the code, then next again and the pragma appears
 above the same loop.*
 
-*Slide 18. One more press grows the bar.*
+*Slide 19. One more press grows the bar.*
 
 In the code that's one pragma above the row loop, and it gives 6367 on 24
 cores, 14 times SIMD.
 
-## 5:09 Strong scaling (0:38)
+## 5:21 Strong scaling (0:36)
 
-On screen, slide 19. Point at the 24 thread point, then the dashed Amdahl
+On screen, slide 20. Point at the 24 thread point, then the dashed Amdahl
 curve.
 
 Strong scaling keeps the grid the same and adds threads. Ideally 24 threads
@@ -227,9 +238,9 @@ percent. The boundary update, the only code on one thread, is 0.4 percent.
 The rest is the threads waiting at the barrier every step and sharing each
 socket's cache.
 
-## 5:48 Weak scaling (0:37)
+## 5:57 Weak scaling (0:35)
 
-On screen, slide 20. Point at the step time line, then the scaled speedup
+On screen, slide 21. Point at the step time line, then the scaled speedup
 against the Gustafson line.
 
 Weak scaling gives each thread its own 21 rows, so 24 threads solve a grid
@@ -239,14 +250,14 @@ time, a scaled speedup of 16. Gustafson's law predicts 22 from our 9 percent
 serial share. We fall short because one thread has a whole socket's cache
 and bandwidth to itself, and 24 threads share them.
 
-## 6:24 The roofline, and why grid size matters (0:38)
+## 6:32 The roofline, and why grid size matters (0:36)
 
-On screen, slides 21 to 22. Point at the omp line where it drops.
+On screen, slides 22 to 23. Point at the omp line where it drops.
 
 While both buffers fit in the L3 caches, 24 threads run 40 times serial. At
 4096 by 1024 they no longer fit, and the rate halves.
 
-*Slide 22. Press next for the slide. Press next for one core of simd, next
+*Slide 23. Press next for the slide. Press next for one core of simd, next
 for 24 threads rising, next for the big grid on the memory roof.*
 
 The roofline shows why. Speed is capped by how fast the cores compute, the
@@ -254,9 +265,9 @@ flat roof, or by how fast memory delivers data, the sloped roof. The small
 grid runs above the memory roof because its data comes from L3. The big grid
 sits on the memory roof, so after threads the limit is memory bandwidth.
 
-## 7:03 MPI (0:35)
+## 7:08 MPI (0:33)
 
-On screen, slides 23 to 24. Four clicks, the owned rows, the edge rows, the
+On screen, slides 24 to 25. Four clicks, the owned rows, the edge rows, the
 exchange, the wait.
 
 To go past one node we need MPI, and each MPI process has its own memory. So
@@ -264,15 +275,15 @@ each process gets a block of rows. Its first row needs the row below it,
 which another process owns. So every step, each process sends its edge rows
 to its neighbours and receives theirs into an extra row, called a ghost row.
 
-*Slide 24. Press next for the code. Three presses, the receive, the send,
+*Slide 25. Press next for the code. Three presses, the receive, the send,
 the wait.*
 
 In the code we post the receive, then the send, and MPI Waitall waits for
 both.
 
-## 7:38 Memory placement, and why one process per socket wins (0:43)
+## 7:42 Memory placement, and why one process per socket wins (0:40)
 
-On screen, slides 25 to 26. Point at the pages on socket 0 bar, then the MPI
+On screen, slides 26 to 27. Point at the pages on socket 0 bar, then the MPI
 bar.
 
 MPI helped on one node too. Each socket has its own memory, and Linux puts a
@@ -281,49 +292,48 @@ grid, so every page lands on socket 0. With one MPI process per socket, each
 fills its own copy, so its pages stay local. That made the big grid 2.28
 times faster.
 
-*Slide 26. Press next for the slide. Point at the two node bars, then the
+*Slide 27. Press next for the slide. Point at the two node bars, then the
 white exchange shares.*
 
 Two nodes give 1.21 times on the small grid and 1.64 on the big one. The
 small grid gains less because the exchange is 40 percent of each step.
 
-## 8:20 Tried and rejected (0:15)
+## 8:22 Tried and rejected (0:14)
 
-On screen, slide 27. Point at the dynamic bars, then the float bar.
+On screen, slide 28. Point at the dynamic bars, then the float bar.
 
 Dynamic scheduling only added overhead, because every row costs the same.
 Float ran 1.73 times faster but moved the price by 4 cents and gamma by 12
 percent, so we rejected it.
 
-## 8:35 The same answer, and the conclusion (0:25)
+## 8:36 The same answer, and the conclusion (0:24)
 
-On screen, slides 28 to 29.
+On screen, slides 29 to 30.
 
 No version was timed until it matched the baseline, and every version agrees
 to within 3.3 times 10 to the minus 15.
 
-*Slide 29. Press next for the slide. Point down the ladder table.*
+*Slide 30. Press next for the slide. Point down the ladder table.*
 
 In the end we reached 123 times the baseline on one node and 147 on two.
 Most of it came from SIMD and threads, and four of our six hypotheses held.
 
-## 9:01 What surprised me, what I would change, and what comes next (0:39)
+## 9:00 What surprised me, what I would change, and what comes next (0:35)
 
-On screen, slide 30. Point at each block in turn.
+On screen, slide 31. Point at each block in turn.
 
-What surprised me most was that two compiler flags alone gave SIMD 1.19
-times. If I started again, I'd flush denormals before the first sweep. A
-denormal is a double below about 2.2 times 10 to the minus 308, and this CPU
-spends tens of extra cycles on every operation that touches one. Next, each
-MPI process would hold only its own rows plus one ghost row from each
-neighbour. That cuts each process from 16 to 4 mebibytes on two nodes, so
-the grid can grow.
+What surprised me most was the split loads. If I started again, I'd flush
+denormals before the first sweep. A denormal is a double below about 2.2
+times 10 to the minus 308, and this CPU spends tens of extra cycles on every
+operation that touches one. Next, each MPI process would hold only its own
+rows plus one ghost row from each neighbour. That cuts each process from 16
+to 4 mebibytes on two nodes, so the grid can grow.
 
-## 9:40 Close and AI declaration (0:08)
+## 9:35 Close and AI declaration (0:08)
 
-On screen, slides 31 to 32.
+On screen, slides 32 to 33.
 
 Every number here has a job id in the results file. Thanks for watching.
 
-*Slide 32. Press next for the AI declaration and hold it for three seconds.
+*Slide 33. Press next for the AI declaration and hold it for three seconds.
 Nothing is said.*

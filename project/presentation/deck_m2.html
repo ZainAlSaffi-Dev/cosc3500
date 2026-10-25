@@ -2077,6 +2077,72 @@ overflow: hidden!important;
 display:block!important;
 }</style></aside>
 </section>
+<section id="aligned-and-unaligned-loads" class="slide level2">
+<h2>Aligned and unaligned loads</h2>
+<p><span class="sub">One AVX2 load reads four doubles, 32 bytes, in one instruction</span></p>
+<!-- svg:loads -->
+<svg class="anim" viewbox="0 0 1400 400" xmlns="http://www.w3.org/2000/svg">
+<rect x="180.0" y="280.0" width="80.0" height="56.0" fill="#E2E8F0" stroke="#FFFFFF" stroke-width="3" />
+<rect x="260.0" y="280.0" width="80.0" height="56.0" fill="#E2E8F0" stroke="#FFFFFF" stroke-width="3" />
+<rect x="340.0" y="280.0" width="80.0" height="56.0" fill="#E2E8F0" stroke="#FFFFFF" stroke-width="3" />
+<rect x="420.0" y="280.0" width="80.0" height="56.0" fill="#E2E8F0" stroke="#FFFFFF" stroke-width="3" />
+<rect x="500.0" y="280.0" width="80.0" height="56.0" fill="#E2E8F0" stroke="#FFFFFF" stroke-width="3" />
+<rect x="580.0" y="280.0" width="80.0" height="56.0" fill="#E2E8F0" stroke="#FFFFFF" stroke-width="3" />
+<rect x="660.0" y="280.0" width="80.0" height="56.0" fill="#E2E8F0" stroke="#FFFFFF" stroke-width="3" />
+<rect x="740.0" y="280.0" width="80.0" height="56.0" fill="#E2E8F0" stroke="#FFFFFF" stroke-width="3" />
+<rect x="820.0" y="280.0" width="80.0" height="56.0" fill="#E2E8F0" stroke="#FFFFFF" stroke-width="3" />
+<rect x="900.0" y="280.0" width="80.0" height="56.0" fill="#E2E8F0" stroke="#FFFFFF" stroke-width="3" />
+<rect x="980.0" y="280.0" width="80.0" height="56.0" fill="#E2E8F0" stroke="#FFFFFF" stroke-width="3" />
+<rect x="1060.0" y="280.0" width="80.0" height="56.0" fill="#E2E8F0" stroke="#FFFFFF" stroke-width="3" />
+<text x="180.0" y="366.0" font-size="19" text-anchor="middle" font-weight="700" class="blue">0</text>
+<line x1="180.0" y1="120.0" x2="180.0" y2="342.0" stroke="#2563EB" stroke-width="3" stroke-dasharray="7 6"></line>
+<text x="260.0" y="366.0" font-size="17" text-anchor="middle" font-weight="400" class="dim">8</text>
+<text x="340.0" y="366.0" font-size="17" text-anchor="middle" font-weight="400" class="dim">16</text>
+<text x="420.0" y="366.0" font-size="17" text-anchor="middle" font-weight="400" class="dim">24</text>
+<text x="500.0" y="366.0" font-size="19" text-anchor="middle" font-weight="700" class="blue">32</text>
+<line x1="500.0" y1="120.0" x2="500.0" y2="342.0" stroke="#2563EB" stroke-width="3" stroke-dasharray="7 6"></line>
+<text x="580.0" y="366.0" font-size="17" text-anchor="middle" font-weight="400" class="dim">40</text>
+<text x="660.0" y="366.0" font-size="17" text-anchor="middle" font-weight="400" class="dim">48</text>
+<text x="740.0" y="366.0" font-size="17" text-anchor="middle" font-weight="400" class="dim">56</text>
+<text x="820.0" y="366.0" font-size="19" text-anchor="middle" font-weight="700" class="blue">64</text>
+<line x1="820.0" y1="120.0" x2="820.0" y2="342.0" stroke="#2563EB" stroke-width="3" stroke-dasharray="7 6"></line>
+<text x="900.0" y="366.0" font-size="17" text-anchor="middle" font-weight="400" class="dim">72</text>
+<text x="980.0" y="366.0" font-size="17" text-anchor="middle" font-weight="400" class="dim">80</text>
+<text x="1060.0" y="366.0" font-size="17" text-anchor="middle" font-weight="400" class="dim">88</text>
+<text x="1140.0" y="366.0" font-size="19" text-anchor="middle" font-weight="700" class="blue">96</text>
+<line x1="1140.0" y1="120.0" x2="1140.0" y2="342.0" stroke="#2563EB" stroke-width="3" stroke-dasharray="7 6"></line>
+<text x="160.0" y="366.0" font-size="19" text-anchor="end" font-weight="400" class="dim">byte</text>
+<text x="160.0" y="316.0" font-size="19" text-anchor="end" font-weight="400" class="dim">one row</text>
+<text x="1160.0" y="366.0" font-size="19" text-anchor="start" font-weight="400" class="blue">a dashed line every 32 bytes</text>
+<g class="fragment" data-fragment-index="0"><g class="fragment fade-out" data-fragment-index="2"><rect x="504.0" y="190.0" width="312.0" height="28.0" fill="#2563EB" stroke="none" stroke-width="0" rx="5" /></g><text x="914.0" y="211.0" font-size="20" text-anchor="start" font-weight="400" class="blue">centre, aligned</text></g>
+<g class="fragment current-visible" data-fragment-index="0"><text x="700.0" y="40.0" font-size="26" text-anchor="middle" font-weight="700" class="blue">An aligned load reads 32 bytes, four doubles, from a multiple of 32</text><text x="700.0" y="76.0" font-size="21" text-anchor="middle" font-weight="400" class="blue">_mm256_load_pd needs that address, _mm256_loadu_pd reads from any address</text></g>
+<g class="fragment" data-fragment-index="1"><g class="fragment fade-out" data-fragment-index="2"><rect x="424.0" y="150.0" width="312.0" height="28.0" fill="#93C5FD" stroke="none" stroke-width="0" rx="5" /></g><text x="914.0" y="171.0" font-size="20" text-anchor="start" font-weight="400" class="blue">west, unaligned</text></g>
+<g class="fragment" data-fragment-index="1"><g class="fragment fade-out" data-fragment-index="2"><rect x="584.0" y="230.0" width="312.0" height="28.0" fill="#93C5FD" stroke="none" stroke-width="0" rx="5" /></g><text x="914.0" y="251.0" font-size="20" text-anchor="start" font-weight="400" class="blue">east, unaligned</text></g>
+<g class="fragment current-visible" data-fragment-index="1"><text x="700.0" y="40.0" font-size="26" text-anchor="middle" font-weight="700" class="blue">West and east sit 8 bytes either side, so they cannot all be aligned</text><text x="700.0" y="76.0" font-size="21" text-anchor="middle" font-weight="400" class="blue">so the AVX2 row uses _mm256_loadu_pd for every load</text></g>
+<g class="fragment current-visible" data-fragment-index="2"><rect x="424.0" y="150.0" width="150.0" height="28.0" fill="#D97706" stroke="none" stroke-width="0" rx="5" /><rect x="586.0" y="150.0" width="150.0" height="28.0" fill="#D97706" stroke="none" stroke-width="0" rx="5" /><rect x="504.0" y="190.0" width="150.0" height="28.0" fill="#D97706" stroke="none" stroke-width="0" rx="5" /><rect x="666.0" y="190.0" width="150.0" height="28.0" fill="#D97706" stroke="none" stroke-width="0" rx="5" /><rect x="584.0" y="230.0" width="150.0" height="28.0" fill="#D97706" stroke="none" stroke-width="0" rx="5" /><rect x="746.0" y="230.0" width="150.0" height="28.0" fill="#D97706" stroke="none" stroke-width="0" rx="5" /></g>
+<g class="fragment current-visible" data-fragment-index="2"><text x="700.0" y="40.0" font-size="26" text-anchor="middle" font-weight="700" class="amber">With only -mavx2, g++ 8.5 splits each into two 16 byte loads</text><text x="700.0" y="76.0" font-size="21" text-anchor="middle" font-weight="400" class="amber">then joins the halves with vinsertf128, 11 split loads for every four cells</text></g>
+<g class="fragment" data-fragment-index="3"><rect x="424.0" y="150.0" width="312.0" height="28.0" fill="#2563EB" stroke="none" stroke-width="0" rx="5" /><rect x="504.0" y="190.0" width="312.0" height="28.0" fill="#2563EB" stroke="none" stroke-width="0" rx="5" /><rect x="584.0" y="230.0" width="312.0" height="28.0" fill="#2563EB" stroke="none" stroke-width="0" rx="5" /></g>
+<g class="fragment" data-fragment-index="3"><text x="700.0" y="40.0" font-size="26" text-anchor="middle" font-weight="700" class="blue">Two flags keep each one 32 byte load</text><text x="700.0" y="76.0" font-size="21" text-anchor="middle" font-weight="400" class="blue">simd goes from 387 to 460 million updates a second, 1.19x, with the same answer</text></g>
+</svg>
+<!-- /svg:loads -->
+<div class="band">
+<p>Two flags, <code>-mno-avx256-split-unaligned-load</code> and <code>-store</code> (<code>Makefile</code> line 23), keep every load whole, with the same answer and <span class="em">1.19x</span> the speed on one core. Every number in this video uses them.</p>
+</div>
+<aside class="notes">
+<p><em>Four presses, the aligned load, west and east, the split, one load again.</em></p>
+<p>One more SIMD detail. An aligned load reads 32 bytes starting at a multiple of 32. West, centre and east sit one double apart, so they can’t all be aligned, and the code uses unaligned loads. With only the AVX2 flag, g++ 8.5 split every unaligned load into two 16 byte halves. Two flags keep it one load, 1.19 times faster, with the same answer.</p>
+<style type="text/css">
+span.MJX_Assistive_MathML {
+position:absolute!important;
+clip: rect(1px, 1px, 1px, 1px);
+padding: 1px 0 0 0!important;
+border: 0!important;
+height: 1px!important;
+width: 1px!important;
+overflow: hidden!important;
+display:block!important;
+}</style></aside>
+</section>
 <section id="openmp-one-block-of-rows-per-thread" class="slide level2">
 <h2>OpenMP, one block of rows per thread</h2>
 <p><span class="sub">The rows of each step are shared between the cores of one node</span></p>
@@ -2702,7 +2768,7 @@ display:block!important;
 </div>
 <aside class="notes">
 <p><em>Point at each block in turn.</em></p>
-<p>What surprised me most was that two compiler flags alone gave SIMD 1.19 times. If I started again, I’d flush denormals before the first sweep. A denormal is a double below about 2.2 times 10 to the minus 308, and this CPU spends tens of extra cycles on every operation that touches one. Next, each MPI process would hold only its own rows plus one ghost row from each neighbour. That cuts each process from 16 to 4 mebibytes on two nodes, so the grid can grow.</p>
+<p>What surprised me most was the split loads. If I started again, I’d flush denormals before the first sweep. A denormal is a double below about 2.2 times 10 to the minus 308, and this CPU spends tens of extra cycles on every operation that touches one. Next, each MPI process would hold only its own rows plus one ghost row from each neighbour. That cuts each process from 16 to 4 mebibytes on two nodes, so the grid can grow.</p>
 <style type="text/css">
 span.MJX_Assistive_MathML {
 position:absolute!important;
